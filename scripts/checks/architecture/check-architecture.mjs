@@ -4,6 +4,12 @@ import { basename, dirname, join, relative, sep } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import tsModule from 'typescript';
+import {
+  CAST_ALLOWLIST,
+  DIRECT_TRANSACTION_ALLOWED,
+  SESSION_CONTINUATION_USERS,
+  UNSCOPED_IDENTITY_CLIENT_ALLOWED,
+} from './architecture-allowlists.mjs';
 import cacheHelpers from './dependency-cruiser-cache.cjs';
 
 const ts = /** @type {typeof import('typescript')} */ (tsModule);
@@ -1508,50 +1514,16 @@ export function collectSourceTextFailures(options) {
   // the Organization to PostgreSQL from an explicit argument before any
   // repository statement runs. A direct `$transaction` in infrastructure
   // bypasses that seam and would silently see no rows under fail-closed RLS.
-  // The files below are the only ones that may open one, each for the reason
-  // given; a new repository is checked by default, so a bypass fails the gate.
+  // The files in architecture-allowlists.mjs are the only ones that may open
+  // one, each for the reason given; a new repository is checked by default.
   {
-    const directTransactionAllowed = new Map([
-      [
-        'src/modules/persistence/infrastructure/organization-transaction.ts',
-        'the seam itself',
-      ],
-      [
-        'src/modules/identity/shared/infrastructure/postgres-identity.client.ts',
-        'the Identity form of the seam and its unscoped pre-tenant form',
-      ],
-      [
-        'src/modules/auth/shared/infrastructure/auth-prisma.ts',
-        'Auth sessions and accounts, not Organization-owned rows',
-      ],
-      [
-        'src/modules/avatar/infrastructure/postgres-avatar.repository.ts',
-        'User-scoped avatar rows, no Organization column',
-      ],
-      [
-        'src/modules/metering/infrastructure/billing/postgres-billing-statement.repository.ts',
-        'Operator billing snapshot, close and adjustment across Organizations',
-      ],
-      [
-        'src/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository.ts',
-        'fleet-wide collector coverage, no Organization',
-      ],
-      [
-        'src/modules/metering/infrastructure/billing/postgres-usage-retention.repository.ts',
-        'fleet-wide usage pruning job',
-      ],
-      [
-        'src/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository.ts',
-        'Operator revocation that discovers the Organization from the asset',
-      ],
-    ]);
     for (const file of sourceFiles) {
       if (file.endsWith('.spec.ts')) continue;
       const relativePath = relative(root, file).replace(/\\/g, '/');
       if (!/^src\/modules\/[^/]+\/.*\/?infrastructure\//.test(relativePath)) {
         continue;
       }
-      if (directTransactionAllowed.has(relativePath)) continue;
+      if (DIRECT_TRANSACTION_ALLOWED.has(relativePath)) continue;
       if (/\$transaction\s*\(/.test(sourceText(file))) {
         fail(
           `${relativePath} opens a transaction directly; use organizationTransaction (Identity: identityTransaction) from the shared seam so the Organization is declared inside the transaction (#785)`,
@@ -1564,8 +1536,9 @@ export function collectSourceTextFailures(options) {
   // (`this.client`) runs outside any transaction, so it never declares the
   // Organization and would see no rows under fail-closed RLS. A request-serving
   // statement goes through `identityTransaction(this.client, organizationId, ...)`
-  // and runs on the transaction it hands over. The files below are the only ones
-  // that may use `this.client` directly, each for the reason given. A local
+  // and runs on the transaction it hands over. The files in
+  // architecture-allowlists.mjs are the only ones that may use `this.client`
+  // directly, each for the reason given. A local
   // alias of the client is the same escape, so receivers are resolved from
   // variable declarations before the statement patterns are matched. A class
   // field or a client passed through a function call is not resolved here; the
@@ -1627,31 +1600,13 @@ export function collectSourceTextFailures(options) {
     );
   }
   {
-    const unscopedIdentityClientAllowed = new Map([
-      [
-        'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
-        'pre-tenant lookup by key hash (ADR-0109 decision 6, #80)',
-      ],
-      [
-        'src/modules/identity/membership/infrastructure/postgres-organization-membership-read.repository.ts',
-        'pre-tenant roster of one User Account across Organizations (ADR-0109 decision 6, #80)',
-      ],
-      [
-        'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts',
-        'scheduled sweep across Organizations, not request-serving',
-      ],
-      [
-        'src/modules/identity/shared/infrastructure/postgres-operator-redis-failure.repository.ts',
-        'Operator Redis failure record, no Organization column',
-      ],
-    ]);
     for (const file of sourceFiles) {
       if (file.endsWith('.spec.ts')) continue;
       const relativePath = relative(root, file).replace(/\\/g, '/');
       if (!/^src\/modules\/identity\/.*\/infrastructure\//.test(relativePath)) {
         continue;
       }
-      if (unscopedIdentityClientAllowed.has(relativePath)) continue;
+      if (UNSCOPED_IDENTITY_CLIENT_ALLOWED.has(relativePath)) continue;
       const receivers = ownIdentityClientReceivers(sourceText(file));
       const unscopedIdentityClientUse =
         unscopedIdentityClientPattern(receivers);
@@ -1669,10 +1624,6 @@ export function collectSourceTextFailures(options) {
   // session that already exists, so only the Refresh Token rotation may name it.
   // The type system cannot see who calls an exported function, so check the
   // source text.
-  const SESSION_CONTINUATION_USERS = new Set([
-    'src/modules/auth/shared/infrastructure/auth-mfa-session.guard.ts',
-    'src/modules/auth/web-sessions/infrastructure/postgres-refresh-session.repository.ts',
-  ]);
   for (const file of sourceFiles) {
     if (file.endsWith('.spec.ts')) continue;
     const relativePath = relative(root, file).replace(/\\/g, '/');
@@ -1751,8 +1702,7 @@ export function collectSourceTextFailures(options) {
   // infrastructure. Application ports stay free of Prisma-shaped concepts; a
   // transaction or client crosses the seam through a thin infrastructure adapter
   // instead of a compiler-forcing cast. Justified exceptions carry a comment and
-  // are listed in CAST_ALLOWLIST below.
-  const CAST_ALLOWLIST = new Set([]);
+  // are listed in architecture-allowlists.mjs.
 
   const applicationTypeNames = new Set();
   for (const file of sourceFiles) {
