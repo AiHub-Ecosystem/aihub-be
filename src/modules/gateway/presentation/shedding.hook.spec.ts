@@ -143,4 +143,21 @@ describe('registerSheddingGuard', () => {
       Math.ceil(errorBodyOf(response.body).error.retry_after_ms / 1_000),
     );
   });
+
+  it('refuses inside the 50 ms budget (#1591)', async () => {
+    // Warm the router first: the budget is for the refusal, not for the first
+    // route lookup in a cold process.
+    await app.inject({ method: 'GET', url: '/v1/ielts/speaking/questions' });
+    level.set(2);
+
+    const startedAt = performance.now();
+    const response = await app.inject({
+      method: 'POST',
+      url: GRADE_PATH,
+      payload: { essay: 'text' },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(performance.now() - startedAt).toBeLessThan(50);
+  });
 });
