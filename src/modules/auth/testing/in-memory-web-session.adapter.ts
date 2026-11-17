@@ -8,6 +8,8 @@ import type {
   WebSessionRepositoryPort,
 } from '@/modules/auth/web-sessions/application/web-session-repository.port';
 
+import { admitsInMemorySession } from './in-memory-session-admission';
+
 /**
  * The in-memory Web Session store, and the durable guarantees it has to hold
  * honestly or the unit lane would only be asserting them:
@@ -37,31 +39,7 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     if (this.failCreateWebSession) {
       throw new Error('durable store unavailable');
     }
-    const account = this.state.accounts.get(input.userId);
-    if (
-      account?.status !== 'active' ||
-      account.passwordHash !== input.expectedPasswordHash
-    ) {
-      return false;
-    }
-    const factor = this.state.mfaFactors.get(input.userId);
-    if (factor?.status === 'enabled') {
-      if (
-        input.mfaProof?.kind === 'totp' &&
-        input.mfaProof.factorId === factor.factorId
-      ) {
-        // The application verified this factor snapshot before the transaction.
-      } else if (
-        input.mfaProof?.kind === 'recovery' &&
-        this.state.recoveryCodes
-          .get(input.userId)
-          ?.delete(input.mfaProof.codeHash)
-      ) {
-        // Recovery proof consumption and session creation share this write.
-      } else {
-        return false;
-      }
-    } else if (input.mfaProof !== undefined) {
+    if (!admitsInMemorySession(this.state, input)) {
       return false;
     }
     this.state.webSessions.set(input.token.hash, {

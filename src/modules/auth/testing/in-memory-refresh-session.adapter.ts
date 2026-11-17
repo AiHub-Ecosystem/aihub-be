@@ -6,6 +6,7 @@ import type {
   RotateRefreshTokenInput,
 } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import type { InMemoryAuthState } from './in-memory-auth.state';
+import { admitsInMemorySession } from './in-memory-session-admission';
 
 export class InMemoryRefreshSessionAdapter
   implements RefreshSessionRepositoryPort
@@ -23,31 +24,7 @@ export class InMemoryRefreshSessionAdapter
     if (this.failCreateRefreshSession) {
       throw new Error('durable store unavailable');
     }
-    const account = this.state.accounts.get(input.userId);
-    if (
-      account?.status !== 'active' ||
-      account.passwordHash !== input.expectedPasswordHash
-    ) {
-      return false;
-    }
-    const factor = this.state.mfaFactors.get(input.userId);
-    if (factor?.status === 'enabled') {
-      if (
-        input.mfaProof?.kind === 'totp' &&
-        input.mfaProof.factorId === factor.factorId
-      ) {
-        // The application verified this factor snapshot before the transaction.
-      } else if (
-        input.mfaProof?.kind === 'recovery' &&
-        this.state.recoveryCodes
-          .get(input.userId)
-          ?.delete(input.mfaProof.codeHash)
-      ) {
-        // Recovery proof consumption and session creation share this write.
-      } else {
-        return false;
-      }
-    } else if (input.mfaProof !== undefined) {
+    if (!admitsInMemorySession(this.state, input)) {
       return false;
     }
     this.state.refreshTokens.set(input.token.hash, {
