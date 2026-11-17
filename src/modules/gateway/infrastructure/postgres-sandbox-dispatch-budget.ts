@@ -9,7 +9,7 @@ import type {
   SandboxDispatchReservation,
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { quotaPeriod } from '@/modules/metering/public/quota-counter';
-import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type { PrismaClient } from '@prisma-client/client';
 import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
 
@@ -62,75 +62,87 @@ export class PostgresSandboxDispatchBudget
     const now = this.now();
     const { monthNumber, start: monthStart } = quotaPeriod(now);
 
-    return this.client.$transaction(async (transaction) => {
-      // A Speaking grading job reserves at submit under its job id and the
-      // shared dispatcher reserves again under the same id (ADR-0159): a
-      // reservation this request already holds admits it without a second unit.
-      const held = await transaction.sandboxDispatchReservation.findUnique({
-        where: { requestId: input.requestId },
-      });
-      if (held !== null) {
-        return (
-          held.status === 'reserved' &&
-          held.organizationId === input.organizationId
-        );
-      }
-
-      // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
-      // Prisma's query path cannot deserialize PostgreSQL's void result.
-      await transaction.$executeRawUnsafe(
-        'SELECT pg_advisory_xact_lock($1, $2)',
-        182,
-        monthNumber,
-      );
-
-      // Runbook policy edits take this same lock, so a lowering override cannot
-      // race a reservation that has already read the older value.
-      const monthlyLimit = await effectiveAllowance(
-        transaction,
-        input.organizationId,
-        monthStart,
-      );
-      if (monthlyLimit === null) {
-        throw internalError('Sandbox allowance policy is unavailable');
-      }
-
-      // Both counts run under the month's advisory lock, so no reservation
-      // lands between them.
-      const reserved = { status: 'reserved', monthStart } as const;
-      const organizationCount =
-        await transaction.sandboxDispatchReservation.count({
-          where: { ...reserved, organizationId: input.organizationId },
+    return organizationTransaction(
+      this.client,
+      input.organizationId,
+      async (transaction) => {
+        // A Speaking grading job reserves at submit under its job id and the
+        // shared dispatcher reserves again under the same id (ADR-0159): a
+        // reservation this request already holds admits it without a second unit.
+        const held = await transaction.sandboxDispatchReservation.findUnique({
+          where: { requestId: input.requestId },
         });
-      const environmentCount =
-        await transaction.sandboxDispatchReservation.count({ where: reserved });
-      if (
-        !canReserveSandboxDispatch({
-          organizationCount,
-          organizationLimit: monthlyLimit,
-          environmentCount,
-        })
-      ) {
-        return false;
-      }
+        if (held !== null) {
+          return (
+            held.status === 'reserved' &&
+            held.organizationId === input.organizationId
+          );
+        }
 
-      await transaction.sandboxDispatchReservation.create({
-        data: {
-          requestId: input.requestId,
-          organizationId: input.organizationId,
+        // ponytail: one lock per UTC month serializes the 500/month admission check; split by Organization if dispatch volume makes this a bottleneck.
+        // Prisma's query path cannot deserialize PostgreSQL's void result.
+        await transaction.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock($1, $2)',
+          182,
+          monthNumber,
+        );
+
+        // Runbook policy edits take this same lock, so a lowering override cannot
+        // race a reservation that has already read the older value.
+        const monthlyLimit = await effectiveAllowance(
+          transaction,
+          input.organizationId,
           monthStart,
-          createdAt: now,
-        },
-      });
-      return true;
-    }, CONTROL_PLANE_TRANSACTION_OPTIONS);
+        );
+        if (monthlyLimit === null) {
+          throw internalError('Sandbox allowance policy is unavailable');
+        }
+
+        // Both counts run under the month's advisory lock, so no reservation
+        // lands between them.
+        const reserved = { status: 'reserved', monthStart } as const;
+        const organizationCount =
+          await transaction.sandboxDispatchReservation.count({
+            where: { ...reserved, organizationId: input.organizationId },
+          });
+        const environmentCount =
+          await transaction.sandboxDispatchReservation.count({
+            where: reserved,
+          });
+        if (
+          !canReserveSandboxDispatch({
+            organizationCount,
+            organizationLimit: monthlyLimit,
+            environmentCount,
+          })
+        ) {
+          return false;
+        }
+
+        await transaction.sandboxDispatchReservation.create({
+          data: {
+            requestId: input.requestId,
+            organizationId: input.organizationId,
+            monthStart,
+            createdAt: now,
+          },
+        });
+        return true;
+      },
+    );
   }
 
-  async release(requestId: string): Promise<void> {
-    await this.client.sandboxDispatchReservation.updateMany({
-      where: { requestId, status: 'reserved' },
-      data: { status: 'released', releasedAt: this.now() },
-    });
+  async release(organizationId: string, requestId: string): Promise<void> {
+    await organizationTransaction(
+      this.client,
+      organizationId,
+      async (transaction) => {
+        await transaction.sandboxDispatchReservation.updateMany({
+          where: { organizationId, requestId, status: 'reserved' },
+          data: { status: 'released', releasedAt: this.now() },
+        });
+      },
+    );
   }
 
   async allowanceFor(
@@ -138,22 +150,31 @@ export class PostgresSandboxDispatchBudget
   ): Promise<SandboxAllowanceSnapshot | null> {
     const { start: monthStart } = quotaPeriod(this.now());
     try {
-      const monthlyLimit = await effectiveAllowance(
+      return await organizationTransaction(
         this.client,
         organizationId,
-        monthStart,
+        async (transaction) => {
+          const monthlyLimit = await effectiveAllowance(
+            transaction,
+            organizationId,
+            monthStart,
+          );
+          if (monthlyLimit === null) return null;
+          return {
+            monthlyLimit,
+            reserved: await transaction.sandboxDispatchReservation.count({
+              where: { status: 'reserved', monthStart, organizationId },
+            }),
+            sharedMonthlyLimit: SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
+            // Counts every Organization on purpose: the shared ceiling is
+            // environment-wide. #80 must give this count a named cross-
+            // Organization path before a policy covers this table (ADR-0109).
+            sharedReserved: await transaction.sandboxDispatchReservation.count({
+              where: { status: 'reserved', monthStart },
+            }),
+          };
+        },
       );
-      if (monthlyLimit === null) return null;
-      return {
-        monthlyLimit,
-        reserved: await this.client.sandboxDispatchReservation.count({
-          where: { status: 'reserved', monthStart, organizationId },
-        }),
-        sharedMonthlyLimit: SANDBOX_ENVIRONMENT_MONTHLY_LIMIT,
-        sharedReserved: await this.client.sandboxDispatchReservation.count({
-          where: { status: 'reserved', monthStart },
-        }),
-      };
     } catch {
       return null;
     }

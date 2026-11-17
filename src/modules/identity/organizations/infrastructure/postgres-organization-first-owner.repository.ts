@@ -64,106 +64,110 @@ export class PostgresOrganizationFirstOwnerRepository
   private transact(
     input: AttachFirstOwnerInput,
   ): Promise<AttachFirstOwnerResult> {
-    return identityTransaction(this.client, async (transaction) => {
-      const actorId = await findActiveAccountId(
-        transaction,
-        input.actorUsername,
-      );
-      if (actorId === undefined) {
-        return { kind: 'actor_invalid' as const };
-      }
-      // The owner need not have verified their email yet: an unverified
-      // account cannot sign in, so attaching it early harms nothing and saves a
-      // round trip in the handoff. Only a disabled account is refused
-      // (ADR-0045).
-      const owner = await transaction.userAccount.findFirst({
-        where: {
-          username: input.ownerUsername,
-          status: { in: ['active', 'pending_verification'] },
-        },
-        select: { id: true },
-      });
-      if (owner === null) {
-        return { kind: 'owner_invalid' as const };
-      }
-      const ownerId = owner.id;
-      // An operator joining a customer's Organization is the crossing this
-      // command exists to make deliberate; another operator must do it.
-      if (ownerId === actorId) {
-        return { kind: 'actor_is_owner' as const };
-      }
-
-      const organizationRows = await identityRows(
-        transaction,
-        LOCK_ORGANIZATION_SQL,
-        [input.organizationId],
-      );
-      if (!isRecord(organizationRows[0])) {
-        return { kind: 'organization_not_found' as const };
-      }
-
-      const memberships = (
-        await transaction.organizationMembership.findMany({
-          where: { organizationId: input.organizationId, status: 'active' },
-          select: { userAccountId: true, role: true },
-        })
-      ).map((row) => {
-        const role = membershipRoleValue(row, 'role');
-        if (role === undefined) {
-          throw invalidIdentityData();
+    return identityTransaction(
+      this.client,
+      input.organizationId,
+      async (transaction) => {
+        const actorId = await findActiveAccountId(
+          transaction,
+          input.actorUsername,
+        );
+        if (actorId === undefined) {
+          return { kind: 'actor_invalid' as const };
         }
-        return { userId: row.userAccountId, role };
-      });
+        // The owner need not have verified their email yet: an unverified
+        // account cannot sign in, so attaching it early harms nothing and saves a
+        // round trip in the handoff. Only a disabled account is refused
+        // (ADR-0045).
+        const owner = await transaction.userAccount.findFirst({
+          where: {
+            username: input.ownerUsername,
+            status: { in: ['active', 'pending_verification'] },
+          },
+          select: { id: true },
+        });
+        if (owner === null) {
+          return { kind: 'owner_invalid' as const };
+        }
+        const ownerId = owner.id;
+        // An operator joining a customer's Organization is the crossing this
+        // command exists to make deliberate; another operator must do it.
+        if (ownerId === actorId) {
+          return { kind: 'actor_is_owner' as const };
+        }
 
-      const [only] = memberships;
-      if (
-        memberships.length === 1 &&
-        only?.userId === ownerId &&
-        only.role === 'owner'
-      ) {
-        return { kind: 'unchanged' as const };
-      }
-      if (memberships.length > 0) {
-        return { kind: 'organization_has_members' as const };
-      }
+        const organizationRows = await identityRows(
+          transaction,
+          LOCK_ORGANIZATION_SQL,
+          [input.organizationId],
+        );
+        if (!isRecord(organizationRows[0])) {
+          return { kind: 'organization_not_found' as const };
+        }
 
-      // An upsert rather than an insert: a disabled membership of the named
-      // account can only exist through hand edits, and reactivating it still
-      // ends with exactly one active owner.
-      await transaction.organizationMembership.upsert({
-        where: {
-          organizationId_userAccountId: {
+        const memberships = (
+          await transaction.organizationMembership.findMany({
+            where: { organizationId: input.organizationId, status: 'active' },
+            select: { userAccountId: true, role: true },
+          })
+        ).map((row) => {
+          const role = membershipRoleValue(row, 'role');
+          if (role === undefined) {
+            throw invalidIdentityData();
+          }
+          return { userId: row.userAccountId, role };
+        });
+
+        const [only] = memberships;
+        if (
+          memberships.length === 1 &&
+          only?.userId === ownerId &&
+          only.role === 'owner'
+        ) {
+          return { kind: 'unchanged' as const };
+        }
+        if (memberships.length > 0) {
+          return { kind: 'organization_has_members' as const };
+        }
+
+        // An upsert rather than an insert: a disabled membership of the named
+        // account can only exist through hand edits, and reactivating it still
+        // ends with exactly one active owner.
+        await transaction.organizationMembership.upsert({
+          where: {
+            organizationId_userAccountId: {
+              organizationId: input.organizationId,
+              userAccountId: ownerId,
+            },
+          },
+          create: {
             organizationId: input.organizationId,
             userAccountId: ownerId,
+            role: 'owner',
+            status: 'active',
           },
-        },
-        create: {
-          organizationId: input.organizationId,
-          userAccountId: ownerId,
-          role: 'owner',
-          status: 'active',
-        },
-        update: { role: 'owner', status: 'active' },
-      });
-      await recordOrganizationAuditEvent(
-        transaction,
-        auditStamp(
+          update: { role: 'owner', status: 'active' },
+        });
+        await recordOrganizationAuditEvent(
+          transaction,
+          auditStamp(
+            {
+              context: { requestId: input.requestId },
+              organizationId: input.organizationId,
+            },
+            actorId,
+            input.occurredAt,
+            'self_declared_operator',
+          ),
           {
-            context: { requestId: input.requestId },
-            organizationId: input.organizationId,
+            action: 'membership.owner_attached',
+            targetUserAccountId: ownerId,
+            username: input.ownerUsername,
           },
-          actorId,
-          input.occurredAt,
-          'self_declared_operator',
-        ),
-        {
-          action: 'membership.owner_attached',
-          targetUserAccountId: ownerId,
-          username: input.ownerUsername,
-        },
-      );
+        );
 
-      return { kind: 'attached' as const };
-    });
+        return { kind: 'attached' as const };
+      },
+    );
   }
 }

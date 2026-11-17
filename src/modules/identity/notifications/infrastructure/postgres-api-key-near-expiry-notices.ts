@@ -26,6 +26,7 @@ import {
   identityRows,
   identityTransaction,
 } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
+import type { Prisma } from '@prisma-client/client';
 
 const KIND: NotificationKind = 'api-key.near-expiry';
 
@@ -157,9 +158,7 @@ function requiredDate(row: unknown, field: string): Date {
   return value;
 }
 
-type IdentityTransactionClient = Parameters<
-  Parameters<typeof identityTransaction>[1]
->[0];
+type IdentityTransactionClient = Prisma.TransactionClient;
 
 /** The email-delivery kind of this catalog's notice; `KIND` is the event's. */
 const NOTICE_EMAIL_KIND = 'api_key_near_expiry_notification' as const;

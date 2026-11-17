@@ -6,6 +6,7 @@ on:
   # a required check that never runs blocks the pull request forever.
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
 
   # Markdown is skipped unless a tracked spec or the Public API release gate
   # reads it. The CI path-filter spec compares this allowlist with Markdown
@@ -393,6 +394,64 @@ jobs:
             temp/flaky-tests/report.json
           if-no-files-found: ignore
           retention-days: 90
+
+  unit-repeatability:
+    name: Unit repeatability (${{ matrix.max-workers }} workers × 10)
+    if: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'repeatability') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        max-workers: [1, 4]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4-canary.20261109.1
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run the default unit suites ten times
+        shell: bash
+        env:
+          MAX_WORKERS: ${{ matrix.max-workers }}
+        run: |
+          set -uo pipefail
+          failures=0
+          for attempt in {1..10}; do
+            echo "Run ${attempt}/10 with --maxWorkers=${MAX_WORKERS}"
+            if ! bun run test; then
+              failures=$((failures + 1))
+              echo "Bun unit suite failed on run ${attempt}."
+            fi
+            if ! ./node_modules/.bin/jest --coverage=false --maxWorkers="${MAX_WORKERS}"; then
+              failures=$((failures + 1))
+              echo "Jest unit suite failed on run ${attempt}."
+            fi
+          done
+          printf '## Unit repeatability\n\n- Requested Jest workers: `%s`\n- Consecutive runs: `10`\n- Failed suite executions: `%s`\n' \
+            "$MAX_WORKERS" "$failures" >> "$GITHUB_STEP_SUMMARY"
+          test "$failures" -eq 0
 
   shell-specs:
     name: Shell specs
@@ -1531,6 +1590,7 @@ jobs:
       - secret-scan
       - static
       - test
+      - unit-repeatability
       - shell-specs
       - dev-restart-budget
       - build
@@ -1551,6 +1611,8 @@ jobs:
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          UNIT_REPEATABILITY_RESULT: ${{ needs.unit-repeatability.result }}
+          RUN_UNIT_REPEATABILITY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'repeatability') }}
           SHELL_SPECS_RESULT: ${{ needs.shell-specs.result }}
           DEV_RESTART_BUDGET_RESULT: ${{ needs.dev-restart-budget.result }}
           BUILD_RESULT: ${{ needs.build.result }}
@@ -1569,6 +1631,11 @@ jobs:
           test "$SECRET_SCAN_RESULT" = success
           test "$STATIC_RESULT" = success
           test "$TEST_RESULT" = success
+          if [ "$RUN_UNIT_REPEATABILITY" = true ]; then
+            test "$UNIT_REPEATABILITY_RESULT" = success
+          else
+            test "$UNIT_REPEATABILITY_RESULT" = skipped
+          fi
           test "$SHELL_SPECS_RESULT" = success
           test "$DEV_RESTART_BUDGET_RESULT" = success
           test "$BUILD_RESULT" = success

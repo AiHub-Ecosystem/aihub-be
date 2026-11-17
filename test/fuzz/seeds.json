@@ -1,0 +1,8 @@
+{
+  "contracts": 6260001,
+  "speakingMultipart": 6260002,
+  "contractsBudgetMs": 5000,
+  "speakingMultipartBudgetMs": 5000,
+  "laneBudgetMs": 10000,
+  "rotationSchedule": "Rotate both seeds in the first PR merged in January, April, July, and October."
+}

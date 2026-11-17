@@ -99,14 +99,17 @@ class RecordingSender implements EmailSenderPort {
 
 class CountingRateLimiter implements AuthRateLimiterPort {
   consumed = 0;
+  denyEmailKey: string | undefined;
 
   async check(): Promise<{ readonly allowed: true }> {
     return { allowed: true };
   }
 
-  async consume(): Promise<{ readonly allowed: true }> {
+  async consume(
+    input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): Promise<{ readonly allowed: boolean }> {
     this.consumed += 1;
-    return { allowed: true };
+    return { allowed: input.key !== this.denyEmailKey };
   }
 }
 
@@ -207,6 +210,7 @@ beforeEach(async () => {
   identityClient.failOutboxInserts = false;
   sender.calls = [];
   rateLimiter.consumed = 0;
+  rateLimiter.denyEmailKey = undefined;
 });
 
 function invite(headers: Record<string, string> = {}) {
@@ -312,6 +316,34 @@ describe('organization invitation email outbox over HTTP', () => {
     );
   });
 
+  it('preserves an actionable invitation when the Organization/email limit rejects a resend', async () => {
+    const original = await invite();
+    const originalBody = original.json<{ data: { invitation_id: string } }>();
+    const originalInvitation = await pool.query<{
+      id: string;
+      token_hash: string;
+      consumed_at: Date | null;
+    }>(
+      'SELECT id, token_hash, consumed_at FROM organization_invitations WHERE id = $1',
+      [originalBody.data.invitation_id],
+    );
+
+    rateLimiter.denyEmailKey = JSON.stringify([ORGANIZATION_ID, INVITEE]);
+    const rejectedResend = await invite();
+
+    expect(rejectedResend.statusCode).toBe(429);
+    const currentInvitation = await pool.query<{
+      id: string;
+      token_hash: string;
+      consumed_at: Date | null;
+    }>(
+      'SELECT id, token_hash, consumed_at FROM organization_invitations WHERE email = $1',
+      [INVITEE],
+    );
+    expect(currentInvitation.rows).toEqual(originalInvitation.rows);
+    expect(await queuedRequests()).toHaveLength(1);
+  });
+
   it('rolls the invitation and its audit event back when the outbox write fails', async () => {
     identityClient.failOutboxInserts = true;
 
@@ -331,6 +363,7 @@ describe('organization invitation email outbox over HTTP', () => {
     const key = { 'idempotency-key': 'invite-once-key' };
 
     const first = await invite(key);
+    const consumedAfterFirst = rateLimiter.consumed;
     const second = await invite(key);
 
     expect(first.statusCode).toBe(201);
@@ -343,6 +376,6 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(await countRows('organization_invitations')).toBe(1);
     expect(await queuedRequests()).toHaveLength(1);
     // A replayed key spends no further allowance (ADR-0074).
-    expect(rateLimiter.consumed).toBe(3);
+    expect(rateLimiter.consumed).toBe(consumedAfterFirst);
   });
 });

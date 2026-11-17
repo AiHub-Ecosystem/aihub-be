@@ -3,6 +3,7 @@ import { invalidRequest } from '@/common/errors/invalid-request';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import { normalizeEmail } from '@/modules/auth/public/local-auth';
+import { ORGANIZATION_INVITATION_EMAIL_RATE_LIMIT } from '@/modules/auth/public/organization-invitation-email-rate-limit';
 import { type AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
 import {
@@ -48,11 +49,6 @@ export const ORGANIZATION_INVITATION_RATE_LIMITS = {
     scope: 'organization_invitation_organization',
     limit: 20,
     windowMs: 15 * 60 * 1000,
-  },
-  email: {
-    scope: 'organization_invitation_email',
-    limit: 3,
-    windowMs: 24 * 60 * 60 * 1000,
   },
 } as const;
 
@@ -121,10 +117,7 @@ export class InviteOrganizationMember {
           // The request that carries the credential is committed with the
           // invitation, so a caller retrying after a delivery failure re-sends
           // nothing: a worker dispatches the row (ADR-0074).
-          emailDelivery: {
-            token: issued.raw,
-            createdAt: now,
-          },
+          emailDelivery: { token: issued.raw, createdAt: now },
           now,
         });
 
@@ -198,7 +191,10 @@ export class InviteOrganizationMember {
         ...ORGANIZATION_INVITATION_RATE_LIMITS.organization,
         key: input.organizationId,
       },
-      { ...ORGANIZATION_INVITATION_RATE_LIMITS.email, key: email },
+      {
+        ...ORGANIZATION_INVITATION_EMAIL_RATE_LIMIT,
+        key: JSON.stringify([input.organizationId, email]),
+      },
     ];
 
     for (const request of requests) {

@@ -24,9 +24,11 @@ import {
   stringValue,
 } from '@/modules/identity/shared/infrastructure/identity-row';
 import { isOrganizationContextAllowed } from '@/modules/identity/shared/infrastructure/organization-context-policy';
-import { identityRows } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-
-type IdentitySqlClient = Parameters<typeof identityRows>[0];
+import {
+  type IdentityRepositoryClient,
+  identityRows,
+  identityTransaction,
+} from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 
 const TARGET_TYPES = [
   'organization',
@@ -173,7 +175,7 @@ function mapAuditEvent(
 export class PostgresOrganizationAuditReadRepository
   implements OrganizationAuditEventReadPort
 {
-  constructor(private readonly client: IdentitySqlClient) {}
+  constructor(private readonly client: IdentityRepositoryClient) {}
 
   async listAuditEvents(
     input: ListOrganizationAuditEventsInput,
@@ -194,16 +196,21 @@ export class PostgresOrganizationAuditReadRepository
 
     let rows: readonly unknown[];
     try {
-      rows = await identityRows(this.client, LIST_AUDIT_EVENTS_SQL, [
+      rows = await identityTransaction(
+        this.client,
         input.organizationId,
-        after?.occurredAt ?? null,
-        after?.id ?? null,
-        filter.actions === undefined ? null : [...filter.actions],
-        filter.outcome ?? null,
-        filter.from ?? null,
-        filter.to ?? null,
-        input.limit,
-      ]);
+        (transaction) =>
+          identityRows(transaction, LIST_AUDIT_EVENTS_SQL, [
+            input.organizationId,
+            after?.occurredAt ?? null,
+            after?.id ?? null,
+            filter.actions === undefined ? null : [...filter.actions],
+            filter.outcome ?? null,
+            filter.from ?? null,
+            filter.to ?? null,
+            input.limit,
+          ]),
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }

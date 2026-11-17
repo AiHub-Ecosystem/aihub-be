@@ -9,13 +9,14 @@ import { createTestPool } from './database';
 let pool: Pool;
 
 function client() {
+  const query = async (text: string, values: readonly unknown[]) => {
+    const result = await pool.query<Record<string, unknown>>(text, [...values]);
+    return result.rows;
+  };
+  // Organization-scoped keys run in the Organization seam's transaction (#785).
   return prismaFromQueryFake({
-    async query(text, values) {
-      const result = await pool.query<Record<string, unknown>>(text, [
-        ...values,
-      ]);
-      return result.rows;
-    },
+    query,
+    transaction: (callback) => callback({ query }),
   });
 }
 

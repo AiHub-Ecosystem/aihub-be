@@ -124,7 +124,7 @@ function parseFields(
 ): Omit<SpeakingGradeInput, 'audio'> {
   for (const [field, value] of fields) {
     if (!ALLOWED_FIELDS.has(field)) {
-      throw invalidRequest(`Unknown field ${field}`);
+      throw invalidRequest();
     }
     if (containsUnstorableText(value)) {
       throw invalidRequest();
@@ -175,7 +175,7 @@ function parseQuestionFieldsV2(
 ): Omit<SpeakingV2QuestionGradeInput, 'audio'> {
   for (const [field, value] of fields) {
     if (!QUESTION_FIELDS_V2.has(field)) {
-      throw invalidRequest(`Unknown field ${field}`);
+      throw invalidRequest();
     }
     if (containsUnstorableText(value)) {
       throw invalidRequest();
@@ -261,13 +261,13 @@ export class FastifySpeakingMultipartParser
         }
 
         if (fields.has(part.fieldname)) {
-          throw invalidRequest(`Duplicate field ${part.fieldname}`);
+          throw invalidRequest();
         }
         if (part.truncated) {
           throw payloadTooLarge();
         }
         if (typeof part.value !== 'string') {
-          throw invalidRequest(`Field ${part.fieldname} must be text`);
+          throw invalidRequest();
         }
         fields.set(part.fieldname, part.value);
       }

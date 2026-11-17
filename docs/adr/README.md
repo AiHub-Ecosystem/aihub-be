@@ -29,3 +29,5 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0010](0010-meter-requests-and-tokens.md)                 | Meter both request counts and token metrics from day one         | Accepted                                    |
 | [0011](0011-docker-compose-single-vps.md)                 | Docker Compose on a single VPS with documented exit triggers     | Accepted; see ADR-0085 and ADR-0165         |
 | [0012](0012-defer-distributed-tracing.md)                 | Defer distributed tracing in Stage A                             | Superseded by ADR-0063                      |
+| [0013](0013-vault-runtime-secret-management.md)           | Vault-backed runtime secret management                           | Accepted; amended by ADR-0171               |
+| [0171](0171-vault-runtime-login-requires-a-secret-id.md)  | Vault runtime login requires a Secret ID as well as the role ID  | Accepted; supersedes ADR-0170               |

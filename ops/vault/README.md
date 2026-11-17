@@ -58,6 +58,9 @@ $env:AIHUB_VAULT_PROVISION_ALLOW = 'true'
 $env:AIHUB_VAULT_ENVIRONMENT = 'staging'
 $env:AIHUB_VAULT_CREDENTIALS_DIR = 'C:\secure\aihub-vault\staging'
 $env:AIHUB_VAULT_AGENT_CIDR = '172.16.2.1/32'
+$env:AIHUB_VAULT_SECRET_ID_FILE = 'C:\secure\aihub-vault\staging\secret-id'
+# Required when database-pooler.json is present:
+$env:AIHUB_PGBOUNCER_VAULT_SECRET_ID_FILE = 'C:\secure\aihub-vault\staging\secret-id-pgbouncer'
 bun run vault:provision
 ```
 
@@ -100,8 +103,10 @@ Vault audit log, not from `docker inspect`.
 
 Because every container on the host is NATed to that same gateway, this
 constraint blocks logins from outside the VPS but does not distinguish one
-container on it from another. It is a network boundary, not per-container
-isolation; the policy is what limits what the resulting token can read.
+container on it from another. The `secret_id` provisioned below is the
+per-Agent factor: a container holding the role ID and reaching the same gateway
+still cannot log in. The policy additionally limits what the resulting token
+can read.
 
 `auth-mfa.json` contains `current_key_id` and `keys`, both strings. `keys` is a
 JSON object encoded as a string and maps key IDs to 32-byte base64 AES keys.
@@ -109,10 +114,17 @@ Keep previous key IDs in the map while enabled factors still reference them;
 the new runtime reads this separate file, which the previous image ignores.
 Provision this bundle and render the file before deploying the writer release.
 
-The role is provisioned with `bind_secret_id=false`, so the Agent's role ID is a
-complete credential and the Agent re-authenticates on its own after a restart
-or a revoked token. `bound_cidr_list` is the constraint Vault requires when
-`bind_secret_id` is off.
+The role is provisioned with `bind_secret_id=true` and no Secret ID TTL or use
+limit. The helper mints the Secret ID under a five-minute response wrap and
+unwraps it directly into `AIHUB_VAULT_SECRET_ID_FILE` (and the PgBouncer file
+when applicable), so the value is never printed. The Agent mounts both files
+and re-authenticates on its own after a restart or a revoked token.
+`secret_id_bound_cidrs` stays as a second, off-host boundary. Each runtime and
+PgBouncer role also has a 12-per-minute login quota with a one-minute block;
+the `role` parameter on `sys/quotas/rate-limit` works in Vault Community
+Edition. On role-ID or Secret ID
+compromise, rotate the AppRole: both credential files change together and the
+Agent restarts. See [ADR-0171](../../docs/adr/0171-vault-runtime-login-requires-a-secret-id.md).
 
 The helper writes the selected policy, creates an AppRole with a short token
 TTL and bounded maximum TTL, and writes the runtime KV bundles. If the
@@ -192,8 +204,9 @@ apply any change to this line to the running Redis too. Persist the user with
 Vault. Verify authentication and a read-only script with that user, and use
 `ACL DRYRUN` to verify `SET` access without reserving a real send slot.
 
-Deliver the Role ID to Vault Agent through the deployment secret channel; never
-commit or paste it into an issue. There is no Agent `secret_id` to rotate.
+Deliver both the Role ID and the Secret ID to Vault Agent through the
+deployment secret channel; never commit or paste either into an issue. Both are
+host files owned by `10001:10001` with mode `0600`.
 
 The AppRole policy must be read-only and must not receive `root`, `sys`, auth
 management, write, delete, or broad-list capabilities. Revoke bootstrap/root
@@ -227,3 +240,25 @@ verification loop. Set `AIHUB_VAULT_SMOKE_AUTH_METHOD=approle` as proof that
 the operator authenticated through the intended machine-identity flow. The
 check uses Vault capability reads for unrelated paths rather than performing a
 write/delete probe.
+
+## Login visibility
+
+The per-role login quota refuses a burst. The Secret ID stops a container
+without it from succeeding, and the audit device makes every attempt visible,
+including a single failed login that the quota does not reject. On the Vault
+host, filter the file audit device for failed runtime logins (replace the path
+with the one in `vault audit list`):
+
+```sh
+sudo jq -c 'select(.request.path == "auth/approle/login" and
+  (.request.data.role_name | startswith("aihub-")) and
+  ((.response.errors // []) | length > 0)) |
+  {time, role: .request.data.role_name, from: .request.remote_address}' \
+  /var/log/vault/audit.log | tail -n 50
+```
+
+An Agent with both credential files does not produce failed logins on restart.
+Any line in that output is an unexplained runtime login attempt: find the source
+container before treating it as noise. Run this after each Agent restart and on
+the daily operator pass. See
+[Vault runtime secrets](../../docs/operations/vault-runtime-secrets.md#login-visibility).

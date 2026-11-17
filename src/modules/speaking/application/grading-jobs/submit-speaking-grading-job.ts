@@ -280,7 +280,9 @@ export class SubmitSpeakingGradingJob {
 
       if (admission.created === false) {
         if (sandboxReserved) {
-          await this.sandboxBudget.release(jobId).catch(() => undefined);
+          await this.sandboxBudget
+            .release(owner.organizationId, jobId)
+            .catch(() => undefined);
         }
         if (admission.existingJobId !== jobId) {
           return { job_id: admission.existingJobId, status: 'queued' };
@@ -292,7 +294,9 @@ export class SubmitSpeakingGradingJob {
       }
     } catch (error) {
       if (sandboxReserved) {
-        await this.sandboxBudget.release(jobId).catch(() => undefined);
+        await this.sandboxBudget
+          .release(owner.organizationId, jobId)
+          .catch(() => undefined);
       }
       throw error;
     }

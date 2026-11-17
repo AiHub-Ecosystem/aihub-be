@@ -37,8 +37,8 @@ each hostname to its matching loopback port. See
   enabled.
 - A Vault operator session that can provision the AIHUB bundles, including the
   existing Wispace Redis credential, without using the runtime identity.
-- A CA file trusted by Vault and a role ID file for each Agent. The Agent
-  authenticates with its role ID; it does not use a `secret_id`.
+- A CA file trusted by Vault and a role ID plus Secret ID file for each Agent.
+  The Agent needs both; a role ID and the shared Docker gateway are not enough.
 - A release image in the registry, or a local Docker build.
 
 Do not reuse the development AppRole or the development rendered snapshot.
@@ -105,7 +105,9 @@ place backend credentials in Compose or source.
 The PgBouncer Vault role-ID path defaults to
 `/srv/aihub/secrets/vault-role-id-pgbouncer`, so existing `.env.production`
 files can continue loading Compose with the pooler profile disabled. Set
-`AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE` when the host stores that file elsewhere.
+`AIHUB_PGBOUNCER_VAULT_ROLE_ID_FILE` and
+`AIHUB_PGBOUNCER_VAULT_SECRET_ID_FILE` when the host stores those files
+elsewhere.
 
 After the rollout gate is met, start and verify the pooler profile before
 enabling it for app containers:
@@ -143,6 +145,7 @@ sudo install -d -o 10001 -g 10001 -m 0700 /srv/aihub/secrets/pgbouncer
 sudo install -d -m 0700 /srv/aihub/secrets
 sudo install -m 0600 -o 10001 -g 10001 vault-ca.pem /srv/aihub/secrets/vault-ca.pem
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id /srv/aihub/secrets/vault-role-id
+sudo install -m 0600 -o 10001 -g 10001 vault-secret-id /srv/aihub/secrets/vault-secret-id
 sudo install -m 0600 -o 10001 -g 10001 vault-role-id-sandbox /srv/aihub/secrets/vault-role-id-sandbox
 sudo docker network create --driver bridge --subnet 172.16.7.0/24 --gateway 172.16.7.1 aihub-production_backend
 cp .env.production.example .env.production
@@ -151,8 +154,10 @@ chmod 600 .env.production
 
 Set hostnames, Vault address, file paths, provider URLs, and ordinary storage
 configuration in `.env.production`. `AIHUB_RUNTIME_SECRETS_HOST_DIR` points to
-the Production rendered directory; `AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR` and
-`VAULT_SANDBOX_ROLE_ID_FILE` point to the Sandbox directory and role ID file.
+the Production rendered directory; `VAULT_ROLE_ID_FILE` and
+`VAULT_SECRET_ID_FILE` point to the Agent's two credential files.
+`AIHUB_SANDBOX_RUNTIME_SECRETS_HOST_DIR` and `VAULT_SANDBOX_ROLE_ID_FILE` point
+to the Sandbox directory and role ID file.
 Production and Sandbox each receive their own downstream credentials,
 database/Redis URLs, User Access JWT key, SeaweedFS credentials, and MFA/email
 encryption keys from their matching Agent. None of those secret values belong
@@ -976,9 +981,11 @@ The Production directory contains `ai-speaking.json`, `ai-writing.json`,
 `resend.json`, `user-access-jwt.json`, `seaweedfs.json`, `database.json`,
 `redis.json`, `email-outbox.json`, `web-session.json`, and `auth-mfa.json`. It
 must not contain `sandbox-assertion.json`. Keep the directory mode `0700` and
-remove it after installing the helper-generated `vault-role-id` at
-`VAULT_ROLE_ID_FILE`. When the optional PgBouncer role is provisioned, read its
-role ID directly to the protected host path without printing it:
+remove it after installing the helper-generated role ID and Secret ID files at
+`VAULT_ROLE_ID_FILE` and `VAULT_SECRET_ID_FILE`. When the optional PgBouncer
+role is provisioned, the helper writes its Secret ID to
+`AIHUB_PGBOUNCER_VAULT_SECRET_ID_FILE`; read the role ID directly to the
+protected host path without printing either value.
 
 Before provisioning `database-pooler.json`, export the four approved
 `AIHUB_POSTGRES_POOL_MAX_*` values used by Compose. The helper checks that their
@@ -988,6 +995,8 @@ sum matches the AIHUB BE aliases' approved client pool maxima.
 umask 077
 vault read -field=role_id auth/approle/role/aihub-production-pgbouncer/role-id \
   > /srv/aihub/secrets/vault-role-id-pgbouncer
+sudo install -m 0600 -o 10001 -g 10001 \
+  <helper-secret-id-file> /srv/aihub/secrets/vault-secret-id-pgbouncer
 sudo chown 10001:10001 /srv/aihub/secrets/vault-role-id-pgbouncer
 sudo chmod 0600 /srv/aihub/secrets/vault-role-id-pgbouncer
 ```
@@ -1003,18 +1012,33 @@ so Docker NATs the connection to the Vault-side gateway first: on this host the
 Agent is at `172.16.7.x` but Vault sees `172.16.2.1`. Read the value from a
 rejected login in the Vault audit log.
 
-The role is provisioned with `bind_secret_id=false` so the Agent authenticates
-with its role ID alone and can re-authenticate whenever it is restarted, and
-with `bound_cidr_list` as the constraint Vault requires in that mode. Because
-every container on the host is NATed to the same gateway, that constraint blocks
-logins from outside the VPS but does not distinguish containers on it; the
-runtime policy is what limits what the token can read.
+The role is provisioned with `bind_secret_id=true` and a durable Secret ID
+(no TTL, no use limit), so the Agent re-authenticates after a restart or a
+revoked token. The CIDR still blocks logins from outside the VPS, but every
+container on the host is NATed to that gateway; the Secret ID file is what
+distinguishes the Agent from them ([ADR-0171](../adr/0171-vault-runtime-login-requires-a-secret-id.md)).
+The helper mints it under a response wrap and writes it straight to the
+operator-controlled `AIHUB_VAULT_SECRET_ID_FILE`. Each runtime role also gets a
+12-per-minute login quota with a one-minute block; see
+[login visibility](vault-runtime-secrets.md#login-visibility) for the audit
+query that catches a single failed attempt.
 
-Provisioning requires a non-root operator identity. The Agent needs no
-`secret_id`; for smoke checks, authenticate the Vault CLI as the generated
-AppRole using its role ID and keep the returned token only in the shell
-environment. Never print it or run the smoke check with the operator or root
-token. Validate the policy before starting the application:
+Provisioning requires a non-root operator identity. For smoke checks, open a
+separate Vault CLI session authenticated as the generated runtime AppRole with
+both protected credential files, and keep the returned token only in that
+shell's `VAULT_TOKEN`. Never print either credential or the token, and never
+run the smoke check with the operator or root token:
+
+```sh
+export VAULT_TOKEN=$(
+  printf '{"role_id":"%s","secret_id":"%s"}' \
+    "$(tr -d '\r\n' < "$VAULT_ROLE_ID_FILE")" \
+    "$(tr -d '\r\n' < "$VAULT_SECRET_ID_FILE")" \
+  | vault write -field=token auth/approle/login -
+)
+```
+
+Validate the policy before starting the application:
 
 ```sh
 AIHUB_VAULT_SMOKE_ALLOW=true \
@@ -1127,9 +1151,26 @@ docker compose --env-file .env.production \
   -f docker-compose.production.yml config --quiet
 ```
 
-Before recreating Vault Agent, verify its operator-provisioned role ID file.
-The current AppRole uses `bind_secret_id=false`, so the Agent re-authenticates
-with that role ID and needs no one-use SecretID. CD does not provision roles.
+For the AppRole authentication change, install both credentials before switching
+the Agent configuration. Complete these steps in one maintenance window, before
+the current Agent token reaches its maximum TTL
+([ADR-0171](../adr/0171-vault-runtime-login-requires-a-secret-id.md)):
+
+1. Provision the runtime role with `bind_secret_id=true` and a wrapped durable
+   Secret ID. Install `vault-role-id` and `vault-secret-id` at the protected host
+   paths with owner `10001:10001` and mode `0600`, and set `VAULT_SECRET_ID_FILE`
+   in `.env.production`. Do not change the mounted HCL or Compose file yet; the
+   running Agent keeps its token and the app keeps its rendered snapshot.
+2. Validate interpolation with `docker compose ... config --quiet`, then copy the
+   updated Agent HCL and Compose file to the host. The running Agent does not
+   reload them yet.
+3. Recreate only `vault-agent`. Confirm it authenticates and re-renders both
+   documents, without printing any rendered value; the active app continues on
+   its loaded snapshot. Check the audit log for failed runtime logins as in
+   [login visibility](vault-runtime-secrets.md#login-visibility).
+4. Only then deploy the application release. CD does not provision roles or
+   credentials.
+
 Its #351 cutover step recreates the Production Agent only when it detects the
 old shared connection document and Sandbox is disabled. Other rollouts that
 change the rendered document schema must follow the coordinated release
@@ -1795,10 +1836,11 @@ rollback point, not a reason to drop the live database.
 Back up the existing Postgres before releases and test restore separately.
 Rotate compromised downstream credentials using the Vault runbook, then
 restart the matching Agent and app so the startup snapshot is re-rendered. The
-Agents use role IDs with `bind_secret_id=false`; do not mint or rotate a
-`secret_id`. If a role ID is compromised, rotate the affected AppRole and
-install its replacement role ID in that tier's host file before restarting
-its Agent. Certificates are renewed by certbot on the host, not by this stack.
+Agents hold a role ID and a durable Secret ID; rotate both per
+[ADR-0171](../adr/0171-vault-runtime-login-requires-a-secret-id.md) before
+restarting the Agent. Check failed runtime logins after any restart
+([login visibility](vault-runtime-secrets.md#login-visibility)).
+Certificates are renewed by certbot on the host, not by this stack.
 
 ## AI Speaking Production handoff
 

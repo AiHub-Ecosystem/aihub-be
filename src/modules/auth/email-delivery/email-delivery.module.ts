@@ -8,6 +8,11 @@ import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
 import { PostgresEmailCredentialRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-credential.repository';
 import {
+  AUTH_RATE_LIMITER,
+  type AuthRateLimiterPort,
+} from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { AuthRateLimitModule } from '@/modules/auth/rate-limit/public/auth-rate-limit.module';
+import {
   EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   PersistenceModule,
   type PrismaClientHolder,
@@ -91,7 +96,12 @@ import { ResendEmailSender } from './infrastructure/resend/resend-email.sender';
 registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
 
 @Module({
-  imports: [RuntimeConfigurationModule, PersistenceModule, SecretsModule],
+  imports: [
+    RuntimeConfigurationModule,
+    PersistenceModule,
+    SecretsModule,
+    AuthRateLimitModule,
+  ],
   providers: [
     {
       provide: EMAIL_DELIVERY_ID,
@@ -199,6 +209,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         sendRateLimiter: EmailSendRateLimiterPort,
         providerOutageCircuit: EmailProviderOutageCircuitPort,
         dailySendBudget: EmailDailySendBudgetPort,
+        invitationEmailRateLimiter: AuthRateLimiterPort,
         configuration: ConfigType<typeof appConfig>,
         notices: EmailNoticeResolvers,
       ): EmailDeliveryPoller => {
@@ -229,6 +240,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
             onProviderConfigurationFailure:
               reportEmailProviderConfigurationFailure,
             dailySendBudget,
+            invitationEmailRateLimiter,
             notices,
           },
         );
@@ -240,6 +252,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
         EMAIL_SEND_RATE_LIMITER,
         EMAIL_PROVIDER_OUTAGE_CIRCUIT,
         EMAIL_DAILY_SEND_BUDGET,
+        AUTH_RATE_LIMITER,
         appConfig.KEY,
         EMAIL_NOTICE_RESOLVERS,
       ],

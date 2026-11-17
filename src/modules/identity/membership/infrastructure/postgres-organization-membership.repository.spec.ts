@@ -73,10 +73,15 @@ class FakePostgres implements PostgresIdentityQueryClient {
   queries: Array<{ values: readonly unknown[] }> = [];
   result: readonly unknown[] = [membershipRow];
   shouldFail = false;
-  /** Fails only the non-transactional path, which is where a denial is recorded. */
+  /** Fails only a transaction after the first, which is where a denial is recorded. */
   failDirectQuery = false;
   transactionRows: readonly (readonly unknown[])[] = [];
-  transactionQueries: Array<{ values: readonly unknown[] }> = [];
+  /** Every statement of every transaction, with the transaction it ran in (1 is the mutation). */
+  transactionQueries: Array<{
+    values: readonly unknown[];
+    transaction: number;
+  }> = [];
+  private transactionCount = 0;
 
   query(
     _text: string,
@@ -97,12 +102,16 @@ class FakePostgres implements PostgresIdentityQueryClient {
     callback: Parameters<PostgresIdentityTransactionalClient['transaction']>[0],
   ): Promise<T> {
     let index = 0;
+    this.transactionCount += 1;
+    const transaction = this.transactionCount;
     return callback({
-      query: async (_text, values) => {
-        this.transactionQueries.push({ values });
-        if (this.shouldFail) {
+      query: async (text, values) => {
+        if (this.shouldFail || (this.failDirectQuery && transaction > 1)) {
           throw new Error('database unavailable');
         }
+        // The Organization seam declares the tenant before repository reads.
+        if (text.includes('set_config')) return [];
+        this.transactionQueries.push({ values, transaction });
         const rows = this.transactionRows[index] ?? [];
         index += 1;
         return rows;
@@ -250,6 +259,8 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
   it('resolves an active membership with organization status', async () => {
     const client = new FakePostgres();
+    // Membership reads run inside the Organization seam's transaction.
+    client.transactionRows = [[membershipRow]];
 
     await expect(
       new PostgresOrganizationMembershipRepository(
@@ -270,7 +281,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
       },
     });
 
-    expect(client.queries[0]?.values).toEqual([
+    expect(client.transactionQueries[0]?.values).toEqual([
       membershipRow.user_account_id,
       membershipRow.organization_id,
     ]);
@@ -278,7 +289,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
 
   it('distinguishes a disabled membership internally', async () => {
     const client = new FakePostgres();
-    client.result = [{ ...membershipRow, membership_status: 'disabled' }];
+    client.transactionRows = [
+      [{ ...membershipRow, membership_status: 'disabled' }],
+    ];
 
     await expect(
       new PostgresOrganizationMembershipRepository(
@@ -510,7 +523,7 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect((unavailable as AppError).code).toBe('INTERNAL_ERROR');
 
     client.shouldFail = false;
-    client.result = [{ ...membershipRow, role: 'superuser' }];
+    client.transactionRows = [[{ ...membershipRow, role: 'superuser' }]];
     const malformed = await new PostgresOrganizationMembershipRepository(
       prismaFromQueryFake(client),
     )
@@ -525,7 +538,9 @@ describe('PostgresOrganizationMembershipRepository', () => {
     expect((malformed as AppError).code).toBe('INTERNAL_ERROR');
     expect((malformed as AppError).message).toBe('Identity data is invalid');
 
-    client.result = [{ ...membershipRow, user_account_id: 'usr_other' }];
+    client.transactionRows = [
+      [{ ...membershipRow, user_account_id: 'usr_other' }],
+    ];
     const mismatched = await new PostgresOrganizationMembershipRepository(
       prismaFromQueryFake(client),
     )
@@ -748,8 +763,11 @@ describe('PostgresOrganizationMembershipRepository', () => {
 });
 
 describe('PostgresOrganizationMembershipRepository audit trail', () => {
+  /** A refusal is written in a transaction of its own, after the mutation's rolled back. */
   function auditWrites(client: FakePostgres) {
-    return membershipAuditWrites(client.queries);
+    return membershipAuditWrites(
+      client.transactionQueries.filter(({ transaction }) => transaction > 1),
+    );
   }
 
   it('records a refusal outside the transaction that rolled back', async () => {
@@ -774,7 +792,13 @@ describe('PostgresOrganizationMembershipRepository audit trail', () => {
 
     // Not in the transaction: that transaction rolled back, and the record
     // written inside it would have gone with it.
-    expect(membershipAuditWrites(client.transactionQueries)).toHaveLength(0);
+    expect(
+      membershipAuditWrites(
+        client.transactionQueries.filter(
+          ({ transaction }) => transaction === 1,
+        ),
+      ),
+    ).toHaveLength(0);
 
     const [write] = auditWrites(client);
     expect(write?.values).toEqual([

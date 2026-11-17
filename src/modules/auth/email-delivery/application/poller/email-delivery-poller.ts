@@ -192,7 +192,7 @@ export class EmailDeliveryPoller {
           this.providerPausedUntil - now.getTime(),
         );
         try {
-          await this.defer(request, now, retryAfterMs);
+          await this.maintenance.defer(request, now, retryAfterMs);
           summary.deferred += 1;
         } catch {
           // Its lease lapses if the store cannot hand it back.
@@ -255,13 +255,13 @@ export class EmailDeliveryPoller {
     try {
       delivery = readEmailPayload(this.cipher, request);
     } catch {
-      return this.defer(request, now);
+      return this.maintenance.defer(request, now, DEFER_RETRY_MS);
     }
     if (delivery === 'unrecognised') {
       // Only a newer release can open it, and one will once it runs: hand the
       // row back unchanged instead of failing a payload that is not corrupt.
       this.options.onUnrecognisedPayload?.({ kind: request.kind });
-      return this.defer(request, now);
+      return this.maintenance.defer(request, now, DEFER_RETRY_MS);
     }
     if (delivery === 'unreadable' || delivery === 'key_unavailable') {
       // Neither outcome improves by waiting: an unreadable payload would be
@@ -310,9 +310,18 @@ export class EmailDeliveryPoller {
       now,
       notices: this.options.notices ?? {},
     });
-    if (message === undefined) {
+    if (message === undefined)
       return this.maintenance.cancel(request, 'not_actionable', now);
-    }
+
+    if (
+      await this.maintenance.deferInvitationAtRecipientLimit(
+        request,
+        message.recipient,
+        now,
+        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      )
+    )
+      return 'deferred';
 
     let sendPermit: EmailProviderSendPermit;
     try {
@@ -336,12 +345,16 @@ export class EmailDeliveryPoller {
       reservation = await this.sendRateLimiter.reserve();
     } catch {
       await this.releaseProbe(sendPermit.probeToken);
-      return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
+      return this.maintenance.defer(
+        request,
+        now,
+        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      );
     }
     if (!reservation.reserved) {
       await this.releaseProbe(sendPermit.probeToken);
       const retryAfterMs = reservation.retryAfterMs;
-      return this.defer(
+      return this.maintenance.defer(
         request,
         now,
         Number.isSafeInteger(retryAfterMs) && retryAfterMs > 0
@@ -358,7 +371,11 @@ export class EmailDeliveryPoller {
         );
       } catch {
         await this.releaseProbe(sendPermit.probeToken);
-        return this.defer(request, now, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
+        return this.maintenance.defer(
+          request,
+          now,
+          EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+        );
       }
       if (!budgetReservation.reserved) {
         await this.releaseProbe(sendPermit.probeToken);
@@ -367,7 +384,7 @@ export class EmailDeliveryPoller {
           expiresAt === undefined
             ? Infinity
             : Date.parse(expiresAt) - now.getTime();
-        return this.defer(
+        return this.maintenance.defer(
           request,
           now,
           Number.isFinite(remainingCredentialLifetime) &&
@@ -493,19 +510,6 @@ export class EmailDeliveryPoller {
     return 'provider_accepted';
   }
 
-  private async defer(
-    request: EmailDeliveryRequestRecord,
-    now: Date,
-    retryAfterMs = DEFER_RETRY_MS,
-  ): Promise<'deferred'> {
-    await this.store.releaseDeferred({
-      id: request.id,
-      owner: this.options.owner,
-      retryAt: new Date(now.getTime() + retryAfterMs),
-    });
-    return 'deferred';
-  }
-
   private async deferForProviderOutage(
     request: EmailDeliveryRequestRecord,
     now: Date,
@@ -519,7 +523,7 @@ export class EmailDeliveryPoller {
       this.providerPausedUntil,
       now.getTime() + safeRetryAfterMs,
     );
-    await this.defer(
+    await this.maintenance.defer(
       request,
       now,
       Math.max(EMAIL_SEND_RATE_LIMIT_RETRY_MS, safeRetryAfterMs),

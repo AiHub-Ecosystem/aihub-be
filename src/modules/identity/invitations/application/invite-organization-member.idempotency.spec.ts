@@ -191,7 +191,7 @@ function decodeInvitation(value: unknown): InvitedOrganizationMember {
     email,
     role,
     expiresAt: parsedExpiresAt,
-    emailDeliveryStatus: 'queued',
+    emailDeliveryStatus: value['emailDeliveryStatus'],
   };
 }
 
@@ -405,30 +405,32 @@ describe('organization invitation management idempotency seam', () => {
     },
   );
 
-  it('shares the normalized email allowance across callers and Organizations', async () => {
-    await execute({
-      idempotencyKey: 'invite-1',
-      email: ' Invitee@Example.COM ',
+  it('lets another Organization invite an address after this Organization reaches its limit', async () => {
+    for (const idempotencyKey of ['org-a-1', 'org-a-2', 'org-a-3']) {
+      await execute({ idempotencyKey });
+    }
+
+    await expect(execute({ idempotencyKey: 'org-a-4' })).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      httpStatus: 429,
     });
     await execute({
-      idempotencyKey: 'invite-2',
+      idempotencyKey: 'org-b-1',
       organizationId: OTHER_ORGANIZATION_ID,
       userId: OTHER_USER_ID,
     });
-    await execute({
-      idempotencyKey: 'invite-3',
-      organizationId: 'org_third',
-      userId: 'usr_third',
-    });
 
-    await expect(
-      execute({
-        idempotencyKey: 'invite-4',
-        organizationId: 'org_fourth',
-        userId: 'usr_fourth',
-      }),
-    ).rejects.toMatchObject({ code: 'RATE_LIMITED', httpStatus: 429 });
-    expect(invitationCreateInputs).toHaveLength(3);
+    expect(
+      rateLimiter.counts.get(
+        `organization_invitation_email:["${ORGANIZATION_ID}","invitee@example.com"]`,
+      ),
+    ).toBe(4);
+    expect(
+      rateLimiter.counts.get(
+        `organization_invitation_email:["${OTHER_ORGANIZATION_ID}","invitee@example.com"]`,
+      ),
+    ).toBe(1);
+    expect(invitationCreateInputs).toHaveLength(4);
   });
 
   it('rejects a different role with the same scoped key', async () => {

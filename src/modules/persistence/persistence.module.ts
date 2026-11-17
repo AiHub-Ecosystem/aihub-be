@@ -104,3 +104,4 @@ export {
   postgresError,
   runGuardedTransaction,
 } from './infrastructure/prisma-raw';
+export { organizationTransaction } from './infrastructure/organization-transaction';

@@ -103,7 +103,7 @@ function decodeInvitationReplay(value: unknown): InvitedOrganizationMember {
     email,
     role,
     expiresAt: parsedExpiresAt,
-    emailDeliveryStatus: 'queued',
+    emailDeliveryStatus: emailDeliveryStatus ?? 'queued',
   };
 }
 

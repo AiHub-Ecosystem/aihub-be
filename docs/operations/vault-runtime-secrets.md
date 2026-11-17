@@ -36,8 +36,9 @@ during a temporary Vault/Agent outage; it does not read Vault per request.
    Before deploying an MFA writer, also provision `email-outbox`, `web-session`,
    and `auth-mfa`; the latter contains `current_key_id` and a JSON string of
    key IDs mapped to 32-byte base64 keys.
-3. Provision the environment AppRole and configure Vault Agent to render all
-   four files under the AIHUB service account.
+3. Provision the environment AppRole with a response-wrapped Secret ID, install
+   the role ID and Secret ID files for the Agent, and configure Vault Agent to
+   render all four files under the AIHUB service account ([ADR-0171](../adr/0171-vault-runtime-login-requires-a-secret-id.md)).
 4. Set the rendered-file paths in the deployment config channel. Do not put
    runtime credential values in `.env.production`.
 5. Start one instance and run the opt-in AppRole smoke test. Verify health,
@@ -142,3 +143,33 @@ $env:AIHUB_VAULT_SMOKE_AUTH_METHOD = 'approle'
 $env:AIHUB_VAULT_ENVIRONMENT = 'production'
 bun run vault:smoke
 ```
+
+## Login visibility
+
+The runtime AppRole requires both the role ID and a Secret ID. A container that
+shares the host's Docker gateway has the role ID and the source address but not
+the Secret ID file, so its login fails. A per-role quota refuses a burst of
+12 logins per minute with a one-minute block; the audit device makes a single
+failed attempt visible too. After each Agent restart and
+on the daily operator pass, filter failed `aihub-*` AppRole logins from the file
+audit device (the [Vault bootstrap](../../ops/vault/README.md#login-visibility)
+has the query). An Agent with both files does not fail a login on restart; any
+failed runtime login is an attempt to investigate, not noise to ignore. This is
+an operator-run detection rule, not a Prometheus alert: Vault audit records are
+not shipped to Loki today, so the catalog entry stays unrouted until that
+prerequisite exists.
+
+## Shared-host rehearsal
+
+ADR-0171 requires host evidence before #431 closes. Run this drill after the new
+credentials are installed, then record the UTC time, the Vault-observed source
+address and the outcome in the issue:
+
+1. From a container on the shared host network that is not Vault Agent, attempt
+   an AppRole login for the runtime role with invented credentials, then a
+   `kv get` of a production bundle path. Both must be refused.
+2. Repeat the login with the real role ID and an arbitrary wrong Secret ID. It
+   must be refused too, showing that the shared gateway address plus the role ID
+   is not enough.
+3. Confirm Vault Agent still authenticates and renders. Do not print any
+   credential or rendered value, and remove any throwaway credential copy.

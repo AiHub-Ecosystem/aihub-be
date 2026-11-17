@@ -22,9 +22,10 @@ interface ScriptedPostgres {
  * authority policy runs in the fast lane. The database lane proves the locks
  * and the trigger; this proves the decisions taken under them.
  *
- * A statement on the client itself is outside the transaction, which is where a
- * refusal is recorded. Inside it, the reads are the two locks, a rename goes
- * through the model delegate, and any other statement is an audit write.
+ * The first transaction is the rename: its reads are the two locks, a rename goes
+ * through the model delegate, and any other statement is an audit write. A
+ * refusal is recorded in a transaction of its own, after that one rolled back,
+ * so every statement of a later transaction is a denied write.
  */
 function scriptedClient(
   organization: Record<string, unknown> | undefined,
@@ -35,6 +36,7 @@ function scriptedClient(
     deniedWrites: [],
     renames: [],
   };
+  let opened = 0;
 
   const client = {
     ...recorder,
@@ -50,8 +52,16 @@ function scriptedClient(
       callback: (transaction: unknown) => Promise<T>,
     ): Promise<T> => {
       let read = 0;
+      opened += 1;
+      const denial = opened > 1;
       return callback({
-        $queryRawUnsafe: async (_text: string, ...values: unknown[]) => {
+        $queryRawUnsafe: async (text: string, ...values: unknown[]) => {
+          // The Organization seam declares the tenant before repository reads.
+          if (text.includes('set_config')) return [];
+          if (denial) {
+            recorder.deniedWrites.push({ values });
+            return [];
+          }
           if (read === 0) {
             read += 1;
             return organization === undefined ? [] : [organization];
@@ -64,7 +74,7 @@ function scriptedClient(
           return [];
         },
         $executeRawUnsafe: async (_text: string, ...values: unknown[]) => {
-          recorder.writes.push({ values });
+          (denial ? recorder.deniedWrites : recorder.writes).push({ values });
           return 1;
         },
         organization: {

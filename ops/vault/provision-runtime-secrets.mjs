@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 
@@ -32,14 +32,15 @@ if (
   fail('AIHUB_VAULT_CREDENTIALS_DIR is required');
 }
 
-// The Agent logs in unattended, so it authenticates with role_id alone. That
-// requires bind_secret_id=false, and Vault then still requires a constraint:
-// bound_cidr_list restricts the login to the deployment network.
+// The Agent logs in unattended with role_id AND secret_id. The secret_id is the
+// per-Agent factor: a container that shares the host's Docker gateway has the
+// role_id and the source address but not this file, so it cannot log in.
+// secret_id_bound_cidrs stays as a second, off-host boundary.
 //
-// This must be the address Vault records as the request source, not the Agent
-// container's IP. The Agent and Vault sit on different Docker networks, so
-// Docker NATs every cross-network connection to the Vault-side gateway before
-// Vault ever sees it. On the production host that is 172.16.2.1, and the
+// The CIDR must be the address Vault records as the request source, not the
+// Agent container's IP. The Agent and Vault sit on different Docker networks,
+// so Docker NATs every cross-network connection to the Vault-side gateway
+// before Vault ever sees it. On the production host that is 172.16.2.1, and the
 // Agent's own 172.16.7.x address is never observed by Vault. Read the value
 // from a rejected login in the Vault audit log, not from `docker inspect`.
 const agentCidr = process.env.AIHUB_VAULT_AGENT_CIDR?.trim();
@@ -47,6 +48,13 @@ if (agentCidr === undefined || !/^[\d./]+$/.test(agentCidr)) {
   fail(
     'AIHUB_VAULT_AGENT_CIDR must be the CIDR Vault records as the login source, for example 172.16.2.1/32',
   );
+}
+
+// The wrapping token is delivered to this operator session, never printed.
+// The unwrapped value is written straight to the deployment secret channel.
+const secretIdFile = process.env.AIHUB_VAULT_SECRET_ID_FILE?.trim();
+if (secretIdFile === undefined || secretIdFile.length === 0) {
+  fail('AIHUB_VAULT_SECRET_ID_FILE is required for the Agent Secret ID');
 }
 
 /** @param {string[]} args @param {string} label @returns {string} */
@@ -60,6 +68,73 @@ function runVault(args, label) {
     fail(`Vault command failed: ${label}`);
   }
   return result.stdout;
+}
+
+/** @param {string} roleName @param {string} quotaName @returns {void} */
+function limitRoleLogins(roleName, quotaName) {
+  runVault(
+    [
+      'write',
+      `sys/quotas/rate-limit/${quotaName}`,
+      'type=rate-limit',
+      'path=auth/approle',
+      `role=${roleName}`,
+      'rate=12',
+      'interval=1m',
+      'block_interval=1m',
+    ],
+    'AppRole login rate limit',
+  );
+}
+
+/** @param {string} roleName @param {string} destination @returns {void} */
+function installSecretId(roleName, destination) {
+  const wrapped = runVault(
+    [
+      'write',
+      '-format=json',
+      '-wrap-ttl=5m',
+      '-f',
+      `auth/approle/role/${roleName}/secret-id`,
+    ],
+    'AppRole Secret ID wrap',
+  );
+  /** @type {unknown} */
+  let wrappedDocument;
+  try {
+    wrappedDocument = JSON.parse(wrapped);
+  } catch {
+    fail('wrapped AppRole Secret ID response did not return JSON');
+  }
+  const wrapInfo = isRecord(wrappedDocument)
+    ? wrappedDocument.wrap_info
+    : undefined;
+  const wrapToken = isRecord(wrapInfo) ? wrapInfo.token : undefined;
+  if (typeof wrapToken !== 'string' || wrapToken.length === 0) {
+    fail('wrapped AppRole Secret ID response has no wrapping token');
+  }
+
+  const unwrapped = runVault(
+    ['unwrap', '-format=json', wrapToken],
+    'AppRole Secret ID unwrap',
+  );
+  /** @type {unknown} */
+  let unwrappedDocument;
+  try {
+    unwrappedDocument = JSON.parse(unwrapped);
+  } catch {
+    fail('unwrapped AppRole Secret ID response did not return JSON');
+  }
+  const data = isRecord(unwrappedDocument)
+    ? unwrappedDocument.data
+    : unwrappedDocument;
+  const secretId = isRecord(data) ? data.secret_id : undefined;
+  if (typeof secretId !== 'string' || secretId.trim().length === 0) {
+    fail('unwrapped AppRole Secret ID response has no secret_id');
+  }
+
+  writeFileSync(destination, secretId, { mode: 0o600 });
+  chmodSync(destination, 0o600);
 }
 
 /** @param {string} fileName @param {string[]} keys @param {string[]} [optionalKeys] @returns {string} */
@@ -126,21 +201,23 @@ runVault(
     `auth/approle/role/${policyName}`,
     `token_policies=${policyName}`,
     'token_type=service',
-    'secret_id_ttl=10m',
-    'secret_id_num_uses=1',
+    // No TTL and no use limit: the Agent holds the Secret ID as a durable file
+    // and re-authenticates after restart or token revocation. A one-use value
+    // would strand it after the first login (#193).
+    'secret_id_ttl=0',
+    'secret_id_num_uses=0',
     'token_ttl=1h',
     'token_max_ttl=24h',
-    // bind_secret_id=false is what makes the Agent durable: without a
-    // secret_id there is nothing to expire or burn, so the token renews until
-    // it is revoked instead of dying at token_max_ttl. The operator still
-    // mints a short-lived one-use secret_id for hands-on sessions. Vault
-    // requires a constraint when bind_secret_id is off, so the deployment
-    // network is bound at login time instead.
-    'bind_secret_id=false',
-    `bound_cidr_list=${agentCidr}`,
+    // The Secret ID is the per-Agent factor the shared host cannot supply from
+    // the role_id and gateway address alone. The CIDR stays as a second,
+    // off-host boundary.
+    'bind_secret_id=true',
+    `secret_id_bound_cidrs=${agentCidr}`,
   ],
   'AppRole provision',
 );
+limitRoleLogins(policyName, `aihub-${environment}-runtime-login`);
+installSecretId(policyName, secretIdFile);
 
 /** @type {Array<[string, string[], string, string[]?]>} */
 const bundles = [
@@ -228,6 +305,14 @@ if (existsSync(poolerBundlePath)) {
     'KV bundle write (database-pooler)',
   );
 
+  const poolerSecretIdFile =
+    process.env.AIHUB_PGBOUNCER_VAULT_SECRET_ID_FILE?.trim();
+  if (poolerSecretIdFile === undefined || poolerSecretIdFile.length === 0) {
+    fail(
+      'AIHUB_PGBOUNCER_VAULT_SECRET_ID_FILE is required when provisioning PgBouncer',
+    );
+  }
+
   const poolerPolicyName = `aihub-${environment}-pgbouncer`;
   const poolerPolicyPath = join(
     process.cwd(),
@@ -246,15 +331,17 @@ if (existsSync(poolerBundlePath)) {
       `auth/approle/role/${poolerPolicyName}`,
       `token_policies=${poolerPolicyName}`,
       'token_type=service',
-      'secret_id_ttl=10m',
-      'secret_id_num_uses=1',
+      'secret_id_ttl=0',
+      'secret_id_num_uses=0',
       'token_ttl=1h',
       'token_max_ttl=24h',
-      'bind_secret_id=false',
-      `bound_cidr_list=${agentCidr}`,
+      'bind_secret_id=true',
+      `secret_id_bound_cidrs=${agentCidr}`,
     ],
     'PgBouncer AppRole provision',
   );
+  limitRoleLogins(poolerPolicyName, `aihub-${environment}-pgbouncer-login`);
+  installSecretId(poolerPolicyName, poolerSecretIdFile);
 }
 
 console.log(`Vault provisioning completed for ${environment}`);

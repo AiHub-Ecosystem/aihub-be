@@ -1618,12 +1618,24 @@ describe('source-text architecture rules fail arch-check', () => {
           '  function setupFakeTimers() { jest.useFakeTimers(); }',
           '  await new Promise((resolve) => setTimeout(resolve, 1));',
           '});',
+          'it("checks timer waits inside async helpers", async () => {',
+          '  async function sleep() {',
+          '    await new Promise((resolve) => setTimeout(resolve, 5));',
+          '  }',
+          '  const wait = sleep();',
+          '  await wait;',
+          '});',
+          'it("does not exempt nested waits before fake timers", async () => {',
+          '  async function wait() { await new Promise((resolve) => setTimeout(resolve, 5)); }',
+          '  await wait();',
+          '  jest.useFakeTimers();',
+          '});',
           '',
         ].join('\n'),
       ],
     ]);
 
-    expect(result.failures).toHaveLength(7);
+    expect(result.failures).toHaveLength(9);
     expect(result.failures[0]).toContain('test/real-timer.spec.ts:5');
     expect(result.failures[1]).toContain('test/real-timer.spec.ts:7');
     expect(result.failures[2]).toContain('test/real-timer.spec.ts:9');
@@ -1631,6 +1643,8 @@ describe('source-text architecture rules fail arch-check', () => {
     expect(result.failures[4]).toContain('test/real-timer.spec.ts:13');
     expect(result.failures[5]).toContain('test/real-timer.spec.ts:16');
     expect(result.failures[6]).toContain('test/real-timer.spec.ts:25');
+    expect(result.failures[7]).toContain('test/real-timer.spec.ts:29');
+    expect(result.failures[8]).toContain('test/real-timer.spec.ts:35');
   });
 
   it('rejects timer-promises and PostgreSQL sleeps in specs', () => {
@@ -2176,5 +2190,112 @@ describe('fixture isolation (#1636)', () => {
       .map((entry) => relative(repoRoot, join(entry.parentPath, entry.name)));
 
     expect(leftovers).toEqual([]);
+  });
+});
+
+describe('request-serving persistence opens transactions through the Organization seam (#785)', () => {
+  function checkRepository(
+    source: string,
+    path = 'src/modules/identity/api-keys/infrastructure/postgres-fixture.repository.ts',
+  ): {
+    status: number | null;
+    output: string;
+  } {
+    return checkFixtures([[path, source]]);
+  }
+
+  it('rejects a repository that opens a direct transaction', () => {
+    const result = checkRepository(
+      [
+        'export class FixtureRepository {',
+        '  async run(client: { $transaction: (cb: () => Promise<void>) => Promise<void> }) {',
+        '    await client.$transaction(async () => {});',
+        '  }',
+        '}',
+      ].join('\n'),
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('use organizationTransaction');
+  });
+
+  it('rejects a direct transaction in a module outside Identity', () => {
+    const result = checkRepository(
+      'export const run = (client: { $transaction: (cb: () => void) => void }) => client.$transaction(() => {});',
+      'src/modules/speaking/infrastructure/postgres-fixture.repository.ts',
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('use organizationTransaction');
+  });
+
+  it('keeps a named cross-Organization repository off the seam', () => {
+    const result = checkRepository(
+      'export const run = (client: { $transaction: (cb: () => void) => void }) => client.$transaction(() => {});',
+      'src/modules/metering/infrastructure/billing/postgres-usage-retention.repository.ts',
+    );
+    expect(result.output).not.toContain('use organizationTransaction');
+  });
+
+  it('accepts a repository that routes through the seam', () => {
+    const result = checkRepository(
+      [
+        'import { identityTransaction } from "@/modules/identity/shared/infrastructure/postgres-identity.client";',
+        'export class FixtureRepository {',
+        '  async run(client: unknown, organizationId: string) {',
+        '    return identityTransaction(client as never, organizationId, async () => 1);',
+        '  }',
+        '}',
+      ].join('\n'),
+    );
+    expect(result.status).toBe(0);
+  });
+});
+
+describe('Identity repositories do not run statements on their own client (#785)', () => {
+  const REJECTED = 'runs a statement on its own client outside a transaction';
+  const path =
+    'src/modules/identity/invitations/infrastructure/postgres-fixture.repository.ts';
+
+  function checkRepository(
+    body: string,
+    repositoryPath = path,
+  ): { status: number | null; output: string } {
+    return checkFixtures([
+      [
+        repositoryPath,
+        [
+          'export class FixtureRepository {',
+          '  constructor(private readonly client: unknown) {}',
+          '  async run(organizationId: string) {',
+          body,
+          '  }',
+          '}',
+        ].join('\n'),
+      ],
+    ]);
+  }
+
+  it.each([
+    ['identityRows', '    return identityRows(this.client, "SELECT 1", []);'],
+    ['a raw query', '    return this.client.$queryRawUnsafe("SELECT 1");'],
+    ['a model delegate write', '    return this.client.apiKey.updateMany({});'],
+  ])('rejects %s on this.client', (_name, body) => {
+    const result = checkRepository(body);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(REJECTED);
+  });
+
+  it('accepts a statement on the transaction the seam hands over', () => {
+    const result = checkRepository(
+      '    return identityTransaction(this.client, organizationId, (transaction) => identityRows(transaction, "SELECT 1", []));',
+    );
+    expect(result.output).not.toContain(REJECTED);
+  });
+
+  it('keeps a named pre-tenant repository off the seam', () => {
+    const result = checkRepository(
+      '    return identityRows(this.client, "SELECT 1", []);',
+      'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
+    );
+    expect(result.output).not.toContain(REJECTED);
   });
 });

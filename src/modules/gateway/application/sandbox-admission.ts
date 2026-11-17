@@ -56,7 +56,7 @@ export class SandboxAdmission {
       throw sandboxBudgetUnavailable();
     }
     const reservation: SandboxReservation = {
-      release: () => this.release(budget, context.requestId),
+      release: () => this.release(budget, organizationId, context.requestId),
     };
     try {
       requireTimeLeft(context);
@@ -75,9 +75,10 @@ export class SandboxAdmission {
 
   private async release(
     budget: SandboxDispatchBudgetPort,
+    organizationId: string,
     requestId: string,
   ): Promise<void> {
-    await budget.release(requestId).catch(() => {
+    await budget.release(organizationId, requestId).catch(() => {
       this.warn('sandbox_dispatch_reservation_release_failed');
     });
   }

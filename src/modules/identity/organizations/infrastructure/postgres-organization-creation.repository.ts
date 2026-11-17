@@ -46,61 +46,71 @@ export class PostgresOrganizationCreationRepository
     const organizationId = `org_${ulid()}`;
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
-        const accountRows = await identityRows(transaction, LOCK_ACCOUNT_SQL, [
-          input.creatorUserId,
-        ]);
-        const account = accountRows[0];
-        if (!isRecord(account) || account['status'] !== 'active') {
-          return { kind: 'account_inactive' as const };
-        }
+      return await identityTransaction(
+        this.client,
+        organizationId,
+        async (transaction) => {
+          const accountRows = await identityRows(
+            transaction,
+            LOCK_ACCOUNT_SQL,
+            [input.creatorUserId],
+          );
+          const account = accountRows[0];
+          if (!isRecord(account) || account['status'] !== 'active') {
+            return { kind: 'account_inactive' as const };
+          }
 
-        const creations = await transaction.organization.count({
-          where: { createdByUserAccountId: input.creatorUserId },
-        });
-        if (creations >= input.creationLimit) {
-          // No Organization exists to own an audit event, so the refusal is
-          // left as a log line; the requested name stays out of it.
-          logger.warn({
-            event: 'organization_creation_limit_reached',
-            userAccountId: input.creatorUserId,
-            requestId: input.context.requestId,
+          const creations = await transaction.organization.count({
+            where: { createdByUserAccountId: input.creatorUserId },
           });
-          return { kind: 'limit_reached' as const };
-        }
+          if (creations >= input.creationLimit) {
+            // No Organization exists to own an audit event, so the refusal is
+            // left as a log line; the requested name stays out of it.
+            logger.warn({
+              event: 'organization_creation_limit_reached',
+              userAccountId: input.creatorUserId,
+              requestId: input.context.requestId,
+            });
+            return { kind: 'limit_reached' as const };
+          }
 
-        await transaction.organization.create({
-          data: {
-            id: organizationId,
-            name: input.name,
-            entitlements: [...input.terms.entitlements],
-            rateLimitRpm: input.terms.rateLimitRpm,
-            maxConcurrent: input.terms.maxConcurrent,
-            monthlyRequestQuota: input.terms.monthlyRequestQuota,
-            hardStopOnQuota: input.terms.hardStopOnQuota,
-            createdByUserAccountId: input.creatorUserId,
-          },
-        });
-        await transaction.organizationMembership.create({
-          data: {
-            organizationId,
-            userAccountId: input.creatorUserId,
-            role: 'owner',
-            status: 'active',
-          },
-        });
-        await recordOrganizationAuditEvent(
-          transaction,
-          auditStamp(
-            { context: input.context, organizationId },
-            input.creatorUserId,
-            input.context.receivedAt,
-          ),
-          { action: 'organization.created', organizationId, name: input.name },
-        );
+          await transaction.organization.create({
+            data: {
+              id: organizationId,
+              name: input.name,
+              entitlements: [...input.terms.entitlements],
+              rateLimitRpm: input.terms.rateLimitRpm,
+              maxConcurrent: input.terms.maxConcurrent,
+              monthlyRequestQuota: input.terms.monthlyRequestQuota,
+              hardStopOnQuota: input.terms.hardStopOnQuota,
+              createdByUserAccountId: input.creatorUserId,
+            },
+          });
+          await transaction.organizationMembership.create({
+            data: {
+              organizationId,
+              userAccountId: input.creatorUserId,
+              role: 'owner',
+              status: 'active',
+            },
+          });
+          await recordOrganizationAuditEvent(
+            transaction,
+            auditStamp(
+              { context: input.context, organizationId },
+              input.creatorUserId,
+              input.context.receivedAt,
+            ),
+            {
+              action: 'organization.created',
+              organizationId,
+              name: input.name,
+            },
+          );
 
-        return { kind: 'created' as const, organizationId };
-      });
+          return { kind: 'created' as const, organizationId };
+        },
+      );
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

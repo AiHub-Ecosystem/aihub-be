@@ -1,3 +1,5 @@
+import type { PrismaClient } from '@prisma-client/client';
+
 import { PostgresIdempotencyRepository } from './postgres-idempotency.repository';
 
 class QueueClient {
@@ -6,10 +8,20 @@ class QueueClient {
   constructor(private readonly responses: readonly (readonly unknown[])[]) {}
 
   async $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T> {
-    void query;
+    // The Organization seam declares the tenant first; it is not a repository statement.
+    if (query.includes('set_config')) return [] as T;
     this.queries.push({ values });
     return (this.responses[this.queries.length - 1] ?? []) as T;
   }
+
+  /** Organization-scoped keys run in the seam's transaction (#785). */
+  async $transaction<T>(callback: (client: QueueClient) => Promise<T>) {
+    return callback(this);
+  }
+}
+
+function repositoryOver(client: QueueClient): PostgresIdempotencyRepository {
+  return new PostgresIdempotencyRepository(client as unknown as PrismaClient);
 }
 
 const baseInput = {
@@ -52,7 +64,7 @@ describe('PostgresIdempotencyRepository', () => {
         },
       ],
     ]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(
       repository.findCompletedMatch({
@@ -79,7 +91,7 @@ describe('PostgresIdempotencyRepository', () => {
 
   it('claims a new row from the insert and does not issue a second query', async () => {
     const client = new QueueClient([[{ request_id: 'req_1' }]]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(repository.reserve(baseInput)).resolves.toEqual({
       kind: 'claimed',
@@ -91,7 +103,7 @@ describe('PostgresIdempotencyRepository', () => {
 
   it('binds management reservations to the authenticated caller scope', async () => {
     const client = new QueueClient([[{ request_id: 'req_management' }]]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(
       repository.reserve({ ...baseInput, actorScope: 'usr_owner' }),
@@ -104,7 +116,7 @@ describe('PostgresIdempotencyRepository', () => {
 
   it('atomically reclaims failed rows and uses the fingerprint for completed replay', async () => {
     const failedClient = new QueueClient([[], [{ request_id: 'req_2' }]]);
-    const failedRepository = new PostgresIdempotencyRepository(failedClient);
+    const failedRepository = repositoryOver(failedClient);
     await expect(
       failedRepository.reserve({ ...baseInput, requestId: 'req_2' }),
     ).resolves.toEqual({ kind: 'claimed', requestId: 'req_2' });
@@ -123,7 +135,7 @@ describe('PostgresIdempotencyRepository', () => {
         },
       ],
     ]);
-    const replayRepository = new PostgresIdempotencyRepository(replayClient);
+    const replayRepository = repositoryOver(replayClient);
     await expect(replayRepository.reserve(baseInput)).resolves.toEqual({
       kind: 'replay',
       responseStatus: 200,
@@ -133,7 +145,7 @@ describe('PostgresIdempotencyRepository', () => {
 
   it('reclaims an expired pending row even when the new fingerprint differs', async () => {
     const client = new QueueClient([[], [{ request_id: 'req_expired' }]]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(
       repository.reserve({
@@ -159,7 +171,7 @@ describe('PostgresIdempotencyRepository', () => {
         },
       ],
     ]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(repository.reserve(baseInput)).resolves.toEqual({
       kind: 'conflict',
@@ -173,7 +185,7 @@ describe('PostgresIdempotencyRepository', () => {
       [],
       [{ request_fingerprint: { invalid: true }, state: 'completed' }],
     ]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(repository.reserve(baseInput)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -182,7 +194,7 @@ describe('PostgresIdempotencyRepository', () => {
   });
 
   it('fails when completion does not update the claimed row', async () => {
-    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+    const repository = repositoryOver(new QueueClient([[]]));
 
     await expect(repository.complete(completeInput)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -196,7 +208,7 @@ describe('PostgresIdempotencyRepository', () => {
       [{ request_id: baseInput.requestId }],
       [{ request_id: baseInput.requestId }],
     ]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
 
     await expect(repository.complete(completeInput)).resolves.toBeUndefined();
     await expect(repository.markFailed(attemptInput)).resolves.toBeUndefined();
@@ -205,7 +217,7 @@ describe('PostgresIdempotencyRepository', () => {
   });
 
   it('fails when marking a claimed row does not update it', async () => {
-    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+    const repository = repositoryOver(new QueueClient([[]]));
 
     await expect(repository.markFailed(attemptInput)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -214,7 +226,7 @@ describe('PostgresIdempotencyRepository', () => {
   });
 
   it('fails when deleting a claimed row does not delete it', async () => {
-    const repository = new PostgresIdempotencyRepository(new QueueClient([[]]));
+    const repository = repositoryOver(new QueueClient([[]]));
 
     await expect(repository.delete(attemptInput)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -224,7 +236,7 @@ describe('PostgresIdempotencyRepository', () => {
 
   it('deletes expired records in one cleanup query', async () => {
     const client = new QueueClient([[{ request_id: 'req_expired' }]]);
-    const repository = new PostgresIdempotencyRepository(client);
+    const repository = repositoryOver(client);
     const cutoff = new Date('2026-10-01T00:00:00.000Z');
 
     await expect(repository.cleanupExpired(cutoff)).resolves.toBe(1);

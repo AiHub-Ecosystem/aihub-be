@@ -410,25 +410,10 @@ export function collectSourceTextFailures(options) {
             : ts.isPropertyAccessExpression(callee)
               ? callee.name.text
               : '';
-          let awaitedInNestedFunction = false;
-          for (
-            let parent = node.parent;
-            parent !== undefined && parent !== callback;
-            parent = parent.parent
-          ) {
-            if (ts.isFunctionLike(parent)) {
-              awaitedInNestedFunction = true;
-              break;
-            }
-          }
           if (
             (name === 'it' || name === 'test') &&
             callback !== undefined &&
-            containsFakeTimerSetupBefore(
-              callback,
-              node,
-              awaitedInNestedFunction,
-            )
+            containsFakeTimerSetupBefore(callback, node)
           ) {
             return true;
           }
@@ -441,14 +426,9 @@ export function collectSourceTextFailures(options) {
     /**
      * @param {import('typescript').Node} callback
      * @param {import('typescript').Node} awaitedNode
-     * @param {boolean} [allowSetupAfterWait]
      * @returns {boolean}
      */
-    function containsFakeTimerSetupBefore(
-      callback,
-      awaitedNode,
-      allowSetupAfterWait = false,
-    ) {
+    function containsFakeTimerSetupBefore(callback, awaitedNode) {
       const awaitedPosition = awaitedNode.getStart(sourceFile);
       /** @param {import('typescript').Node} node @returns {boolean} */
       function containsSetup(node, root = true) {
@@ -456,16 +436,14 @@ export function collectSourceTextFailures(options) {
         if (ts.isCallExpression(node)) {
           const callee = node.expression;
           if (
-            (allowSetupAfterWait ||
-              node.getStart(sourceFile) < awaitedPosition) &&
+            node.getStart(sourceFile) < awaitedPosition &&
             ts.isIdentifier(callee) &&
             callee.text === 'withFakeTimers'
           ) {
             return true;
           }
           if (
-            (allowSetupAfterWait ||
-              node.getStart(sourceFile) < awaitedPosition) &&
+            node.getStart(sourceFile) < awaitedPosition &&
             ts.isPropertyAccessExpression(callee) &&
             ts.isIdentifier(callee.expression) &&
             callee.expression.text === 'jest' &&
@@ -1523,6 +1501,107 @@ export function collectSourceTextFailures(options) {
       ts.forEachChild(node, visit);
     }
     visit(sourceFile);
+  }
+
+  // #785 / ADR-0109: request-serving persistence opens its transactions through
+  // `organizationTransaction` (Identity: `identityTransaction`), which declares
+  // the Organization to PostgreSQL from an explicit argument before any
+  // repository statement runs. A direct `$transaction` in infrastructure
+  // bypasses that seam and would silently see no rows under fail-closed RLS.
+  // The files below are the only ones that may open one, each for the reason
+  // given; a new repository is checked by default, so a bypass fails the gate.
+  {
+    const directTransactionAllowed = new Map([
+      [
+        'src/modules/persistence/infrastructure/organization-transaction.ts',
+        'the seam itself',
+      ],
+      [
+        'src/modules/identity/shared/infrastructure/postgres-identity.client.ts',
+        'the Identity form of the seam and its unscoped pre-tenant form',
+      ],
+      [
+        'src/modules/auth/shared/infrastructure/auth-prisma.ts',
+        'Auth sessions and accounts, not Organization-owned rows',
+      ],
+      [
+        'src/modules/avatar/infrastructure/postgres-avatar.repository.ts',
+        'User-scoped avatar rows, no Organization column',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-billing-statement.repository.ts',
+        'Operator billing snapshot, close and adjustment across Organizations',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository.ts',
+        'fleet-wide collector coverage, no Organization',
+      ],
+      [
+        'src/modules/metering/infrastructure/billing/postgres-usage-retention.repository.ts',
+        'fleet-wide usage pruning job',
+      ],
+      [
+        'src/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository.ts',
+        'Operator revocation that discovers the Organization from the asset',
+      ],
+    ]);
+    for (const file of sourceFiles) {
+      if (file.endsWith('.spec.ts')) continue;
+      const relativePath = relative(root, file).replace(/\\/g, '/');
+      if (!/^src\/modules\/[^/]+\/.*\/?infrastructure\//.test(relativePath)) {
+        continue;
+      }
+      if (directTransactionAllowed.has(relativePath)) continue;
+      if (/\$transaction\s*\(/.test(sourceText(file))) {
+        fail(
+          `${relativePath} opens a transaction directly; use organizationTransaction (Identity: identityTransaction) from the shared seam so the Organization is declared inside the transaction (#785)`,
+        );
+      }
+    }
+  }
+
+  // #785 / ADR-0109: a statement an Identity repository runs on its own client
+  // (`this.client`) runs outside any transaction, so it never declares the
+  // Organization and would see no rows under fail-closed RLS. A request-serving
+  // statement goes through `identityTransaction(this.client, organizationId, ...)`
+  // and runs on the transaction it hands over. The files below are the only ones
+  // that may use `this.client` directly, each for the reason given. This reads
+  // the text, so it does not follow a client copied into another variable; the
+  // coverage spec in `src/modules/persistence` is the behavioural check.
+  {
+    const unscopedIdentityClientAllowed = new Map([
+      [
+        'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
+        'pre-tenant lookup by key hash (ADR-0109 decision 6, #80)',
+      ],
+      [
+        'src/modules/identity/membership/infrastructure/postgres-organization-membership-read.repository.ts',
+        'pre-tenant roster of one User Account across Organizations (ADR-0109 decision 6, #80)',
+      ],
+      [
+        'src/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices.ts',
+        'scheduled sweep across Organizations, not request-serving',
+      ],
+      [
+        'src/modules/identity/shared/infrastructure/postgres-operator-redis-failure.repository.ts',
+        'Operator Redis failure record, no Organization column',
+      ],
+    ]);
+    const unscopedIdentityClientUse =
+      /\bidentityRows\(\s*this\.client\b|\bthis\.client\.\$(?:query|execute)Raw|\bthis\.client\.[a-z]\w*\.(?:find\w*|create\w*|update\w*|delete\w*|count|upsert|aggregate|groupBy)\s*\(/;
+    for (const file of sourceFiles) {
+      if (file.endsWith('.spec.ts')) continue;
+      const relativePath = relative(root, file).replace(/\\/g, '/');
+      if (!/^src\/modules\/identity\/.*\/infrastructure\//.test(relativePath)) {
+        continue;
+      }
+      if (unscopedIdentityClientAllowed.has(relativePath)) continue;
+      if (unscopedIdentityClientUse.test(sourceText(file))) {
+        fail(
+          `${relativePath} runs a statement on its own client outside a transaction; use identityTransaction(this.client, organizationId, ...) so the Organization is declared first (#785)`,
+        );
+      }
+    }
   }
 
   // ADR-0054 / #784: every statement that stores a session takes a

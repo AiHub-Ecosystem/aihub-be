@@ -197,7 +197,10 @@ function expectExpiredAssetCleanup(
       }) as unknown as SpeakingGradingJobError,
     }),
   );
-  expect(subject.sandboxRelease).toHaveBeenCalledWith(job.jobId);
+  expect(subject.sandboxRelease).toHaveBeenCalledWith(
+    job.organizationId,
+    job.jobId,
+  );
   expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
   expect(subject.execute).not.toHaveBeenCalled();
   expect(subject.release).toHaveBeenCalledTimes(1);

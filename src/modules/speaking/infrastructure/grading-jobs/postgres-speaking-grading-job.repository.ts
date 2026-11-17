@@ -1,7 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
-import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
+import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type {
   NewSpeakingGradingJob,
   SpeakingGradingJob,
@@ -91,8 +91,20 @@ export class PostgresSpeakingGradingJobRepository
 {
   constructor(private readonly client: PrismaClient) {}
 
+  /** Request-serving access declares its Organization before any statement. */
+  private scoped<T>(
+    organizationId: string,
+    callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.run(() =>
+      organizationTransaction(this.client, organizationId, callback),
+    );
+  }
+
   async create(job: NewSpeakingGradingJob): Promise<void> {
-    await this.run(() => insertJob(this.client, job));
+    await this.scoped(job.organizationId, (transaction) =>
+      insertJob(transaction, job),
+    );
   }
 
   async createWithAdmission(input: {
@@ -104,21 +116,24 @@ export class PostgresSpeakingGradingJobRepository
       input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
     );
     if (input.job.idempotencyKey !== undefined) {
-      const existing = await selectKeyedJob(this.client, {
+      const idempotencyKey = input.job.idempotencyKey;
+      const keyed = {
         organizationId: input.job.organizationId,
         endUserId: input.job.endUserId,
-        idempotencyKey: input.job.idempotencyKey,
-        unexpiredSince,
-      });
+        idempotencyKey,
+      };
+      const existing = await this.scoped(keyed.organizationId, (transaction) =>
+        selectKeyedJob(transaction, { ...keyed, unexpiredSince }),
+      );
       if (existing !== undefined) {
         return { created: false, existingJobId: existing.jobId };
       }
-      await clearExpiredKeyedJobs(this.client, {
-        organizationId: input.job.organizationId,
-        endUserId: input.job.endUserId,
-        idempotencyKey: input.job.idempotencyKey,
-        expiredBefore: unexpiredSince,
-      });
+      await this.scoped(keyed.organizationId, (transaction) =>
+        clearExpiredKeyedJobs(transaction, {
+          ...keyed,
+          expiredBefore: unexpiredSince,
+        }),
+      );
     }
 
     if (input.monthlyQuota === null) {
@@ -134,7 +149,9 @@ export class PostgresSpeakingGradingJobRepository
     let admissionFailed = false;
     let admissionError: unknown;
     try {
-      return await this.client.$transaction(
+      return await organizationTransaction(
+        this.client,
+        input.job.organizationId,
         async (transaction): Promise<SpeakingGradingJobCreationOutcome> => {
           // One lock per Organization, not per month: reservations carry over a
           // month boundary, so admissions on either side must serialize.
@@ -160,7 +177,6 @@ export class PostgresSpeakingGradingJobRepository
           await insertJob(transaction, input.job);
           return { created: true };
         },
-        CONTROL_PLANE_TRANSACTION_OPTIONS,
       );
     } catch (error) {
       if (admissionFailed) throw admissionError;
@@ -171,15 +187,18 @@ export class PostgresSpeakingGradingJobRepository
           'Speaking grading job store is unavailable',
         );
       }
+      const retryKey = input.job.idempotencyKey;
       const existingAfter =
-        input.job.idempotencyKey === undefined
+        retryKey === undefined
           ? undefined
-          : await selectKeyedJob(this.client, {
-              organizationId: input.job.organizationId,
-              endUserId: input.job.endUserId,
-              idempotencyKey: input.job.idempotencyKey,
-              unexpiredSince,
-            });
+          : await this.scoped(input.job.organizationId, (transaction) =>
+              selectKeyedJob(transaction, {
+                organizationId: input.job.organizationId,
+                endUserId: input.job.endUserId,
+                idempotencyKey: retryKey,
+                unexpiredSince,
+              }),
+            );
       if (existingAfter === undefined) {
         if (error instanceof AppError) throw error;
         throw databaseUnavailableError(
@@ -195,8 +214,8 @@ export class PostgresSpeakingGradingJobRepository
     owner: SpeakingGradingJobOwner,
     jobId: string,
   ): Promise<SpeakingGradingJob | undefined> {
-    return this.run(async () => {
-      const rows = await this.client.$queryRawUnsafe<
+    return this.scoped(owner.organizationId, async (transaction) => {
+      const rows = await transaction.$queryRawUnsafe<
         readonly SpeakingGradingJobRow[]
       >(
         `SELECT ${JOB_COLUMNS} FROM speaking_grading_jobs WHERE job_id = $1 AND organization_id = $2 AND end_user_id = $3 AND environment = $4`,
@@ -214,7 +233,9 @@ export class PostgresSpeakingGradingJobRepository
     readonly endUserId: string;
     readonly idempotencyKey: string;
   }): Promise<SpeakingGradingJob | undefined> {
-    return this.run(() => selectKeyedJob(this.client, input));
+    return this.scoped(input.organizationId, (transaction) =>
+      selectKeyedJob(transaction, input),
+    );
   }
 
   async claim(input: {
@@ -313,7 +334,9 @@ export class PostgresSpeakingGradingJobRepository
   }
 
   async countInFlight(input: InFlightCountInput): Promise<number> {
-    return this.run(() => countInFlight(this.client, input));
+    return this.scoped(input.organizationId, (transaction) =>
+      countInFlight(transaction, input),
+    );
   }
 
   async listStaleQueued(input: {

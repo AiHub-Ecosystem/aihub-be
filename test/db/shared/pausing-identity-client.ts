@@ -7,6 +7,8 @@ import {
   prismaFromQueryFake,
 } from '@/modules/persistence/testing/query-fake-client';
 
+const ORGANIZATION_SETTING_SQL = 'SELECT set_config($1, $2, true)';
+
 export interface QueryPause {
   readonly captured: Promise<void>;
   release(): void;
@@ -143,6 +145,11 @@ export class PausingIdentityClient implements QueryFake {
       return;
     }
     if (pause.fragment !== undefined && !text.includes(pause.fragment)) {
+      return;
+    }
+    // The Organization seam declares the tenant first (#785). "The next query"
+    // means the next repository statement, not that declaration.
+    if (pause.fragment === undefined && text === ORGANIZATION_SETTING_SQL) {
       return;
     }
     this.pause = undefined;

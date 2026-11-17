@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma-client/client';
+
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
@@ -134,6 +136,14 @@ export class PostgresOrganizationApiKeyRepository
 {
   constructor(private readonly client: IdentityRepositoryClient) {}
 
+  /** Every key mutation declares its Organization before any statement runs. */
+  private scoped<T>(
+    organizationId: string,
+    callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return identityTransaction(this.client, organizationId, callback);
+  }
+
   /**
    * The one caller-authority evaluation every key mutation makes under its
    * Organization lock: the policy decides, this only supplies the rows and
@@ -173,7 +183,7 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
+      return await this.scoped(input.organizationId, async (transaction) => {
         // Organization first, then key: creation takes the same order, so two
         // key mutations cannot deadlock against each other.
         const organizationRows = await identityRows(
@@ -335,7 +345,7 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
+      return await this.scoped(input.organizationId, async (transaction) => {
         // Organization first, then key: the order creation and rotation use,
         // so key mutations cannot deadlock against each other.
         const organizationRows = await identityRows(
@@ -437,11 +447,13 @@ export class PostgresOrganizationApiKeyRepository
     // process-local and does not imply commit order.
     let rows: readonly unknown[];
     try {
-      rows = await this.client.apiKey.findMany({
-        where: { organizationId: input.organizationId, status: 'active' },
-        select: INVENTORY_SELECT,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
+      rows = await this.scoped(input.organizationId, async (transaction) =>
+        transaction.apiKey.findMany({
+          where: { organizationId: input.organizationId, status: 'active' },
+          select: INVENTORY_SELECT,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }),
+      );
     } catch (error) {
       throw identityStoreUnavailable(error);
     }
@@ -476,7 +488,7 @@ export class PostgresOrganizationApiKeyRepository
     }
 
     try {
-      return await identityTransaction(this.client, async (transaction) => {
+      return await this.scoped(input.organizationId, async (transaction) => {
         const organizationRows = await identityRows(
           transaction,
           LOCK_ORGANIZATION_SQL,

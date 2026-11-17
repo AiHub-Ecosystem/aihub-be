@@ -1,6 +1,6 @@
 # ADR-0154: Adaptive concurrency limit for AI-service dispatch
 
-- Status: Accepted
+- Status: Accepted; baseline update rule amended by [#1880](https://github.com/AiHub-Ecosystem/aihub-be/issues/1880)
 - Date: 2026-11-07
 - Related: [#1590](https://github.com/AiHub-Ecosystem/aihub-be/issues/1590), [ADR-0149](0149-process-local-bulkheads-for-ai-and-object-storage.md)
 
@@ -25,7 +25,10 @@ limit in `src/modules/gateway/infrastructure/dispatch/`, following Netflix
 concurrency-limits. Each configured origin gets its own `Gradient2Limit`:
 
 - the long-term RTT baseline is an exponentially weighted average (warm-up
-  window 10, long window 600, factor `2/(n+1)`);
+  window 10, long window 600, factor `2/(n+1)`) warmed only from samples
+  taken below half the current limit, then refreshed only from low-load
+  samples or samples shorter than the baseline, so sustained downstream
+  overload cannot drift the reference upward toward degraded latency (#1880);
 - every completed downstream request reports its wall time;
 - the gradient is `max(0.5, min(1.0, tolerance * longRtt / currentRtt))`
   with tolerance `1.25`, a queue allowance of `1`, and smoothing `0.2`;
@@ -72,7 +75,9 @@ threshold.
 ## Consequences
 
 A provider that slows from 1 s to 20 s drives the limit from 10 toward the
-2 floor within a few hundred samples; the load test in
+2 floor within a few hundred samples and keeps it there for as long as the
+degraded latency lasts, because the baseline no longer follows the degraded
+samples; the load test in
 `downstream-http.client.spec.ts` proves the degraded origin fast-fails
 without blocking another origin, and the route-isolation test from ADR-0149
 still passes because the seeded limit equals the old static value.
@@ -80,7 +85,9 @@ still passes because the seeded limit equals the old static value.
 The limiter is process-local, like ADR-0149's bulkhead; total in-flight work
 scales with the number of instances. The 5% recovery decay and the 0.5
 gradient floor keep the limit from collapsing below the floor during a
-single outlier sample.
+single outlier sample. Because the baseline only learns at low load or from
+a shorter sample, a recovered provider re-trains it on the first normal
+samples and the limit scales back to the ceiling.
 
 Follow-ups: add an alert rule once production RTT distributions ground a
 threshold, and revisit whether the static tenant cap should also adapt.

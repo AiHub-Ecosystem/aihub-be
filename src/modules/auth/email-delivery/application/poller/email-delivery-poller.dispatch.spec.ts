@@ -16,7 +16,9 @@ import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
   FakeEmailSendRateLimiter,
+  FakeInvitationEmailRateLimiter,
   FakeStore,
+  INVITATION_PAYLOAD,
   NOW,
   ROW_ID,
   RecordingSender,
@@ -228,6 +230,33 @@ describe('EmailDeliveryPoller', () => {
     expect(store.deferredUntil).toEqual([
       new Date(Date.parse(VERIFICATION_PAYLOAD.expiresAt)),
     ]);
+    expect(sender.sends).toEqual([]);
+    expect(summary.deferred).toBe(1);
+  });
+
+  it('defers excess invitation delivery without rejecting the queued invitation', async () => {
+    const invitationEmailRateLimiter = new FakeInvitationEmailRateLimiter();
+    invitationEmailRateLimiter.result = {
+      allowed: false,
+      retryAfterMs: 4_321,
+    };
+    const { poller, store, sender } = harness({
+      payload: INVITATION_PAYLOAD,
+      invitationEmailRateLimiter,
+    });
+    store.claimResult = [claimed({ kind: 'organization_invite_email' })];
+
+    const summary = await poller.runOnce();
+
+    expect(invitationEmailRateLimiter.calls[0]).toEqual({
+      scope: 'organization_invitation_email',
+      key: 'person@example.com',
+      limit: 3,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    expect(store.deferred).toEqual([ROW_ID]);
+    expect(store.deferredUntil).toEqual([new Date(NOW.getTime() + 4_321)]);
+    expect(store.reserved).toEqual([]);
     expect(sender.sends).toEqual([]);
     expect(summary.deferred).toBe(1);
   });
