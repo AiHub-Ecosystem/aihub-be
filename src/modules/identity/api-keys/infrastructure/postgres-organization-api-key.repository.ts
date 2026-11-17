@@ -145,6 +145,46 @@ export class PostgresOrganizationApiKeyRepository
   }
 
   /**
+   * The one first statement every key mutation makes: lock the Organization,
+   * then evaluate the caller under that lock. Create, rotate and revoke share
+   * this order, so a second key mutation waits instead of deadlocking.
+   */
+  private async lockOrganizationAndAuthorize(
+    transaction: Parameters<typeof identityRows>[0],
+    input: { readonly organizationId: string; readonly actorUserId: string },
+    surface: OrganizationApiKeySurface,
+  ): Promise<
+    | {
+        readonly kind: 'refusal';
+        readonly refusal: OrganizationApiKeyCallerRefusal;
+      }
+    | {
+        readonly kind: 'organization';
+        readonly organization: Record<string, unknown>;
+      }
+  > {
+    const organizationRows = await identityRows(
+      transaction,
+      LOCK_ORGANIZATION_SQL,
+      [input.organizationId],
+    );
+    const organization = organizationRows[0];
+    if (!isRecord(organization)) {
+      return { kind: 'refusal', refusal: 'organization_unavailable' };
+    }
+    const refusal = await this.callerRefusal(
+      transaction,
+      input,
+      surface,
+      organization,
+    );
+    if (refusal !== undefined) {
+      return { kind: 'refusal', refusal };
+    }
+    return { kind: 'organization', organization };
+  }
+
+  /**
    * The one caller-authority evaluation every key mutation makes under its
    * Organization lock: the policy decides, this only supplies the rows and
    * the locked Organization status, and create, rotate, and revoke share it.
@@ -184,28 +224,16 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        // Organization first, then key: creation takes the same order, so two
-        // key mutations cannot deadlock against each other.
-        const organizationRows = await identityRows(
-          transaction,
-          LOCK_ORGANIZATION_SQL,
-          [input.organizationId],
-        );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          return { kind: 'organization_unavailable' as const };
-        }
         // ADR-0159 (decision 2): the caller is re-read under the Organization
         // lock, so a disable or demotion that committed while this request
         // waited refuses it instead of leaving a fresh credential behind.
-        const refusal = await this.callerRefusal(
+        const locked = await this.lockOrganizationAndAuthorize(
           transaction,
           input,
           'api_key_rotate',
-          organization,
         );
-        if (refusal !== undefined) {
-          return { kind: refusal } as const;
+        if (locked.kind === 'refusal') {
+          return { kind: locked.refusal } as const;
         }
 
         const keyRows = await identityRows(transaction, LOCK_API_KEY_SQL, [
@@ -346,28 +374,16 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        // Organization first, then key: the order creation and rotation use,
-        // so key mutations cannot deadlock against each other.
-        const organizationRows = await identityRows(
-          transaction,
-          LOCK_ORGANIZATION_SQL,
-          [input.organizationId],
-        );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          return { kind: 'organization_unavailable' as const };
-        }
         // ADR-0159 (decision 2): a caller demoted or disabled while this
         // request waited is refused here, so a revoked-then-reread key cannot
         // be closed by an authority that no longer exists.
-        const refusal = await this.callerRefusal(
+        const locked = await this.lockOrganizationAndAuthorize(
           transaction,
           input,
           'api_key_revoke',
-          organization,
         );
-        if (refusal !== undefined) {
-          return { kind: refusal } as const;
+        if (locked.kind === 'refusal') {
+          return { kind: locked.refusal } as const;
         }
 
         const keyRows = await identityRows(
@@ -489,28 +505,18 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        const organizationRows = await identityRows(
-          transaction,
-          LOCK_ORGANIZATION_SQL,
-          [input.organizationId],
-        );
-        const organization = organizationRows[0];
-        if (!isRecord(organization)) {
-          return { kind: 'organization_unavailable' as const };
-        }
-
         // ADR-0159 (decision 2): an admin disabled during an incident must not
         // complete a concurrent creation and walk away with a fresh
         // credential. The same evaluation refuses a suspended Organization.
-        const refusal = await this.callerRefusal(
+        const locked = await this.lockOrganizationAndAuthorize(
           transaction,
           input,
           'api_key_create',
-          organization,
         );
-        if (refusal !== undefined) {
-          return { kind: refusal } as const;
+        if (locked.kind === 'refusal') {
+          return { kind: locked.refusal } as const;
         }
+        const organization = locked.organization;
 
         const entitlements = stringArrayValue(organization, 'entitlements');
         if (entitlements === undefined) {

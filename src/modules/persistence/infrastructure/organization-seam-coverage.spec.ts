@@ -414,7 +414,11 @@ const groups: readonly Group[] = [
           now: NOW,
         }),
     },
-    unscoped: { scoped: HELPER, callerRefusal: HELPER },
+    unscoped: {
+      scoped: HELPER,
+      callerRefusal: HELPER,
+      lockOrganizationAndAuthorize: HELPER,
+    },
   },
   {
     name: 'PostgresOrganizationAuditReadRepository',
