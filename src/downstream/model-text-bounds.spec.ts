@@ -13,6 +13,8 @@ import { parseGradeResponse } from './writing/grade-response.adapter';
 import { createMicroExerciseAdapter } from './writing/writing-micro-exercises.adapters';
 import { parseWritingV3Response } from './writing/writing-v3-response.adapter';
 
+const BIDI_OVERRIDE = String.fromCodePoint(0x202e);
+
 type Path = readonly (string | number)[];
 
 interface Adapter {
@@ -101,13 +103,16 @@ describe.each(ADAPTERS)('$name model-generated text (#377)', (adapter) => {
         bodyWith(
           adapter.fixture,
           adapter.text,
-          'before\u0000\u0007\u001b[31m\u007f\u0085‮after\n\tkept',
+          'before\u0000\u0007\u001b[31m\u007f\u0085' +
+            BIDI_OVERRIDE +
+            'after\n\tkept',
         ),
       ),
     );
 
     expect(result).toContain('before[31mafter\\n\\tkept');
-    expect(result).not.toMatch(/\\u00(?:00|07|1b|7f|85)|‮/);
+    expect(result).not.toMatch(/\\u00(?:00|07|1b|7f|85)/);
+    expect(result).not.toContain(BIDI_OVERRIDE);
   });
 
   it('accepts text of exactly the maximum length', () => {

@@ -28,12 +28,18 @@ function clean(value: unknown, depth: number): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => clean(item, depth + 1));
   }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key.replace(CONTROL_CHARACTERS, ''),
-      clean(item, depth + 1),
-    ]),
-  );
+  const copy: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const cleaned = key.replace(CONTROL_CHARACTERS, '');
+    // Two keys that differ only by a control character would silently drop one.
+    if (Object.hasOwn(copy, cleaned)) {
+      throw contractViolation(
+        'response body has keys that are the same once control characters are removed',
+      );
+    }
+    copy[cleaned] = clean(item, depth + 1);
+  }
+  return copy;
 }
 
 /**

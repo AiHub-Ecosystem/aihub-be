@@ -5,6 +5,9 @@ import {
   stripControlCharacters,
 } from './model-text';
 
+const RLO = String.fromCodePoint(0x202e);
+const RLI = String.fromCodePoint(0x2067);
+
 function nested(depth: number): unknown {
   let value: unknown = 'leaf';
   for (let level = 0; level < depth; level += 1) value = [value];
@@ -14,7 +17,9 @@ function nested(depth: number): unknown {
 describe('stripControlCharacters', () => {
   it('drops C0, C1 and bidirectional controls but keeps tab, newline and carriage return', () => {
     expect(
-      stripControlCharacters('a\u0000b\u0007c\u001fd\u007fe\u0085f‮g⁧h'),
+      stripControlCharacters(
+        'a\u0000b\u0007c\u001fd\u007fe\u0085f' + RLO + 'g' + RLI + 'h',
+      ),
     ).toBe('abcdefgh');
     expect(stripControlCharacters('line\r\n\tnext')).toBe('line\r\n\tnext');
   });
@@ -27,7 +32,7 @@ describe('stripControlCharacters', () => {
 
   it('cleans every string and every key in a nested body and keeps other values', () => {
     const cleaned = stripControlCharacters({
-      'k\u0007ey': ['x\u0007', { 'in‮ner': 'y\u0000' }],
+      'k\u0007ey': ['x\u0007', { ['in' + RLO + 'ner']: 'y\u0000' }],
       band: 6.5,
       done: true,
       nothing: null,
@@ -85,5 +90,26 @@ describe('assertTextWithinLimit', () => {
         ? `${thrown.message} ${thrown.diagnostic}`
         : '';
     expect(logged).not.toContain('secret');
+  });
+});
+
+describe('stripControlCharacters key collisions', () => {
+  it('refuses keys that become the same key once cleaned, rather than dropping one', () => {
+    let thrown: unknown;
+    try {
+      stripControlCharacters({ AB: 1, 'A\u0007B': 2 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(thrown).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
+  });
+
+  it('keeps distinct keys that stay distinct once cleaned', () => {
+    expect(stripControlCharacters({ AB: 1, 'A\u0007C': 2 })).toEqual({
+      AB: 1,
+      AC: 2,
+    });
   });
 });
