@@ -1,4 +1,4 @@
-import type { OnModuleInit } from '@nestjs/common';
+import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 
 import { JitteredTimer } from '@/common/jittered-timer';
 import { SheddingPolicy } from '@/modules/gateway/application/shedding/shedding-policy';
@@ -32,7 +32,9 @@ function peakUtilization(
  * it. The sample is local, so each instance decides from its own view of the
  * host; the shared level store makes the higher decision win across peers.
  */
-export class SheddingGovernorScheduler implements OnModuleInit {
+export class SheddingGovernorScheduler
+  implements OnModuleInit, OnApplicationShutdown
+{
   private readonly policy = new SheddingPolicy();
   private readonly timer: JitteredTimer;
   private readingSharedLevel = false;
@@ -47,6 +49,10 @@ export class SheddingGovernorScheduler implements OnModuleInit {
 
   onModuleInit(): void {
     this.timer.start(0);
+  }
+
+  onApplicationShutdown(): void {
+    this.timer.stop();
   }
 
   /** One decision pass, exposed so a test can drive it without the timer. */

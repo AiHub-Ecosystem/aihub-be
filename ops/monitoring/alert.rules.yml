@@ -156,17 +156,19 @@ groups:
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-credential-rejections
 
       # #1591: shed_ratio per tier, from the two counters the gateway exports.
+      # `instance` stays in the grouping: one saturated process shedding 30%
+      # must not be averaged against an idle peer into a silent 15%.
       - record: aihub:shed_ratio:rate5m
         expr: |
-          sum by (job, tier) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          sum by (job, instance, tier) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
           /
-          sum by (job, tier) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          sum by (job, instance, tier) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
 
       - alert: AIHUBSheddingSustained
         expr: |
-          sum by (job, tier) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          sum by (job, instance, tier) (rate(aihub_shed_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
           /
-          sum by (job, tier) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
+          sum by (job, instance, tier) (rate(aihub_tier_requests_total{job=~"aihub-(production|sandbox)-app"}[5m]))
           > 0.2
         for: 10m
         labels:
@@ -175,7 +177,7 @@ groups:
           service: aihub
         annotations:
           summary: "AIHUB has shed more than 20% of requests for ten minutes"
-          description: "{{ $labels.job }} refused {{ $value | humanizePercentage }} of its {{ $labels.tier }} requests to protect the AI Services. Shedding this long means demand exceeds capacity in that tier: read aihub_shed_level for how far shedding has escalated, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
+          description: "{{ $labels.instance }} of {{ $labels.job }} refused {{ $value | humanizePercentage }} of its {{ $labels.tier }} requests to protect the AI Services. Shedding this long means demand exceeds capacity in that tier: read aihub_shed_level for how far shedding has escalated, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
 
   - name: aihub-tracing

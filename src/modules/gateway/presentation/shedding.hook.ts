@@ -20,7 +20,14 @@ export function registerSheddingGuard(
     undefined,
 ): void {
   instance.addHook('onRequest', (request, reply, done) => {
-    const tier = requestTierOf(request.method, request.url);
+    // Fastify's own resolved template, so a percent-encoded spelling of a
+    // route (`/%71uestions`) takes the tier of the route it actually hits
+    // instead of falling back to `critical`. An unmatched route has none and
+    // keeps the raw URL's fallback.
+    const tier = requestTierOf(
+      request.method,
+      request.routeOptions.url ?? request.url,
+    );
     if (!shedsAtLevel(tier, level.current())) {
       record(tier, 'admitted');
       done();

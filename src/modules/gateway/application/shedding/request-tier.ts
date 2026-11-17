@@ -67,13 +67,17 @@ export function requestTierOf(method: string, url: string): RequestTier {
   // instance is dead, which is worse than the capacity it saves.
   if (isHealthProbe(url) || path === METRICS_ROUTE_PATH) return 'critical';
 
-  const exact = EXACT_TIERS.get(`${method} ${path}`);
+  // Fastify answers a `HEAD` from the registered `GET` handler, so a `HEAD`
+  // costs exactly the work the equivalent `GET` does and takes its tier.
+  const routeMethod = method === 'HEAD' ? 'GET' : method;
+
+  const exact = EXACT_TIERS.get(`${routeMethod} ${path}`);
   if (exact !== undefined) return exact;
 
   return (
     TEMPLATED_TIERS.find(
       (candidate) =>
-        candidate.method === method && candidate.pattern.test(path),
+        candidate.method === routeMethod && candidate.pattern.test(path),
     )?.tier ?? 'critical'
   );
 }

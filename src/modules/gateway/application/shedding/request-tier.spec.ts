@@ -47,6 +47,16 @@ describe('requestTierOf', () => {
     expect(requestTierOf('GET', '/metrics')).toBe('critical');
   });
 
+  it('gives an implicit HEAD the tier of the GET it runs', () => {
+    expect(requestTierOf('HEAD', '/v1/ielts/speaking/questions')).toBe(
+      'standard',
+    );
+    expect(requestTierOf('HEAD', '/v2/ielts/speaking/grading-jobs/job_1')).toBe(
+      'standard',
+    );
+    expect(requestTierOf('HEAD', '/v1/auth/login')).toBe('critical');
+  });
+
   it('covers every public route exactly once', () => {
     for (const routeId of Object.keys(PUBLIC_ROUTES) as PublicRouteId[]) {
       const route = PUBLIC_ROUTES[routeId];

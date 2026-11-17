@@ -25,7 +25,10 @@ and metrics an alert can read.
 1. A request's tier comes from its **method and path alone**, resolved in a raw
    Fastify `onRequest` hook before the body is read or parsed. An unknown path
    stays `critical` so its `404` still reaches the caller; a refused `404`
-   protects nothing and turns a typo into an outage signal.
+   protects nothing and turns a typo into an outage signal. The path is the
+   template Fastify resolved, and `HEAD` takes its `GET` tier, so neither a
+   percent-encoded spelling nor an implicit `HEAD` can reach a handler that
+   shedding refuses.
 2. Three tiers. `best-effort` is every operation that dispatches to an AI
    Service during the request. `critical` is the control plane a caller needs in
    order to keep operating: authentication and sessions, MFA, password recovery,
@@ -42,9 +45,10 @@ and metrics an alert can read.
 5. The level is shared through Redis (ADR-0168), because an instance that has
    not seen the spike must not keep admitting what a peer is already shedding.
    Reads are served from process memory and refreshed on a timer; a refusal never
-   waits on Redis. A lower publish never lowers the shared key — it is raised and
-   expires on its own TTL, and a failed Redis read keeps the last known level.
-   Redis being down never sheds by itself. Production and Sandbox connect to
+   waits on Redis. A lower publish neither lowers the shared key nor renews it,
+   so a recovered instance cannot keep a peer's higher level alive; the key
+   expires on its own TTL. A failed read keeps the last known peer level only
+   for that TTL, so an outage never sheds by itself. Production and Sandbox connect to
    separate Redis databases with separate credentials (`/0` and `/1`), so one
    key carries one Environment's level and Sandbox saturation cannot shed
    Production traffic.

@@ -340,6 +340,9 @@ beforeAll(async () => {
             : GRADE_RESPONSE,
       };
     },
+    // The shedding governor samples this on a timer; a sandbox that never
+    // saturates stays at level 0.
+    concurrencySnapshot: () => [],
     async close() {},
   } as unknown as DownstreamHttpClient;
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })

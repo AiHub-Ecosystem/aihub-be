@@ -87,4 +87,29 @@ describe('SheddingGovernorScheduler', () => {
 
     expect(level.current()).toBe(0);
   });
+
+  it('stops sampling once the application shuts down', async () => {
+    jest.useFakeTimers();
+    try {
+      const snapshot = jest.fn(() => [sample('ai-writing', 9, 10)]);
+      const scheduler = new SheddingGovernorScheduler(
+        snapshot,
+        new SheddingLevelStore(undefined, noLogger),
+        () => 0,
+      );
+
+      scheduler.onModuleInit();
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(snapshot).toHaveBeenCalled();
+
+      scheduler.onApplicationShutdown();
+      snapshot.mockClear();
+      await jest.advanceTimersByTimeAsync(10_000);
+
+      expect(snapshot).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

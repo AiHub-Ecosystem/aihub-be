@@ -6,7 +6,9 @@ import {
 
 class FakeRedis implements SheddingLevelRedisClient {
   readonly values = new Map<string, number>();
+  readonly ttls = new Map<string, number>();
   getCalls = 0;
+  writes = 0;
   failReads = false;
 
   async get(key: string): Promise<string | null> {
@@ -23,9 +25,12 @@ class FakeRedis implements SheddingLevelRedisClient {
   ): Promise<number> {
     const key = String(args[0]);
     const level = Number(args[1]);
-    const current = Math.max(this.values.get(key) ?? 0, level);
-    this.values.set(key, current);
-    return current;
+    const current = this.values.get(key) ?? 0;
+    if (level < current) return current;
+    this.writes += 1;
+    this.values.set(key, level);
+    this.ttls.set(key, Number(args[2]));
+    return level;
   }
 }
 
@@ -78,12 +83,34 @@ describe('SheddingLevelStore', () => {
   it('keeps the last known peer level while a refresh fails', async () => {
     const redis = new FakeRedis();
     redis.values.set(SHEDDING_LEVEL_KEY, 1);
-    const store = new SheddingLevelStore(redis);
+    let now = 0;
+    const store = new SheddingLevelStore(redis, undefined, () => now);
     await store.refresh();
 
     redis.failReads = true;
     await store.refresh();
 
     expect(store.current()).toBe(1);
+
+    // A peer's level is only trusted for as long as the key it came from
+    // would live; past that, an outage must fail open instead of shedding.
+    now += 16_000;
+    await store.refresh();
+    expect(store.current()).toBe(0);
+  });
+
+  it('does not let a recovered instance renew a higher peer level', async () => {
+    const redis = new FakeRedis();
+    redis.values.set(SHEDDING_LEVEL_KEY, 2);
+    redis.ttls.set(SHEDDING_LEVEL_KEY, 15);
+    const store = new SheddingLevelStore(redis);
+
+    store.setLocal(1);
+    await Promise.resolve();
+
+    expect(redis.values.get(SHEDDING_LEVEL_KEY)).toBe(2);
+    // The 2 expires on its own: the level-1 publisher wrote nothing, so it
+    // cannot renew the key that keeps a level 2 alive.
+    expect(redis.writes).toBe(0);
   });
 });

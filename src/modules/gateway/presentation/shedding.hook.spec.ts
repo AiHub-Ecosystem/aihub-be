@@ -130,6 +130,28 @@ describe('registerSheddingGuard', () => {
     expect(shed.statusCode).toBe(503);
   });
 
+  it('sheds a percent-encoded spelling of a shed route (#1591)', async () => {
+    level.set(2);
+
+    const shed = await app.inject({
+      method: 'GET',
+      url: '/v1/ielts/speaking/%71uestions',
+    });
+    expect(shed.statusCode).toBe(503);
+    expect(handled).toBe(0);
+  });
+
+  it('sheds an implicit HEAD with the tier of its GET (#1591)', async () => {
+    level.set(2);
+
+    const shed = await app.inject({
+      method: 'HEAD',
+      url: '/v1/ielts/speaking/questions',
+    });
+    expect(shed.statusCode).toBe(503);
+    expect(handled).toBe(0);
+  });
+
   it('leaves the retry hint the same shape as the header', async () => {
     level.set(2);
     const response = await app.inject({
