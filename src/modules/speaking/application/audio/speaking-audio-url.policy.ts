@@ -8,7 +8,11 @@ export type SpeakingAudioUrlRejectionReason =
   | 'unapproved_bucket';
 
 export type SpeakingAudioUrlPolicyResult =
-  | { readonly approved: true }
+  | {
+      readonly approved: true;
+      /** Set only for a customer recording; catalogue samples have no Audio asset. */
+      readonly assetId?: string;
+    }
   | {
       readonly approved: false;
       readonly reason: SpeakingAudioUrlRejectionReason;
@@ -21,7 +25,7 @@ export interface SpeakingAudioUrlPolicyOptions {
 }
 
 const ASSET_KEY =
-  /^orgs\/([A-Za-z0-9_-]+)\/speaking\/aud_[0-9A-HJKMNP-TV-Z]{26}\/original$/;
+  /^orgs\/([A-Za-z0-9_-]+)\/speaking\/(aud_[0-9A-HJKMNP-TV-Z]{26})\/original$/;
 const CATALOG_SAMPLE_KEY = /^speaking-samples\/.+$/;
 const PUBLIC_SAMPLE_PATH =
   '/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm';
@@ -89,10 +93,12 @@ export function isApprovedSpeakingAudioUrl(
     return { approved: true };
   }
   if (bucket === options.audioAssetBucket) {
-    const assetKey = ASSET_KEY.exec(key);
-    if (assetKey?.[1] === options.organizationId) return { approved: true };
-    if (assetKey !== null && assetKey[1] !== options.organizationId) {
-      return rejected('foreign_tenant');
+    const [, organizationId, assetId] = ASSET_KEY.exec(key) ?? [];
+    if (organizationId !== undefined && assetId !== undefined) {
+      if (organizationId !== options.organizationId) {
+        return rejected('foreign_tenant');
+      }
+      return { approved: true, assetId };
     }
   }
   return rejected('unapproved_bucket');

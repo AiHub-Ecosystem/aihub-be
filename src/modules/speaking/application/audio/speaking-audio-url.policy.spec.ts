@@ -13,9 +13,17 @@ describe('Speaking audio URL policy', () => {
   it.each([
     ownAsset,
     `${ownAsset}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc%2Fdef`,
+  ])('names the Audio asset of a customer recording %s', (url) => {
+    expect(isApprovedSpeakingAudioUrl(url, options)).toEqual({
+      approved: true,
+      assetId: 'aud_01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    });
+  });
+
+  it.each([
     'https://s3.wispace.app/ielts-task1/speaking-answers/part-1/do-you-enjoy-living-in-your-city-or-hometown.webm',
     'https://s3.wispace.app/aihub-speaking-samples/speaking-samples/part-1/sample.webm?X-Amz-Signature=abc%2Fdef',
-  ])('accepts approved URL family %s', (url) => {
+  ])('accepts catalogue sample %s with no Audio asset', (url) => {
     expect(isApprovedSpeakingAudioUrl(url, options)).toEqual({
       approved: true,
     });

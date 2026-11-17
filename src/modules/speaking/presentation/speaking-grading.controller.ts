@@ -40,21 +40,29 @@ import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
 } from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
+import { SpeakingRecordingAccess } from '@/modules/speaking/application/audio/speaking-recording-access';
 import {
   type InFlightCeiling,
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { createFastifySpeakingMultipartSource } from './fastify-speaking-multipart.source';
+import { speakingRequestOwner } from './speaking-request-owner';
 
 const OPERATION = 'speaking.grading' as const;
 const JSON_OPERATION = 'speaking.grading-json' as const;
+
+interface ParsedJsonBody {
+  readonly input: SpeakingGradeJsonInput;
+  /** The Audio asset a customer recording URL names; undefined for a catalogue sample. */
+  readonly assetId: string | undefined;
+}
 
 function parseJsonBody(
   body: unknown,
   request: AuthenticatedRequest,
   configuration: ConfigType<typeof appConfig>,
   rejections: SpeakingAudioUrlRejectionRecorderPort,
-): SpeakingGradeJsonInput {
+): ParsedJsonBody {
   const parsed = parseRequestBody(
     SpeakingGradeJsonRequestSchema,
     body,
@@ -71,18 +79,21 @@ function parseJsonBody(
   }
 
   return {
-    audioUrl: parsed.audio_url,
-    part: parsed.part,
-    questionId: parsed.question_id,
-    ...(parsed.prompt_text === undefined
-      ? {}
-      : { promptText: parsed.prompt_text }),
-    // Parsing applies this default; fallback satisfies exact optional types.
-    testType: parsed.test_type ?? 'Practice',
-    ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
-    ...(parsed.transcript === undefined
-      ? {}
-      : { transcript: parsed.transcript }),
+    assetId: policy.assetId,
+    input: {
+      audioUrl: parsed.audio_url,
+      part: parsed.part,
+      questionId: parsed.question_id,
+      ...(parsed.prompt_text === undefined
+        ? {}
+        : { promptText: parsed.prompt_text }),
+      // Parsing applies this default; fallback satisfies exact optional types.
+      testType: parsed.test_type ?? 'Practice',
+      ...(parsed.test_code === undefined ? {} : { testCode: parsed.test_code }),
+      ...(parsed.transcript === undefined
+        ? {}
+        : { transcript: parsed.transcript }),
+    },
   };
 }
 
@@ -100,6 +111,8 @@ export class SpeakingGradingController {
     private readonly configuration: ConfigType<typeof appConfig>,
     @Inject(SPEAKING_AUDIO_URL_REJECTION_RECORDER)
     private readonly urlRejections: SpeakingAudioUrlRejectionRecorderPort,
+    @Inject(SpeakingRecordingAccess)
+    private readonly recordings: SpeakingRecordingAccess,
   ) {}
 
   @Post(OPERATION_CATALOG[OPERATION].path)
@@ -134,14 +147,25 @@ export class SpeakingGradingController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<DispatchResult<SpeakingGradeResponse>> {
     return this.gradedRequest.execute(
-      createGradedPipelineContext(request, reply, JSON_OPERATION, () => ({
-        input: parseJsonBody(
+      createGradedPipelineContext(request, reply, JSON_OPERATION, async () => {
+        const { input, assetId } = parseJsonBody(
           body,
           request,
           this.configuration,
           this.urlRejections,
-        ),
-      })),
+        );
+        // A customer recording must be a live Audio asset of this End User
+        // (ADR-0070). Admission has already run, so a refused lookup is
+        // charged to the rate limit like any request; it bills nothing, so it
+        // takes no monthly quota (ADR-0018).
+        if (assetId !== undefined) {
+          await this.recordings.assertLive({
+            ...speakingRequestOwner(request),
+            assetId,
+          });
+        }
+        return { input };
+      }),
     );
   }
 }
