@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import type {
   SandboxDemoEnvironment,
@@ -87,6 +88,11 @@ export class ValidateSandboxDemoKey {
         input.organizationId,
       );
     } catch (error) {
+      // The repository already answers an outage in the shared vocabulary; only
+      // an unclassified failure is this layer's to relabel.
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw identityProviderUnavailable(error);
     }
 

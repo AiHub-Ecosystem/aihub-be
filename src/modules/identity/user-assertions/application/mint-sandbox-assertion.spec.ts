@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type {
   OrganizationIdentityConfig,
@@ -154,5 +155,25 @@ describe('MintSandboxAssertion', () => {
       code: 'IDENTITY_PROVIDER_UNAVAILABLE',
       retryable: true,
     });
+  });
+
+  it('keeps a repository error that already names the outage', async () => {
+    const outage = new AppError({
+      code: 'DATABASE_UNAVAILABLE',
+      message: 'Database temporarily unavailable',
+      retryable: true,
+    });
+    const service = new MintSandboxAssertion(
+      {
+        findActiveByOrganizationId: async (_organizationId: string) => {
+          throw outage;
+        },
+      },
+      new RecordingSigner(),
+    );
+
+    await expect(
+      service.mint({ context: context(), userId: 'student_456' }),
+    ).rejects.toBe(outage);
   });
 });

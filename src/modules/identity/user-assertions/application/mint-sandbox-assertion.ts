@@ -102,6 +102,11 @@ export class MintSandboxAssertion implements SandboxAssertionMinterPort {
       config =
         await this.configRepository.findActiveByOrganizationId(organizationId);
     } catch (error) {
+      // The repository already answers an outage in the shared vocabulary; only
+      // an unclassified failure is this layer's to relabel.
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw identityProviderUnavailable(error);
     }
 
