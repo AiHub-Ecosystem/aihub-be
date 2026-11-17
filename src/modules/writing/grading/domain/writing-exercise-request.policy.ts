@@ -1,9 +1,9 @@
-import type { CriterionId } from '@/contracts/writing/grading';
-import {
-  WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH,
-  type WritingExerciseError,
-} from '@/contracts/writing/v2/exercises';
 import { isAllowedTask1ImageUrl } from './task1-image-url.policy';
+import {
+  type CriterionId,
+  WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH,
+  type WritingExerciseErrorCriterion,
+} from './writing-policy-vocabulary';
 
 function isCriterionAllowedForTask(
   writingTask: 1 | 2,
@@ -16,7 +16,7 @@ function isCriterionAllowedForTask(
 
 export function isValidWritingExerciseError(
   writingTask: 1 | 2,
-  input: Pick<WritingExerciseError, 'criterion' | 'image_url'>,
+  input: WritingExerciseErrorCriterion,
 ): boolean {
   return (
     isCriterionAllowedForTask(writingTask, input.criterion) &&

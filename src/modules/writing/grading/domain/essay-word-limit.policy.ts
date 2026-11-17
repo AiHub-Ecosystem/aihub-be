@@ -1,4 +1,4 @@
-import { WRITING_V2_ESSAY_MAX_WORDS } from '@/contracts/writing/v2/grading';
+import { WRITING_V2_ESSAY_MAX_WORDS } from './writing-policy-vocabulary';
 
 /**
  * AI Writing v3 refuses an essay of more than 1000 words with a 413, but only

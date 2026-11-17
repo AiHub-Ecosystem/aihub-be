@@ -1,6 +1,16 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import {
+  CRITERION_IDS,
+  TASK1_IMAGE_URL_MAX_LENGTH,
+} from '@/modules/writing/public/grading-policy';
+
 import { ChartTypeSchema } from './task1';
+
+export {
+  CRITERION_IDS,
+  type CriterionId,
+} from '@/modules/writing/public/grading-policy';
 
 /**
  * Downstream only produces Vietnamese feedback today. Widening this later is a
@@ -19,17 +29,6 @@ const LanguageSchema = Type.Union(
  */
 const BandSchema = Type.Number({ minimum: 0, maximum: 9, multipleOf: 0.5 });
 
-/** Task 1 grades Task Achievement; Task 2 grades Task Response. */
-export const CRITERION_IDS = [
-  'task_achievement',
-  'task_response',
-  'coherence_cohesion',
-  'lexical_resource',
-  'grammatical_range_accuracy',
-] as const;
-
-export const TASK1_IMAGE_URL_MAX_LENGTH = 2_000;
-
 /**
  * TypeBox counts `maxLength` in UTF-16 code units, the unit of JavaScript's
  * `length`. JSON Schema counts code points, so the published limit says which
@@ -38,8 +37,6 @@ export const TASK1_IMAGE_URL_MAX_LENGTH = 2_000;
  */
 const LENGTH_UNIT_NOTE =
   'The limit counts UTF-16 code units. A character outside the Basic Multilingual Plane, such as most emoji, counts as 2.';
-
-export type CriterionId = (typeof CRITERION_IDS)[number];
 
 export const CriterionIdSchema = Type.Union(
   CRITERION_IDS.map((value) => Type.Literal(value)),

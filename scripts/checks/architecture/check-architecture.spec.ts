@@ -2325,3 +2325,28 @@ describe('Identity repositories do not run statements on their own client (#785)
     expect(result.output).not.toContain(REJECTED);
   });
 });
+
+describe('domain code never imports contracts (#1828)', () => {
+  const REJECTED = 'imports a contract from domain';
+
+  it('rejects a domain file importing a contract', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/writing/grading/domain/probe.ts',
+        "import type { CriterionId } from '@/contracts/writing/grading';\nexport const id: CriterionId = 'task_response';",
+      ],
+    ]);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(REJECTED);
+  });
+
+  it('accepts a domain file importing its own vocabulary', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/writing/grading/domain/probe.ts',
+        "import type { CriterionId } from './writing-policy-vocabulary';\nexport const id: CriterionId = 'task_response';",
+      ],
+    ]);
+    expect(result.output).not.toContain(REJECTED);
+  });
+});

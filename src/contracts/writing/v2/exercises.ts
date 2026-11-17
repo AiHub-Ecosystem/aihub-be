@@ -1,6 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
 import { CriterionIdSchema } from '@/contracts/writing/grading';
+import { WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH } from '@/modules/writing/public/grading-policy';
 
 export const MICRO_EXERCISE_TYPES = [
   'multiple_choice_single',
@@ -17,8 +18,6 @@ export type MicroExerciseType = (typeof MICRO_EXERCISE_TYPES)[number];
 const MicroExerciseTypeSchema = Type.Union(
   MICRO_EXERCISE_TYPES.map((type) => Type.Literal(type)),
 );
-
-export const WRITING_EXERCISE_IMAGE_URL_MAX_LENGTH = 2_048;
 
 const ErrorCodeSchema = Type.String({
   minLength: 1,
@@ -53,8 +52,6 @@ export const WritingExerciseErrorSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type WritingExerciseError = Static<typeof WritingExerciseErrorSchema>;
 
 const ExerciseSelection = {
   topic: Type.String({ minLength: 1, maxLength: 200 }),

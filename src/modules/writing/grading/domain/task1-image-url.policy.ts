@@ -1,4 +1,4 @@
-import { TASK1_IMAGE_URL_MAX_LENGTH } from '@/contracts/writing/grading';
+import { TASK1_IMAGE_URL_MAX_LENGTH } from './writing-policy-vocabulary';
 
 /** The IP version a parsed hostname is, or 0 when it is a name. */
 export type HostAddressVersion = 0 | 4 | 6;

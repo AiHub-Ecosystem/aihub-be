@@ -1050,6 +1050,21 @@ export function collectSourceTextFailures(options) {
     }
   }
 
+  // #1828: domain is the innermost layer. A domain file that imports a
+  // contract inverts the seam: contracts reach module code through public/,
+  // so the reverse edge closes a cycle back into the same module's domain.
+  for (const file of sourceFiles) {
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    if (!/\/domain\//.test(relativePath)) continue;
+    const source = sourceText(file);
+    const match = /from\s*['"]@\/contracts\//.exec(source);
+    if (match === null) continue;
+    const line = source.slice(0, match.index).split(/\r?\n/).length;
+    fail(
+      `${relativePath}:${line} imports a contract from domain; keep shared vocabulary in domain and let contracts re-export it through public/ (#1828)`,
+    );
+  }
+
   const QUERY_VALIDATION_MARKER = 'arch-check:';
 
   /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */

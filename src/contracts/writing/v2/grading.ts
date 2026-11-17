@@ -6,13 +6,7 @@ import {
   GradeTask1RequestSchema,
   GradeTask2RequestSchema,
 } from '@/contracts/writing/grading';
-
-/**
- * The longest essay AI Writing v3 grades. The provider answers 413 for a longer
- * one only after the caller has waited, so AIHUB refuses it first (ADR-0143
- * decision 11). Words are runs of non-whitespace characters.
- */
-export const WRITING_V2_ESSAY_MAX_WORDS = 1_000;
+import { WRITING_V2_ESSAY_MAX_WORDS } from '@/modules/writing/public/grading-policy';
 
 const ESSAY_WORD_NOTE = `An essay of more than ${WRITING_V2_ESSAY_MAX_WORDS} words, counted by whitespace, is refused with INVALID_REQUEST.`;
 
