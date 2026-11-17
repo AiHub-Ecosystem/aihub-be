@@ -19,12 +19,13 @@ const HEADERS = [
   { key: 'Idempotency-Key', value: '{{$guid}}' },
 ];
 
-function gradeRequest(
+/** The request and test-script shell every hand-written v2 Writing scenario uses. */
+function writeRequest(
   name: string,
   description: string,
   path: string,
   body: Record<string, unknown>,
-  operation: string,
+  exec: readonly string[],
 ): Record<string, unknown> {
   return {
     name,
@@ -44,20 +45,30 @@ function gradeRequest(
         listen: 'test',
         script: {
           type: 'text/javascript',
-          exec: [
-            assertStatus(200),
-            ...assertEnvelope(operation),
-            "pm.test('response has the /v2 shape', function () {",
-            '  const data = pm.response.json().data;',
-            '  pm.expect(data.criteria).to.have.length(4);',
-            '  pm.expect(data.overall_assessment.progress).to.have.property("status");',
-            '  pm.expect(data).to.have.property("data_micro");',
-            '});',
-          ],
+          exec: [...exec],
         },
       },
     ],
   };
+}
+
+function gradeRequest(
+  name: string,
+  description: string,
+  path: string,
+  body: Record<string, unknown>,
+  operation: string,
+): Record<string, unknown> {
+  return writeRequest(name, description, path, body, [
+    assertStatus(200),
+    ...assertEnvelope(operation),
+    "pm.test('response has the /v2 shape', function () {",
+    '  const data = pm.response.json().data;',
+    '  pm.expect(data.criteria).to.have.length(4);',
+    '  pm.expect(data.overall_assessment.progress).to.have.property("status");',
+    '  pm.expect(data).to.have.property("data_micro");',
+    '});',
+  ]);
 }
 
 function exerciseRequest(
@@ -68,33 +79,11 @@ function exerciseRequest(
   operation: string,
   assertion: string,
 ): Record<string, unknown> {
-  return {
-    name,
-    request: {
-      method: 'POST',
-      header: HEADERS,
-      body: {
-        mode: 'raw',
-        raw: JSON.stringify(body, null, 2),
-        options: { raw: { language: 'json' } },
-      },
-      url: `{{baseUrl}}${path}`,
-      description,
-    },
-    event: [
-      {
-        listen: 'test',
-        script: {
-          type: 'text/javascript',
-          exec: [
-            assertStatus(200),
-            ...assertEnvelope(operation),
-            ...assertion.split('\n'),
-          ],
-        },
-      },
-    ],
-  };
+  return writeRequest(name, description, path, body, [
+    assertStatus(200),
+    ...assertEnvelope(operation),
+    ...assertion.split('\n'),
+  ]);
 }
 
 const MICRO_EXERCISE_BODY = {
