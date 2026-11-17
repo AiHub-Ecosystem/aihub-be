@@ -51,7 +51,7 @@ function grade(
 async function waitForPublishedLevel(
   redis: Redis,
   saturated: TestWorker,
-  flood: readonly Promise<HttpAnswer | undefined>[],
+  floodSize: number,
 ): Promise<string> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -63,22 +63,6 @@ async function waitForPublishedLevel(
   // The scrape is the only view of why nothing escalated: no dispatch in
   // flight reads exactly like a governor that never ran.
   const metrics = await scrape(saturated);
-  // A refusal before dispatch never reaches the limiter, so the flood's own
-  // answers are the other half of the picture.
-  const settled = (
-    await Promise.race([
-      Promise.allSettled(flood),
-      new Promise<null>((resolve) =>
-        // real-timer-ok: bounded wait on real HTTP responses
-        setTimeout(() => resolve(null), 3_000),
-      ),
-    ])
-  )
-    ?.map((result) =>
-      result.status === 'fulfilled' ? String(result.value?.status) : 'error',
-    )
-    .slice(0, 5)
-    .join(',');
   const concurrency = metrics
     .split('\n')
     .filter((line) => line.startsWith('aihub_downstream_concurrency_limit'))
@@ -87,7 +71,7 @@ async function waitForPublishedLevel(
     [
       'no instance published a shedding level within 30 s',
       `redis ${SHEDDING_LEVEL_KEY}=${String(await redis.get(SHEDDING_LEVEL_KEY))}`,
-      `first flood statuses: ${settled ?? 'none settled in 3 s'}`,
+      `flood in flight: ${String(floodSize)}`,
       concurrency === '' ? 'no concurrency sample' : concurrency,
       `applied level ${shedLevel(metrics)}`,
     ].join('\n'),
@@ -236,7 +220,7 @@ describe('multi-instance prioritized load shedding', () => {
     flood.forEach((call) => void call.catch(() => undefined));
 
     await expect(
-      waitForPublishedLevel(redis, saturated, flood),
+      waitForPublishedLevel(redis, saturated, FLOOD),
     ).resolves.toMatch(/^[12]$/);
     await waitForAppliedLevel(peer, 1);
 
