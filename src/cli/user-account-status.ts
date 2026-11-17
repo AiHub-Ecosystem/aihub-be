@@ -8,6 +8,31 @@ import type {
 import { createOperatorAuthClient } from './operator-auth-client';
 import { runOperatorCommand } from './operator-command-context';
 
+interface OperatorStatusCommandInput {
+  readonly databaseUrl: string;
+  readonly actorUsername: string;
+  readonly repository?: UserAccountStatusPort;
+  readonly emit?: (line: string) => void;
+  readonly now?: () => Date;
+}
+
+/** One way to open the Auth client and choose where operator output goes. */
+async function prepareStatusCommand(
+  input: OperatorStatusCommandInput,
+): Promise<{
+  readonly repository: UserAccountStatusPort;
+  readonly emit: (line: string) => void;
+}> {
+  return {
+    emit: input.emit ?? console.log,
+    repository:
+      input.repository ??
+      createOperatorUserAccountStatusRepository(
+        await createOperatorAuthClient(input.databaseUrl),
+      ),
+  };
+}
+
 export interface DisableUserAccountCliInput {
   readonly databaseUrl: string;
   readonly user: string;
@@ -22,12 +47,7 @@ export type DisableUserAccountCliOutcome = DisableUserAccountResult['kind'];
 export async function runDisableUserAccountCommand(
   input: DisableUserAccountCliInput,
 ): Promise<DisableUserAccountCliOutcome> {
-  const emit = input.emit ?? console.log;
-  const repository =
-    input.repository ??
-    createOperatorUserAccountStatusRepository(
-      await createOperatorAuthClient(input.databaseUrl),
-    );
+  const { repository, emit } = await prepareStatusCommand(input);
   const execution = await runOperatorCommand(
     repository,
     input.now,
@@ -84,12 +104,7 @@ export type RestoreUserAccountCliOutcome = RestoreUserAccountResult['kind'];
 export async function runRestoreUserAccountCommand(
   input: RestoreUserAccountCliInput,
 ): Promise<RestoreUserAccountCliOutcome> {
-  const emit = input.emit ?? console.log;
-  const repository =
-    input.repository ??
-    createOperatorUserAccountStatusRepository(
-      await createOperatorAuthClient(input.databaseUrl),
-    );
+  const { repository, emit } = await prepareStatusCommand(input);
   const execution = await runOperatorCommand(
     repository,
     input.now,
@@ -140,12 +155,7 @@ export type RevokeAllRefreshSessionsCliOutcome =
 export async function runRevokeAllRefreshSessionsCommand(
   input: RevokeAllRefreshSessionsCliInput,
 ): Promise<RevokeAllRefreshSessionsCliOutcome> {
-  const emit = input.emit ?? console.log;
-  const repository =
-    input.repository ??
-    createOperatorUserAccountStatusRepository(
-      await createOperatorAuthClient(input.databaseUrl),
-    );
+  const { repository, emit } = await prepareStatusCommand(input);
   const execution = await runOperatorCommand(
     repository,
     input.now,
