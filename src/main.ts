@@ -6,6 +6,10 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
+import {
+  CONNECTION_TIMEOUT_MS,
+  REQUEST_TIMEOUT_MS,
+} from './common/http/server-timeouts';
 import { prepareSocketListener } from './common/http/unix-socket-listener';
 import { registerMetricsRoute } from './common/observability/metrics.route';
 import { createRequestLogging } from './common/observability/request-logger';
@@ -47,6 +51,8 @@ export async function bootstrap(): Promise<void> {
         ...createRequestLogging(),
         // Outer ceiling only. Each operation carries its own `maxBodyBytes`.
         bodyLimit: MAX_BODY_BYTES,
+        connectionTimeout: CONNECTION_TIMEOUT_MS,
+        requestTimeout: REQUEST_TIMEOUT_MS,
         // Makes `request.id` the canonical AIHUB request id, so the exception
         // filter and every log line agree without extra middleware. Client-sent
         // ids are never trusted; correlation travels in `X-Correlation-Id`.
@@ -109,7 +115,7 @@ export async function bootstrap(): Promise<void> {
     configuration.PORT,
     listenSocket === undefined ? '0.0.0.0' : '127.0.0.1',
   );
-  await openSocket?.();
+  await openSocket?.open();
 }
 
 void bootstrap().catch((error: unknown) => {

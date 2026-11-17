@@ -1031,7 +1031,12 @@ describe('Speaking grading HTTP flow', () => {
     expect(retried.statusCode).toBe(200);
   });
 
-  it('maps an upload deadline cancellation through the public error envelope', async () => {
+  it('maps an upload deadline cancellation through the envelope and releases its upload slot', async () => {
+    const ceiling = app.get<InFlightCeiling>(SPEAKING_UPLOAD_CEILING);
+    const held = Array.from(
+      { length: SPEAKING_UPLOADS_IN_FLIGHT_MAX - 1 },
+      () => ceiling.enter(),
+    );
     const parser = app.get<SpeakingMultipartParserPort>(
       SPEAKING_MULTIPART_PARSER,
     );
@@ -1055,7 +1060,12 @@ describe('Speaking grading HTTP flow', () => {
 
       expect(response.statusCode).toBe(504);
       expectError(response, 'AI_SERVICE_TIMEOUT');
+      const eighth = ceiling.enter();
+      eighth();
     } finally {
+      for (const leave of held) {
+        leave();
+      }
       parser.parse = originalParse;
       timeout.mockRestore();
     }

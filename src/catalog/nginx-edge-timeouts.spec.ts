@@ -98,6 +98,15 @@ describe('nginx edge timeouts', () => {
     expect(edgeServers).toHaveLength(2);
   });
 
+  it.each(['client_body_timeout', 'client_header_timeout'] as const)(
+    'sets %s explicitly on every edge server',
+    (directive) => {
+      for (const server of edgeServers) {
+        expect(seconds(server.directives.get(directive))).toBe(75);
+      }
+    },
+  );
+
   it.each(
     Object.entries(OPERATION_CATALOG).flatMap(([id, operation]) =>
       operation.path.includes('{')

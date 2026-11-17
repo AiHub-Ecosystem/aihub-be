@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import Fastify from 'fastify';
 
 import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
+import { CONNECTION_TIMEOUT_MS } from './server-timeouts';
 import { prepareSocketListener } from './unix-socket-listener';
 
 // A Windows named pipe is not a file, so it cannot be left stale or chmod-ed.
@@ -65,10 +66,10 @@ async function startApp(socketPath: string) {
     }
     return { app, target: { host: '127.0.0.1', port: address.port } };
   }
-  const openSocket = prepareSocketListener(app, socketPath);
+  const listener = prepareSocketListener(app, socketPath);
   await app.listen({ host: '127.0.0.1', port: 0 });
-  await openSocket();
-  return { app, target: { socketPath } };
+  await listener.open();
+  return { app, listener, target: { socketPath } };
 }
 
 describe('local listener', () => {
@@ -100,16 +101,33 @@ describe('local listener', () => {
   });
 });
 
+describePosix('Unix socket timeouts', () => {
+  it('applies the connection timeout to the listener', async () => {
+    const socketPath = socketPathFor('timeout');
+    const app = Fastify(createAppFastifyProxyOptions('172.16.7.1', socketPath));
+    app.server.requestTimeout = 7_000;
+    const listener = prepareSocketListener(app, socketPath);
+    await app.listen({ host: '127.0.0.1', port: 0 });
+
+    try {
+      await listener.open();
+      expect(listener.server.timeout).toBe(CONNECTION_TIMEOUT_MS);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describePosix('Unix socket file', () => {
   it('preserves a regular file at the configured socket path', async () => {
     const socketPath = socketPathFor('regular-file');
     writeFileSync(socketPath, 'preserve this file');
     const app = Fastify(createAppFastifyProxyOptions('172.16.7.1', socketPath));
-    const openSocket = prepareSocketListener(app, socketPath);
+    const listener = prepareSocketListener(app, socketPath);
     await app.listen({ host: '127.0.0.1', port: 0 });
 
     try {
-      await expect(openSocket()).rejects.toThrow(
+      await expect(listener.open()).rejects.toThrow(
         'Refusing to replace non-socket path',
       );
       expect(readFileSync(socketPath, 'utf8')).toBe('preserve this file');
