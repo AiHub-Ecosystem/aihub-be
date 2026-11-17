@@ -1,5 +1,9 @@
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError, internalError } from '@/common/errors/app-error';
+import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SandboxAdmission,
@@ -44,6 +48,11 @@ interface CallWindow {
 }
 
 function dispatchEvidenceUnavailable(cause: unknown): AppError {
+  // The attempt record is the first Postgres write on every graded request;
+  // an outage answers the shared retryable 503 (#373, ADR-0118).
+  if (isPostgresUnavailable(cause)) {
+    return databaseUnavailableError(cause);
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Internal server error',

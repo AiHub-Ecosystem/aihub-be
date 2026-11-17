@@ -1695,7 +1695,7 @@ separate table below.
 |  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely enforce a rate limit, check graded admission, or acquire/release its concurrency permit                             | Retry after `retry_after_ms`; AIHUB does not admit using local rate-limit counters                                 |
 |  503 | `RETRY_BUDGET_UNAVAILABLE`      | Reserved: AIHUB no longer returns this code; a Redis failure while checking graded admission is `REDIS_UNAVAILABLE`                        | If you handle it, treat it as `REDIS_UNAVAILABLE`: retry after `retry_after_ms`                                    |
 |  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                                                                | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
-|  500 | `INTERNAL_ERROR`                | Fault on our side                                                                                                                          | Retry later; report with the `request_id`                                                                          |
+|  500 | `INTERNAL_ERROR`                | Fault on our side; always `retryable: false`                                                                                               | Do not retry automatically. Report it with the `request_id`                                                        |
 
 ### Signed identity configuration errors
 

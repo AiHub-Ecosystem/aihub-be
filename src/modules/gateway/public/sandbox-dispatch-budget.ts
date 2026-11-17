@@ -1,3 +1,4 @@
+export { sandboxBudgetUnavailable } from '@/modules/gateway/application/sandbox-admission';
 export {
   SANDBOX_DISPATCH_BUDGET,
   type SandboxAllowanceSnapshot,

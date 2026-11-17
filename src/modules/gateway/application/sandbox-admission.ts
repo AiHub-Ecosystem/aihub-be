@@ -1,5 +1,9 @@
 import { AppError } from '@/common/errors/app-error';
 import { recordRejected } from '@/common/observability/rejected-metric';
+import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { quotaExceededError } from '@/modules/metering/public/quota-counter';
 import { requireTimeLeft } from './dispatch/dispatch-deadline';
@@ -15,11 +19,22 @@ const NO_RESERVATION: SandboxReservation = {
   release: async () => undefined,
 };
 
-function sandboxBudgetUnavailable(): AppError {
+/**
+ * The reservation store is a control-plane database. An outage answers the
+ * shared retryable 503 (#373); anything else is a fault on our side.
+ */
+export function sandboxBudgetUnavailable(cause?: unknown): AppError {
+  if (isPostgresUnavailable(cause)) {
+    return databaseUnavailableError(
+      cause,
+      'Sandbox dispatch admission is unavailable',
+    );
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Sandbox dispatch admission is unavailable',
-    retryable: true,
+    retryable: false,
+    ...(cause === undefined ? {} : { cause }),
   });
 }
 
@@ -52,8 +67,8 @@ export class SandboxAdmission {
         organizationId,
         requestId: context.requestId,
       });
-    } catch {
-      throw sandboxBudgetUnavailable();
+    } catch (error) {
+      throw sandboxBudgetUnavailable(error);
     }
     const reservation: SandboxReservation = {
       release: () => this.release(budget, organizationId, context.requestId),

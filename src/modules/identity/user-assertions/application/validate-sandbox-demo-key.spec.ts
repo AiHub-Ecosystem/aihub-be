@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import { getMetrics } from '@/common/observability/metrics';
 import type {
   SandboxAllowanceSnapshot,
@@ -237,5 +238,21 @@ describe('ValidateSandboxDemoKey', () => {
       code: 'IDENTITY_PROVIDER_UNAVAILABLE',
       retryable: true,
     });
+  });
+
+  it('keeps a repository error that already names the outage', async () => {
+    const outage = new AppError({
+      code: 'DATABASE_UNAVAILABLE',
+      message: 'Database temporarily unavailable',
+      retryable: true,
+    });
+
+    await expect(
+      validate(
+        validator(async () => {
+          throw outage;
+        }),
+      ),
+    ).rejects.toBe(outage);
   });
 });

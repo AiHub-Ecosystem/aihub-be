@@ -14,7 +14,12 @@ describe('S3SpeakingAudioStorage', () => {
 
     await expect(
       storage.getReadUrl('speaking-samples/part-1/sample.webm'),
-    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    ).rejects.toMatchObject({
+      code: 'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+      retryable: true,
+      // The failure-reason metric needs a classified reason (#373, §I.7).
+      diagnostic: 'object_storage:unavailable',
+    });
   });
 
   it('creates an approved presigned URL for a trusted object key', async () => {
@@ -35,7 +40,9 @@ describe('S3SpeakingAudioStorage', () => {
   });
 
   it('rejects path traversal in object keys', async () => {
-    const storage = new S3SpeakingAudioStorage(configuredClient());
+    const storage = new S3SpeakingAudioStorage(configuredClient(), {
+      bucket: 'test-speaking-samples',
+    });
 
     await expect(storage.getReadUrl('../private.mp3')).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',

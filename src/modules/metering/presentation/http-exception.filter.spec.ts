@@ -132,6 +132,44 @@ describe('HttpExceptionFilter for a method the route does not accept', () => {
   });
 });
 
+describe('HttpExceptionFilter for a wrapped database outage', () => {
+  it('answers a retryable 503 when a seam wrapped a driver failure as INTERNAL_ERROR', async () => {
+    const { status, body, header } = await catchException(
+      new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Idempotency storage is unavailable',
+        retryable: false,
+        cause: Object.assign(new Error('Connection terminated unexpectedly'), {
+          name: 'PrismaClientInitializationError',
+          code: 'P1001',
+        }),
+      }),
+    );
+
+    expect(status).toHaveBeenCalledWith(503);
+    expect(header).toMatch(/^[12]$/);
+    expect(body).toMatchObject({
+      error: {
+        code: 'DATABASE_UNAVAILABLE',
+        retryable: true,
+      },
+    });
+  });
+
+  it('leaves an INTERNAL_ERROR with no database outage in its cause alone', async () => {
+    const { status, body } = await catchException(
+      new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Graded admission is not wired for this route',
+        retryable: false,
+      }),
+    );
+
+    expect(status).toHaveBeenCalledWith(500);
+    expect(body).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+  });
+});
+
 describe('HttpExceptionFilter for a retired Public API major', () => {
   const MAJORS: readonly PublicApiMajorDef[] = [
     {

@@ -157,7 +157,7 @@ function repositoryError(message: string, cause?: unknown): AppError {
   return new AppError({
     code: 'INTERNAL_ERROR',
     message,
-    retryable: true,
+    retryable: false,
     ...(cause === undefined ? {} : { cause }),
   });
 }

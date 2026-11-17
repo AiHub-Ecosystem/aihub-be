@@ -16,7 +16,10 @@ import {
   gradedAdmissionPolicy,
   gradedAdmissionRefusal,
 } from '@/modules/gateway/public/graded-pipeline';
-import { type SandboxDispatchBudgetPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
+import {
+  type SandboxDispatchBudgetPort,
+  sandboxBudgetUnavailable,
+} from '@/modules/gateway/public/sandbox-dispatch-budget';
 import { type IdempotencyServicePort } from '@/modules/idempotency/application/idempotency-service.port';
 import {
   SPEAKING_GRADING_JOB_CREATE_OPERATION,
@@ -246,12 +249,7 @@ export class SubmitSpeakingGradingJob {
                 requestId: jobId,
               });
             } catch (cause) {
-              throw new AppError({
-                code: 'INTERNAL_ERROR',
-                message: 'Sandbox dispatch admission is unavailable',
-                retryable: true,
-                cause,
-              });
+              throw sandboxBudgetUnavailable(cause);
             }
             if (!admitted) {
               recordRejected('quota');

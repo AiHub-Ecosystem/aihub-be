@@ -862,4 +862,31 @@ describe('IdempotencyService', () => {
     expect(repository.failed).toHaveLength(0);
     expect(repository.completed).toHaveLength(0);
   });
+
+  it('answers a retryable 503 when the idempotency store is down', async () => {
+    class OutageRepository extends FakeRepository {
+      override reserve(): Promise<IdempotencyReservation> {
+        return Promise.reject(
+          Object.assign(new Error('Connection terminated unexpectedly'), {
+            name: 'PrismaClientInitializationError',
+            code: 'P1001',
+          }),
+        );
+      }
+    }
+
+    const service = new IdempotencyService(new OutageRepository());
+
+    await expect(
+      service.execute(
+        input(),
+        async () => ({ grading: 'ok' }),
+        () => ({ grading: 'ok' }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+  });
 });

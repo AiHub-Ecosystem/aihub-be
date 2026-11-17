@@ -6,6 +6,10 @@ import {
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
+  databaseUnavailableError,
+  isPostgresUnavailable,
+} from '@/common/postgres/postgres-unavailable-error';
+import {
   type IdempotencyFingerprintInput,
   createIdempotencyFingerprint,
 } from './idempotency-fingerprint';
@@ -81,10 +85,18 @@ function missingKeyError(): AppError {
 }
 
 function storageError(cause: unknown): AppError {
+  // The store is Postgres: an outage answers the shared retryable 503 (#373)
+  // instead of a code the client reads as a fault on our side.
+  if (isPostgresUnavailable(cause)) {
+    return databaseUnavailableError(
+      cause,
+      'Idempotency storage is unavailable',
+    );
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Idempotency storage is unavailable',
-    retryable: true,
+    retryable: false,
     cause,
   });
 }

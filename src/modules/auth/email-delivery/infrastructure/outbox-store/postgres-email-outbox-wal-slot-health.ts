@@ -36,7 +36,7 @@ export async function readEmailOutboxWalSlotHealth(
     throw new AppError({
       code: 'INTERNAL_ERROR',
       message: 'Email logical replication slot health is invalid',
-      retryable: true,
+      retryable: false,
     });
   }
   const status = oneOf({ status: row.status }, 'status', [
@@ -49,7 +49,7 @@ export async function readEmailOutboxWalSlotHealth(
     throw new AppError({
       code: 'INTERNAL_ERROR',
       message: 'Email logical replication slot status is invalid',
-      retryable: true,
+      retryable: false,
     });
   }
   return { active: row.active, retainedBytes, safeBytes, status };

@@ -3,6 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
+import { objectStorageUnavailable } from '@/modules/secrets/public/object-storage';
 import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/audio/speaking-audio-storage.port';
 
 export const SPEAKING_AUDIO_URL_TTL_SECONDS = 15 * 60;
@@ -23,6 +24,16 @@ function storageError(message: string): AppError {
     message,
     retryable: false,
   });
+}
+
+/** A sample read needs the store to answer, so its failure is a storage outage
+ * answered like every sibling adapter, not a fault on our side (#373). */
+function storageUnavailable(cause?: unknown): AppError {
+  return objectStorageUnavailable(
+    'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+    'Speaking sample audio storage is unavailable',
+    cause,
+  );
 }
 
 function validObjectKey(objectKey: string): boolean {
@@ -58,7 +69,7 @@ export class S3SpeakingAudioStorage implements SpeakingAudioStoragePort {
 
   async getReadUrl(objectKey: string): Promise<string> {
     if (this.client === undefined || this.config === undefined) {
-      throw storageError('Speaking sample audio storage is not configured');
+      throw storageUnavailable();
     }
     if (!validObjectKey(objectKey)) {
       throw storageError('Speaking sample audio object key is invalid');
@@ -73,8 +84,8 @@ export class S3SpeakingAudioStorage implements SpeakingAudioStoragePort {
         }),
         { expiresIn: this.config.expiresInSeconds },
       );
-    } catch {
-      throw storageError('Speaking sample audio storage is unavailable');
+    } catch (error) {
+      throw storageUnavailable(error);
     }
   }
 }
