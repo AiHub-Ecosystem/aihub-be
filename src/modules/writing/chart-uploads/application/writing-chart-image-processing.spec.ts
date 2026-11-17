@@ -1,28 +1,30 @@
-import {
-  RasterImageProcessingCapacityError,
-  reserveRasterImageProcessing,
-} from '@/common/image/raster-image';
+import { RasterImageProcessingCapacityError } from '@/common/image/raster-image';
+import { reserveAvatarRasterImageProcessing } from '@/modules/avatar/application/avatar-upload.policy';
 import { serializeWritingChartImageProcessing } from './writing-chart-image-processing';
+import { reserveWritingChartRasterImageProcessing } from './writing-chart-upload.policy';
 
 describe('serializeWritingChartImageProcessing', () => {
   it('bounds retained processing requests independently by lane', () => {
-    const reservations = [
-      reserveRasterImageProcessing('avatar'),
-      reserveRasterImageProcessing('avatar'),
-      reserveRasterImageProcessing('writing-chart'),
-      reserveRasterImageProcessing('writing-chart'),
-      reserveRasterImageProcessing('writing-chart'),
-      reserveRasterImageProcessing('writing-chart'),
+    const avatarReservations = [
+      reserveAvatarRasterImageProcessing(),
+      reserveAvatarRasterImageProcessing(),
+    ];
+    const chartReservations = [
+      reserveWritingChartRasterImageProcessing(),
+      reserveWritingChartRasterImageProcessing(),
+      reserveWritingChartRasterImageProcessing(),
+      reserveWritingChartRasterImageProcessing(),
     ];
     try {
-      expect(() => reserveRasterImageProcessing('avatar')).toThrow(
+      expect(() => reserveAvatarRasterImageProcessing()).toThrow(
         RasterImageProcessingCapacityError,
       );
-      expect(() => reserveRasterImageProcessing('writing-chart')).toThrow(
+      expect(() => reserveWritingChartRasterImageProcessing()).toThrow(
         RasterImageProcessingCapacityError,
       );
     } finally {
-      for (const reservation of reservations) reservation.release();
+      for (const reservation of [...avatarReservations, ...chartReservations])
+        reservation.release();
     }
   });
 
@@ -40,7 +42,7 @@ describe('serializeWritingChartImageProcessing', () => {
 
     const operations = Promise.all(
       [1, 2, 3].map(() => {
-        const admission = reserveRasterImageProcessing('writing-chart');
+        const admission = reserveWritingChartRasterImageProcessing();
         return serializeWritingChartImageProcessing(
           admission,
           new AbortController().signal,
@@ -65,7 +67,7 @@ describe('serializeWritingChartImageProcessing', () => {
   });
 
   it('continues processing after an operation rejects', async () => {
-    const failedAdmission = reserveRasterImageProcessing('writing-chart');
+    const failedAdmission = reserveWritingChartRasterImageProcessing();
     await expect(
       serializeWritingChartImageProcessing(
         failedAdmission,
@@ -76,7 +78,7 @@ describe('serializeWritingChartImageProcessing', () => {
       ).finally(() => failedAdmission.release()),
     ).rejects.toThrow('processing failed');
 
-    const nextAdmission = reserveRasterImageProcessing('writing-chart');
+    const nextAdmission = reserveWritingChartRasterImageProcessing();
     await expect(
       serializeWritingChartImageProcessing(
         nextAdmission,

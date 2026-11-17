@@ -1,3 +1,5 @@
+import { createRasterImageProcessingAdmission } from '@/common/image/raster-image';
+
 export const AVATAR_COMPLETION_DEADLINE_MS = 20_000;
 // Invariant: the callback deadline < transaction timeout <= server idle timeout.
 export const AVATAR_COMPLETION_LOCK_TRANSACTION_TIMEOUT_MS = 30_000;
@@ -24,3 +26,7 @@ export const AVATAR_UPLOAD_ISSUANCE_MAX = 10;
 
 /** The rolling window the issuance ceiling counts over. */
 export const AVATAR_UPLOAD_ISSUANCE_WINDOW_MS = 60 * 60 * 1000;
+
+const AVATAR_RASTER_IMAGE_PROCESSING_CAPACITY = 2;
+export const reserveAvatarRasterImageProcessing =
+  createRasterImageProcessingAdmission(AVATAR_RASTER_IMAGE_PROCESSING_CAPACITY);

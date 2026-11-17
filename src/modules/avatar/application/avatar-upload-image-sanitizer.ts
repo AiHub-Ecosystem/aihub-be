@@ -1,7 +1,7 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { payloadTooLarge, uploadNotFound } from '@/common/errors/upload-errors';
 import {
-  reserveRasterImageProcessing,
+  RasterImageProcessingAbortedError,
   sanitizeRasterImage,
   serializeRasterImageProcessing,
 } from '@/common/image/raster-image';
@@ -13,6 +13,7 @@ import {
   avatarObjectKey,
 } from '@/modules/avatar/domain/avatar';
 import type { AvatarStoragePort } from './avatar-storage.port';
+import { reserveAvatarRasterImageProcessing } from './avatar-upload.policy';
 
 export interface SanitizedAvatarUpload {
   readonly objectKey: string;
@@ -22,7 +23,14 @@ export interface SanitizedAvatarUpload {
 }
 
 type SharedSanitizedAvatarUpload = Omit<SanitizedAvatarUpload, 'release'> & {
-  acquire(): () => void;
+  releaseAdmission(): void;
+};
+
+type PendingSanitization = {
+  readonly controller: AbortController;
+  promise: Promise<SharedSanitizedAvatarUpload>;
+  shared?: SharedSanitizedAvatarUpload;
+  waiters: number;
 };
 
 type ValidatedStagingObject = {
@@ -31,10 +39,7 @@ type ValidatedStagingObject = {
 };
 
 export class AvatarUploadImageSanitizer {
-  private readonly pending = new Map<
-    string,
-    Promise<SharedSanitizedAvatarUpload>
-  >();
+  private readonly pending = new Map<string, PendingSanitization>();
 
   constructor(
     private readonly storage: AvatarStoragePort,
@@ -59,35 +64,103 @@ export class AvatarUploadImageSanitizer {
     assetId: string,
     signal: AbortSignal,
   ): Promise<SanitizedAvatarUpload> {
+    if (signal.aborted) throw new RasterImageProcessingAbortedError();
     const key = `${userId}:${assetId}`;
-    let sanitization = this.pending.get(key);
-    if (sanitization === undefined) {
-      sanitization = this.sanitize(userId, assetId, signal, () => {
-        if (this.pending.get(key) === sanitization) this.pending.delete(key);
-      });
-      this.pending.set(key, sanitization);
+    let pending = this.pending.get(key);
+    if (pending === undefined) {
+      const controller = new AbortController();
+      pending = {
+        controller,
+        waiters: 0,
+        promise: this.sanitize(userId, assetId, controller.signal),
+      };
+      const current = pending;
+      pending.promise = pending.promise
+        .then((shared) => {
+          current.shared = shared;
+          if (current.waiters === 0) {
+            shared.releaseAdmission();
+            this.removePending(key, current);
+          }
+          return shared;
+        })
+        .catch((error: unknown) => {
+          this.removePending(key, current);
+          throw error;
+        });
+      this.pending.set(key, current);
     }
+    pending.waiters += 1;
+    let active = true;
+    const release = () => {
+      if (!active) return;
+      active = false;
+      pending.waiters -= 1;
+      if (pending.waiters !== 0) return;
+      pending.controller.abort();
+      pending.shared?.releaseAdmission();
+      this.removePending(key, pending);
+    };
     try {
-      const shared = await sanitization;
+      const shared = await this.waitFor(pending.promise, signal, release);
       return {
         objectKey: shared.objectKey,
         contentType: shared.contentType,
         bytes: shared.bytes,
-        release: shared.acquire(),
+        release,
       };
     } catch (error) {
-      if (this.pending.get(key) === sanitization) this.pending.delete(key);
+      release();
       throw error;
     }
+  }
+
+  private async waitFor(
+    sanitization: Promise<SharedSanitizedAvatarUpload>,
+    signal: AbortSignal,
+    release: () => void,
+  ): Promise<SharedSanitizedAvatarUpload> {
+    if (signal.aborted) {
+      release();
+      throw new RasterImageProcessingAbortedError();
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = () => {
+        settled = true;
+        signal.removeEventListener('abort', abort);
+      };
+      const abort = () => {
+        if (settled) return;
+        finish();
+        release();
+        reject(new RasterImageProcessingAbortedError());
+      };
+      signal.addEventListener('abort', abort, { once: true });
+      sanitization.then(
+        (shared) => {
+          if (settled) return undefined;
+          finish();
+          resolve(shared);
+          return undefined;
+        },
+        (error: unknown) => {
+          if (settled) return undefined;
+          finish();
+          reject(error);
+          return undefined;
+        },
+      );
+      if (signal.aborted) abort();
+    });
   }
 
   private async sanitize(
     userId: string,
     assetId: string,
     signal: AbortSignal,
-    onUnused: () => void,
   ): Promise<SharedSanitizedAvatarUpload> {
-    const admission = reserveRasterImageProcessing('avatar');
+    const admission = reserveAvatarRasterImageProcessing();
     try {
       const sanitized = await this.readAndSanitize(
         userId,
@@ -95,22 +168,9 @@ export class AvatarUploadImageSanitizer {
         signal,
         admission,
       );
-      let consumers = 0;
       return {
         ...sanitized,
-        acquire: () => {
-          consumers += 1;
-          let active = true;
-          return () => {
-            if (!active) return;
-            active = false;
-            consumers -= 1;
-            if (consumers === 0) {
-              admission.release();
-              onUnused();
-            }
-          };
-        },
+        releaseAdmission: () => admission.release(),
       };
     } catch (error) {
       admission.release();
@@ -118,11 +178,15 @@ export class AvatarUploadImageSanitizer {
     }
   }
 
+  private removePending(key: string, pending: PendingSanitization): void {
+    if (this.pending.get(key) === pending) this.pending.delete(key);
+  }
+
   private async readAndSanitize(
     userId: string,
     assetId: string,
     signal: AbortSignal,
-    admission: ReturnType<typeof reserveRasterImageProcessing>,
+    admission: ReturnType<typeof reserveAvatarRasterImageProcessing>,
   ): Promise<Omit<SanitizedAvatarUpload, 'release'>> {
     const objectKey = avatarObjectKey(userId, assetId);
     const stored = await this.storage.describeStagingObject(objectKey, signal);

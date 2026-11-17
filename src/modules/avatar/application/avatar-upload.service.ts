@@ -456,11 +456,15 @@ export class AvatarUploadService {
     objectKey: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    await this.avatars.withUserLock(userId, async (avatars) => {
-      if ((await avatars.recordedObjectKeys([objectKey])).has(objectKey))
-        return;
-      await this.discard(objectKey, signal);
-    });
+    try {
+      await this.avatars.withUserLock(userId, async (avatars) => {
+        if ((await avatars.recordedObjectKeys([objectKey])).has(objectKey))
+          return;
+        await this.discard(objectKey, signal);
+      });
+    } catch {
+      // Skip deletion if the guard cannot run; the sweep can retry later.
+    }
   }
 
   private async discardStaging(

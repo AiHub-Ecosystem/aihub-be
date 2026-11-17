@@ -9,7 +9,6 @@ import type { IdMinter } from '@/common/ids/prefixed-id';
 import {
   RasterImageProcessingAbortedError,
   RasterImageProcessingCapacityError,
-  reserveRasterImageProcessing,
 } from '@/common/image/raster-image';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
@@ -25,6 +24,7 @@ import {
   WRITING_CHART_INTENT_TTL_MS,
   WRITING_CHART_MAX_BYTES,
   WRITING_CHART_RATE_WINDOW_MS,
+  reserveWritingChartRasterImageProcessing,
 } from './writing-chart-upload.policy';
 import type {
   WritingChartUploadOwner,
@@ -39,6 +39,15 @@ function rateLimited(): AppError {
     message: 'Writing chart upload limit reached; retry later',
     retryable: true,
     retryAfterMs: WRITING_CHART_RATE_WINDOW_MS,
+  });
+}
+
+function rasterCapacityReached(): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Writing chart image processing is busy; retry shortly',
+    retryable: true,
+    retryAfterMs: 1_000,
   });
 }
 
@@ -233,12 +242,14 @@ export class WritingChartUploadService
         throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       }
 
-      let admission: ReturnType<typeof reserveRasterImageProcessing>;
+      let admission: ReturnType<
+        typeof reserveWritingChartRasterImageProcessing
+      >;
       try {
-        admission = reserveRasterImageProcessing('writing-chart');
+        admission = reserveWritingChartRasterImageProcessing();
       } catch (error) {
         if (error instanceof RasterImageProcessingCapacityError)
-          throw rateLimited();
+          throw rasterCapacityReached();
         throw error;
       }
       let refusal: AppError | undefined;

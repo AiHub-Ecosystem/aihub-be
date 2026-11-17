@@ -558,19 +558,14 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('the completion window', () => {
-    it('propagates the ingress deadline to storage and leaves an unfinished upload retryable', async () => {
+    it('does not start storage work when the ingress deadline has expired', async () => {
       const { assetId } = await uploadedAsset();
       const timeout = jest
         .spyOn(AbortSignal, 'timeout')
         .mockReturnValue(
           AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
         );
-      const describe = jest
-        .spyOn(storage, 'describeStagingObject')
-        .mockImplementation(async (_key, signal) => {
-          if (signal?.aborted) throw storageUnavailable();
-          throw new Error('caller deadline did not reach storage');
-        });
+      const describe = jest.spyOn(storage, 'describeStagingObject');
       try {
         const response = await complete(assetId);
         expect(response.statusCode).toBe(503);
@@ -581,6 +576,7 @@ describe('Avatar upload HTTP flow', () => {
           },
         });
         expect(repository.avatars.size).toBe(0);
+        expect(describe).not.toHaveBeenCalled();
       } finally {
         timeout.mockRestore();
         describe.mockRestore();

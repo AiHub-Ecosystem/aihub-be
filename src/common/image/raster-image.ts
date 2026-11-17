@@ -16,22 +16,11 @@ const FORMAT_BY_CONTENT_TYPE = {
 
 sharp.concurrency(1);
 
-export type RasterImageProcessingLane = 'avatar' | 'writing-chart';
-
 export class RasterImageProcessingCapacityError extends Error {}
 
 export class RasterImageProcessingAbortedError extends Error {}
 
-const laneLimits: Record<RasterImageProcessingLane, number> = {
-  avatar: 2,
-  'writing-chart': 4,
-};
-const laneAdmissions: Record<RasterImageProcessingLane, number> = {
-  avatar: 0,
-  'writing-chart': 0,
-};
-type Admission = {
-  readonly lane: RasterImageProcessingLane;
+export type RasterImageProcessingAdmission = {
   isActive(): boolean;
   release(): void;
 };
@@ -43,31 +32,34 @@ type Job = {
 const processingQueue: Job[] = [];
 let processing = false;
 
-/** Bounds retained image requests before callers read their bytes. */
-export function reserveRasterImageProcessing(
-  lane: RasterImageProcessingLane,
-): Admission {
-  if (laneAdmissions[lane] >= laneLimits[lane]) {
-    throw new RasterImageProcessingCapacityError(
-      'Raster image capacity reached',
-    );
+/** Creates a module-owned bound for retained image requests before reads. */
+export function createRasterImageProcessingAdmission(capacity: number) {
+  if (!Number.isInteger(capacity) || capacity < 1) {
+    throw new RangeError('Raster image capacity must be a positive integer');
   }
-  laneAdmissions[lane] += 1;
-  let released = false;
-  return {
-    lane,
-    isActive: () => !released,
-    release() {
-      if (released) return;
-      released = true;
-      laneAdmissions[lane] -= 1;
-    },
+  let active = 0;
+  return (): RasterImageProcessingAdmission => {
+    if (active >= capacity) {
+      throw new RasterImageProcessingCapacityError(
+        'Raster image capacity reached',
+      );
+    }
+    active += 1;
+    let released = false;
+    return {
+      isActive: () => !released,
+      release() {
+        if (released) return;
+        released = true;
+        active -= 1;
+      },
+    };
   };
 }
 
 /** Decoding is process-wide serialized; an aborted queued job is removed promptly. */
 export function serializeRasterImageProcessing<T>(
-  admission: Admission,
+  admission: RasterImageProcessingAdmission,
   signal: AbortSignal,
   operation: () => Promise<T>,
 ): Promise<T> {

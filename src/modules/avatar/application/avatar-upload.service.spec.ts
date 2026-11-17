@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import sharp from 'sharp';
 
 import {
-  reserveRasterImageProcessing,
+  RasterImageProcessingAbortedError,
   serializeRasterImageProcessing,
 } from '@/common/image/raster-image';
 import { InMemoryAvatarRepository } from '@/modules/avatar/testing/in-memory-avatar.repository';
@@ -13,9 +13,11 @@ import type {
   StagedAvatarObject,
   StoredAvatarObject,
 } from './avatar-storage.port';
+import { AvatarUploadImageSanitizer } from './avatar-upload-image-sanitizer';
 import {
   AVATAR_OPEN_UPLOAD_MAX,
   AVATAR_UPLOAD_ISSUANCE_MAX,
+  reserveAvatarRasterImageProcessing,
 } from './avatar-upload.policy';
 import { AvatarUploadService } from './avatar-upload.service';
 
@@ -68,7 +70,10 @@ class FakeStorage implements AvatarStoragePort {
   readonly stagingBytes = new Map<string, Uint8Array>();
   readonly finalBytes = new Map<string, Uint8Array>();
   readonly calls: string[] = [];
-  readonly signals: (AbortSignal | undefined)[] = [];
+  readonly signals: {
+    readonly operation: string;
+    readonly signal: AbortSignal | undefined;
+  }[] = [];
   failFinalCheck = false;
   failFinalDelete = false;
   failStagingDelete = false;
@@ -89,14 +94,14 @@ class FakeStorage implements AvatarStoragePort {
   }
   async describeStagingObject(key: string, signal?: AbortSignal) {
     this.calls.push('check-staging');
-    this.signals.push(signal);
+    this.signals.push({ operation: 'check-staging', signal });
     this.describeGate?.started();
     await this.describeGate?.wait;
     return this.staging.get(key);
   }
   async describeFinalObject(key: string, signal?: AbortSignal) {
     this.calls.push('check-final');
-    this.signals.push(signal);
+    this.signals.push({ operation: 'check-final', signal });
     if (this.failFinalCheck) return undefined;
     return this.final.get(key);
   }
@@ -106,7 +111,7 @@ class FakeStorage implements AvatarStoragePort {
     signal?: AbortSignal,
   ): Promise<StagedAvatarObject | undefined> {
     this.calls.push('read-staging');
-    this.signals.push(signal);
+    this.signals.push({ operation: 'read-staging', signal });
     this.readStarted?.();
     const object = this.staging.get(objectKey);
     const bytes = this.stagingBytes.get(objectKey);
@@ -121,7 +126,7 @@ class FakeStorage implements AvatarStoragePort {
     readonly signal?: AbortSignal;
   }) {
     this.calls.push('copy');
-    this.signals.push(input.signal);
+    this.signals.push({ operation: 'copy', signal: input.signal });
     this.final.set(input.objectKey, {
       contentType: input.contentType,
       byteSize: input.bytes.byteLength,
@@ -133,13 +138,14 @@ class FakeStorage implements AvatarStoragePort {
   }
   async deleteObject(key: string, signal?: AbortSignal) {
     this.calls.push('delete-final');
-    this.signals.push(signal);
+    this.signals.push({ operation: 'delete-final', signal });
     if (this.failFinalDelete) throw new Error('delete failed');
     this.final.delete(key);
+    this.finalBytes.delete(key);
   }
   async deleteStagingObject(key: string, signal?: AbortSignal) {
     this.calls.push('delete-staging');
-    this.signals.push(signal);
+    this.signals.push({ operation: 'delete-staging', signal });
     if (this.failStagingDelete) throw new Error('delete failed');
     this.staging.delete(key);
     this.stagingBytes.delete(key);
@@ -366,7 +372,7 @@ describe('AvatarUploadService private staging', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const blockerAdmission = reserveRasterImageProcessing('avatar');
+    const blockerAdmission = reserveAvatarRasterImageProcessing();
     const blocker = serializeRasterImageProcessing(
       blockerAdmission,
       new AbortController().signal,
@@ -397,6 +403,59 @@ describe('AvatarUploadService private staging', () => {
     await blocker;
     blockerAdmission.release();
     expect(storage.calls).not.toContain('copy');
+  });
+
+  it('keeps shared sanitization alive when only its first waiter aborts', async () => {
+    const { storage, objectKey } = await setup();
+    let releaseBlocker = (): void => undefined;
+    let markBlockerStarted = (): void => undefined;
+    const blockerStarted = new Promise<void>((resolve) => {
+      markBlockerStarted = resolve;
+    });
+    const blockerGate = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const blockerAdmission = reserveAvatarRasterImageProcessing();
+    const blocker = serializeRasterImageProcessing(
+      blockerAdmission,
+      new AbortController().signal,
+      async () => {
+        markBlockerStarted();
+        await blockerGate;
+      },
+    );
+    await blockerStarted;
+    let markReadStarted = (): void => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    storage.readStarted = markReadStarted;
+    const sanitizer = new AvatarUploadImageSanitizer(
+      storage,
+      async (stored) => ({
+        contentType: 'image/png',
+        byteSize: stored.byteSize ?? 1,
+      }),
+      async () => undefined,
+      () => NOW,
+    );
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const first = sanitizer.sanitizeOnce(USER, ASSET, firstController.signal);
+    await readStarted;
+    const second = sanitizer.sanitizeOnce(USER, ASSET, secondController.signal);
+
+    firstController.abort();
+    await expect(first).rejects.toBeInstanceOf(
+      RasterImageProcessingAbortedError,
+    );
+    releaseBlocker();
+    await blocker;
+    blockerAdmission.release();
+    const sanitized = await second;
+    expect(sanitized.objectKey).toBe(objectKey);
+    expect(sanitized.bytes.byteLength).toBeGreaterThan(0);
+    sanitized.release();
   });
 
   it('checks staging before copy and checks the copied final object before recording', async () => {
@@ -431,9 +490,23 @@ describe('AvatarUploadService private staging', () => {
     expect(storage.calls).toContain('delete-final');
     expect(storage.calls).toContain('delete-staging');
     expect(storage.signals).toHaveLength(6);
-    expect(storage.signals[0]).toBeInstanceOf(AbortSignal);
-    expect(storage.signals[4]).toBeUndefined();
-    expect(storage.signals[5]).toBe(storage.signals[0]);
+    const processingSignal = storage.signals.find(
+      ({ operation }) => operation === 'check-staging',
+    )?.signal;
+    expect(processingSignal).toBeInstanceOf(AbortSignal);
+    const requestSignal = storage.signals.find(
+      ({ operation }) => operation === 'copy',
+    )?.signal;
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(processingSignal).not.toBe(requestSignal);
+    expect(
+      storage.signals.find(({ operation }) => operation === 'delete-final')
+        ?.signal,
+    ).toBeUndefined();
+    expect(
+      storage.signals.find(({ operation }) => operation === 'delete-staging')
+        ?.signal,
+    ).toBe(requestSignal);
   });
 
   it('does not copy when the completion deadline aborts before publication', async () => {
@@ -449,8 +522,8 @@ describe('AvatarUploadService private staging', () => {
           requestId: REQUEST_ID,
         }),
       ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
-      expect(storage.calls).toEqual(['check-staging', 'read-staging']);
-      expect(storage.signals[0]?.aborted).toBe(true);
+      expect(storage.calls).not.toContain('check-staging');
+      expect(storage.calls).not.toContain('read-staging');
     } finally {
       deadline.mockRestore();
     }
@@ -589,6 +662,7 @@ describe('AvatarUploadService private staging', () => {
     cleanupGate.resolve();
     await expect(losing).rejects.toMatchObject({ code: 'AVATAR_CHANGED' });
     expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+    expect(storage.final.has(objectKey)).toBe(true);
     expect(storage.finalBytes.has(objectKey)).toBe(true);
   });
 
@@ -639,6 +713,24 @@ describe('AvatarUploadService private staging', () => {
     expect(storage.final.has(`users/${USER}/avatar/${ASSET}/original`)).toBe(
       true,
     );
+  });
+
+  it('keeps a committed replacement successful when cleanup coordination fails', async () => {
+    const { service, storage, repository } = await setup();
+    const previous = seedPreviousAvatar(repository, storage);
+    jest
+      .spyOn(repository, 'recordedObjectKeys')
+      .mockRejectedValueOnce(new Error('cleanup guard unavailable'));
+
+    await expect(
+      service.completeUpload({
+        userId: USER,
+        assetId: ASSET,
+        requestId: REQUEST_ID,
+      }),
+    ).resolves.toMatchObject({ created: true });
+    expect(repository.avatars.get(USER)?.assetId).toBe(ASSET);
+    expect(storage.final.has(previous.objectKey)).toBe(true);
   });
 
   it('retries a copy left behind before the record write', async () => {
