@@ -3,6 +3,8 @@ import '@/contracts/date-time-format';
 
 import {
   BrowserBindingSchema,
+  EmailSchema,
+  MfaCodeSchema,
   MfaRequiredResponseSchema,
   PasswordSchema,
   VerificationPasswordSchema,
@@ -16,15 +18,9 @@ import {
  */
 export const CreateWebSessionRequestSchema = Type.Object(
   {
-    email: Type.String({ minLength: 1, maxLength: 320 }),
+    email: EmailSchema,
     password: PasswordSchema,
-    mfa_code: Type.Optional(
-      Type.String({
-        minLength: 1,
-        maxLength: 64,
-        description: 'TOTP code or one-time recovery code.',
-      }),
-    ),
+    mfa_code: Type.Optional(MfaCodeSchema),
   },
   { additionalProperties: false },
 );
