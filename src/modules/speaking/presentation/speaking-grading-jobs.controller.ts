@@ -29,26 +29,8 @@ import {
 } from '@/modules/identity/shared/presentation/authenticated-request';
 import { RequireApiKeyScope } from '@/modules/identity/shared/presentation/require-api-key-scope.decorator';
 import { GetSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/get-speaking-grading-job';
-import type { SpeakingGradingJobOwner } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
-import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
-
-function speakingEnvironment(value: string): SpeakingAudioEnvironment {
-  return value === 'sandbox' ? 'sandbox' : 'production';
-}
-
-function ownerFor(request: AuthenticatedRequest): SpeakingGradingJobOwner {
-  const authenticated = getAuthenticatedApiKey(request);
-  const identity = request.aihubIdentity;
-  if (identity === undefined) {
-    throw userIdentityRequired();
-  }
-  return {
-    organizationId: authenticated.organizationId,
-    endUserId: identity.userId,
-    environment: speakingEnvironment(authenticated.environment),
-  };
-}
+import { speakingRequestOwner } from './speaking-request-owner';
 
 @Controller()
 @UseGuards(ApiKeyUserIdentityGuard)
@@ -113,7 +95,7 @@ export class SpeakingGradingJobsController {
     @Param('jobId') jobId: string,
   ): Promise<SpeakingGradingJobPollResponse> {
     const result = await this.getJob.execute({
-      owner: ownerFor(request),
+      owner: speakingRequestOwner(request),
       jobId,
     });
     return {

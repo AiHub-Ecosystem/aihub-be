@@ -1,7 +1,7 @@
 import { Value } from '@sinclair/typebox/value';
 import { ulid } from 'ulid';
 
-import { AppError, internalError } from '@/common/errors/app-error';
+import { internalError } from '@/common/errors/app-error';
 import { recordRejected } from '@/common/observability/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
@@ -30,7 +30,11 @@ import type {
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
-import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
+import {
+  hasLiveSpeakingAudioAsset,
+  speakingAudioAssetNotFound,
+} from '@/modules/speaking/application/audio/speaking-recording-access';
+import { speakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 import {
   type NewSpeakingGradingJob,
   type SpeakingGradingJobOwner,
@@ -48,20 +52,6 @@ export interface SubmitSpeakingGradingJobInput {
   readonly idempotencyKey?: string | readonly string[];
 }
 
-function notFound(): AppError {
-  return new AppError({
-    code: 'NOT_FOUND',
-    message: 'Speaking audio asset not found',
-    retryable: false,
-  });
-}
-
-function speakingEnvironment(
-  value: string | undefined,
-): SpeakingAudioEnvironment {
-  return value === 'sandbox' ? 'sandbox' : 'production';
-}
-
 function ownerFromContext(context: RequestContext): SpeakingGradingJobOwner {
   if (
     context.organizationId === undefined ||
@@ -73,7 +63,7 @@ function ownerFromContext(context: RequestContext): SpeakingGradingJobOwner {
   return {
     organizationId: context.organizationId,
     endUserId: context.userId,
-    environment: speakingEnvironment(context.environment),
+    environment: speakingAudioEnvironment(context.environment),
   };
 }
 
@@ -198,16 +188,12 @@ export class SubmitSpeakingGradingJob {
       ...owner,
       assetId: request.audio_asset_id,
     };
-    const found = await this.audio.findUpload(assetOwner);
-    if (
-      found.kind !== 'asset' ||
-      found.asset.retentionExpiresAt.getTime() <= now.getTime()
-    ) {
+    if (!(await hasLiveSpeakingAudioAsset(this.audio, assetOwner, this.now))) {
       // The probe consumed no admission yet: charge the rate limit and the
       // Organization retry budget before answering NOT_FOUND, or a caller
       // could poll for foreign asset ids without ever being limited.
       await this.admitRepeat(admissionInput, owner.organizationId);
-      throw notFound();
+      throw speakingAudioAssetNotFound();
     }
 
     const environment = owner.environment;

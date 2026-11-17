@@ -30,6 +30,13 @@ export const SPEAKING_AUDIO_BUCKETS = {
 
 export type SpeakingAudioEnvironment = 'production' | 'sandbox';
 
+/** The one mapping from an API key's environment to the environment an asset is bound to. */
+export function speakingAudioEnvironment(
+  value: string | undefined,
+): SpeakingAudioEnvironment {
+  return value === 'sandbox' ? 'sandbox' : 'production';
+}
+
 export interface SpeakingAudioUploadIntent {
   readonly assetId: string;
   readonly organizationId: string;

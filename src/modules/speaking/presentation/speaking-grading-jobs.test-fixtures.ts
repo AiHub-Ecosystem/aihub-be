@@ -343,14 +343,29 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
 
 export class FakeAudioRepository implements SpeakingAudioUploadRepositoryPort {
   readonly assets = new Map<string, SpeakingAudioAsset>();
+  readonly intents = new Map<string, SpeakingAudioUploadIntent>();
 
   seed(asset: SpeakingAudioAsset): void {
     this.assets.set(asset.assetId, asset);
   }
 
+  /** An upload that never became an asset: still open, or rejected. */
+  seedIntent(intent: SpeakingAudioUploadIntent): void {
+    this.intents.set(intent.assetId, intent);
+  }
+
   async findUpload(
     owner: SpeakingAudioUploadOwner,
   ): Promise<SpeakingAudioUploadLookup> {
+    const intent = this.intents.get(owner.assetId);
+    if (
+      intent !== undefined &&
+      intent.organizationId === owner.organizationId &&
+      intent.endUserId === owner.endUserId &&
+      intent.environment === owner.environment
+    ) {
+      return { kind: 'intent', intent };
+    }
     const asset = this.assets.get(owner.assetId);
     return asset !== undefined &&
       asset.organizationId === owner.organizationId &&

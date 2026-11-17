@@ -21,10 +21,14 @@ import { getMetrics } from '@/common/observability/metrics';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
-import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
+import {
+  GRADED_ADMISSION,
+  type GradedAdmissionPort,
+} from '@/modules/gateway/application/graded-admission.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
@@ -37,6 +41,10 @@ import {
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
+import {
+  FakeAudioRepository,
+  speakingAsset,
+} from './speaking-grading-jobs.test-fixtures';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const speakingResponseSchema = Type.Object({
@@ -151,6 +159,8 @@ describe('Speaking grading HTTP flow', () => {
   let outboundBody: UndiciFormData | undefined;
   let outboundJson: Record<string, unknown> | undefined;
   let abortJsonRequest = false;
+  const audioRepository = new FakeAudioRepository();
+  let admissionConsume: jest.SpyInstance;
 
   beforeAll(async () => {
     useTestRuntimeConfiguration({
@@ -209,6 +219,8 @@ describe('Speaking grading HTTP flow', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(SPEAKING_AUDIO_UPLOAD_REPOSITORY)
+      .useValue(audioRepository)
       .overrideProvider(DownstreamHttpClient)
       .useValue(
         new DownstreamHttpClient(
@@ -262,6 +274,10 @@ describe('Speaking grading HTTP flow', () => {
       });
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    admissionConsume = jest.spyOn(
+      app.get<GradedAdmissionPort>(GRADED_ADMISSION),
+      'consume',
+    );
   });
 
   afterAll(async () => {
@@ -380,8 +396,118 @@ describe('Speaking grading HTTP flow', () => {
     });
   });
 
+  describe('customer recording URL', () => {
+    const SELF = {
+      organizationId: 'local-development',
+      endUserId: 'local-development',
+      environment: 'production',
+    } as const;
+    const RECORDING_ID = 'aud_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+    const RECORDING_URL = `https://s3.wispace.app/aihub-speaking-recordings/orgs/local-development/speaking/${RECORDING_ID}/original?X-Amz-Signature=abc`;
+
+    function seedRecording(
+      owner: Parameters<typeof speakingAsset>[0],
+      retentionExpiresAt?: Date,
+    ): void {
+      audioRepository.assets.clear();
+      audioRepository.seed({
+        ...speakingAsset(owner, retentionExpiresAt),
+        assetId: RECORDING_ID,
+        objectKey: `orgs/${owner?.organizationId}/speaking/${RECORDING_ID}/original`,
+      });
+    }
+
+    function gradeRecording() {
+      outboundJson = undefined;
+      admissionConsume.mockClear();
+      return app.inject({
+        method: 'POST',
+        url: '/v1/ielts/speaking/grading-json',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          audio_url: RECORDING_URL,
+          part: 1,
+          question_id: 'p1_hometown',
+        },
+      });
+    }
+
+    function seedUpload(status: 'open' | 'rejected'): void {
+      audioRepository.assets.clear();
+      audioRepository.seedIntent({
+        ...SELF,
+        assetId: RECORDING_ID,
+        objectKey: `orgs/${SELF.organizationId}/speaking/${RECORDING_ID}/original`,
+        contentType: 'audio/wav',
+        byteSize: 200,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        status,
+      });
+    }
+
+    afterEach(() => {
+      audioRepository.assets.clear();
+      audioRepository.intents.clear();
+    });
+
+    it('grades a live asset owned by the same Organization, End User and environment', async () => {
+      seedRecording(SELF);
+
+      const response = await gradeRecording();
+
+      expect(response.statusCode).toBe(200);
+      expect(outboundJson).toMatchObject({ audio_url: RECORDING_URL });
+    });
+
+    it.each([
+      ['an asset owned by another End User', { ...SELF, endUserId: 'user_b' }],
+      ['an asset of another environment', { ...SELF, environment: 'sandbox' }],
+    ] as const)('refuses %s as an unknown asset', async (_name, owner) => {
+      seedRecording(owner);
+
+      const response = await gradeRecording();
+
+      expect(response.statusCode).toBe(404);
+      expectError(response, 'NOT_FOUND');
+      expect(outboundJson).toBeUndefined();
+    });
+
+    it('refuses an asset past its retention deadline', async () => {
+      seedRecording(SELF, new Date(Date.now() - 1));
+
+      const response = await gradeRecording();
+
+      expect(response.statusCode).toBe(404);
+      expectError(response, 'NOT_FOUND');
+      expect(outboundJson).toBeUndefined();
+    });
+
+    it.each(['open', 'rejected'] as const)(
+      'refuses an upload that is %s, which is not an accepted asset yet',
+      async (status) => {
+        seedUpload(status);
+
+        const response = await gradeRecording();
+
+        expect(response.statusCode).toBe(404);
+        expectError(response, 'NOT_FOUND');
+        expect(outboundJson).toBeUndefined();
+      },
+    );
+
+    // The admission step runs before the lookup: that order decides which
+    // refusal a caller sees, so it is public behaviour (ADR-0057) and is
+    // asserted over the real chain.
+    it('charges admission for a refused lookup, so foreign ids cannot be probed for free', async () => {
+      const response = await gradeRecording();
+
+      expect(response.statusCode).toBe(404);
+      expect(admissionConsume).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it.each([
-    'https://s3.wispace.app/aihub-speaking-recordings/orgs/local-development/speaking/aud_01ARZ3NDEKTSV4RRFFQ69G5FAV/original?X-Amz-Signature=abc',
     'https://s3.wispace.app/aihub-speaking-samples/speaking-samples/part-1/sample.webm?X-Amz-Signature=abc',
   ])('dispatches an approved audio URL family: %s', async (audioUrl) => {
     outboundJson = undefined;

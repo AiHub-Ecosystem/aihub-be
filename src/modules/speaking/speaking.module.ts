@@ -35,6 +35,7 @@ import { SpeakingAudioUploadService } from './application/audio/speaking-audio-u
 import { SpeakingAudioUploadSweep } from './application/audio/speaking-audio-upload.sweep';
 import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/audio/speaking-audio-url-rejection-recorder.port';
 import { SPEAKING_MULTIPART_PARSER } from './application/audio/speaking-multipart-parser.port';
+import { SpeakingRecordingAccess } from './application/audio/speaking-recording-access';
 import {
   InFlightCeiling,
   SPEAKING_UPLOADS_IN_FLIGHT_MAX,
@@ -385,6 +386,14 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
           prefixedIdGenerator('aud_'),
           clock,
         ),
+    },
+    {
+      provide: SpeakingRecordingAccess,
+      inject: [SPEAKING_AUDIO_UPLOAD_REPOSITORY, SPEAKING_AUDIO_UPLOAD_CLOCK],
+      useFactory: (
+        repository: SpeakingAudioUploadRepositoryPort,
+        clock: () => Date,
+      ) => new SpeakingRecordingAccess(repository, clock),
     },
     {
       provide: SpeakingAudioUploadSweep,
