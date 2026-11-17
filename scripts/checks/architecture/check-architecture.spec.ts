@@ -2284,9 +2284,35 @@ describe('Identity repositories do not run statements on their own client (#785)
     expect(result.output).toContain(REJECTED);
   });
 
+  it.each([
+    [
+      'identityRows',
+      '    const db = this.client;\n    return identityRows(db, "SELECT 1", []);',
+    ],
+    [
+      'a raw query',
+      '    const db = this.client;\n    return db.$queryRawUnsafe("SELECT 1");',
+    ],
+    [
+      'a chained alias',
+      '    const db = this.client;\n    const copy = db;\n    return copy.apiKey.updateMany({});',
+    ],
+  ])('rejects %s on a local alias of this.client', (_name, body) => {
+    const result = checkRepository(body);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(REJECTED);
+  });
+
   it('accepts a statement on the transaction the seam hands over', () => {
     const result = checkRepository(
       '    return identityTransaction(this.client, organizationId, (transaction) => identityRows(transaction, "SELECT 1", []));',
+    );
+    expect(result.output).not.toContain(REJECTED);
+  });
+
+  it('accepts a seam call made through a local alias', () => {
+    const result = checkRepository(
+      '    const db = this.client;\n    return identityTransaction(db, organizationId, (transaction) => identityRows(transaction, "SELECT 1", []));',
     );
     expect(result.output).not.toContain(REJECTED);
   });

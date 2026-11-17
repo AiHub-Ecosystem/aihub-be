@@ -1565,9 +1565,67 @@ export function collectSourceTextFailures(options) {
   // Organization and would see no rows under fail-closed RLS. A request-serving
   // statement goes through `identityTransaction(this.client, organizationId, ...)`
   // and runs on the transaction it hands over. The files below are the only ones
-  // that may use `this.client` directly, each for the reason given. This reads
-  // the text, so it does not follow a client copied into another variable; the
+  // that may use `this.client` directly, each for the reason given. A local
+  // alias of the client is the same escape, so receivers are resolved from
+  // variable declarations before the statement patterns are matched. A class
+  // field or a client passed through a function call is not resolved here; the
   // coverage spec in `src/modules/persistence` is the behavioural check.
+  /** @param {string} source @returns {string[]} */
+  function ownIdentityClientReceivers(source) {
+    const sourceFile = ts.createSourceFile(
+      'identity-repository.ts',
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    /** @type {Array<[string, import('typescript').Expression]>} */
+    const bindings = [];
+    /** @param {import('typescript').Node} node */
+    function visit(node) {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer !== undefined
+      ) {
+        bindings.push([node.name.text, node.initializer]);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(sourceFile);
+
+    const receivers = new Set(['this.client']);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const [name, initializer] of bindings) {
+        if (receivers.has(name)) continue;
+        const isOwnClient =
+          initializer.getText(sourceFile).replace(/\s/g, '') === 'this.client';
+        const isAlias =
+          ts.isIdentifier(initializer) && receivers.has(initializer.text);
+        if (!isOwnClient && !isAlias) continue;
+        receivers.add(name);
+        added = true;
+      }
+    }
+    return [...receivers];
+  }
+
+  /**
+   * @param {string[]} receivers
+   * @returns {RegExp}
+   */
+  function unscopedIdentityClientPattern(receivers) {
+    const names = receivers
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|');
+    return new RegExp(
+      `\\bidentityRows\\(\\s*(?:${names})\\b` +
+        `|\\b(?:${names})\\.\\$(?:query|execute)Raw` +
+        `|\\b(?:${names})\\.[a-z]\\w*\\.(?:find\\w*|create\\w*|update\\w*|delete\\w*|count|upsert|aggregate|groupBy)\\s*\\(`,
+    );
+  }
   {
     const unscopedIdentityClientAllowed = new Map([
       [
@@ -1587,8 +1645,6 @@ export function collectSourceTextFailures(options) {
         'Operator Redis failure record, no Organization column',
       ],
     ]);
-    const unscopedIdentityClientUse =
-      /\bidentityRows\(\s*this\.client\b|\bthis\.client\.\$(?:query|execute)Raw|\bthis\.client\.[a-z]\w*\.(?:find\w*|create\w*|update\w*|delete\w*|count|upsert|aggregate|groupBy)\s*\(/;
     for (const file of sourceFiles) {
       if (file.endsWith('.spec.ts')) continue;
       const relativePath = relative(root, file).replace(/\\/g, '/');
@@ -1596,6 +1652,9 @@ export function collectSourceTextFailures(options) {
         continue;
       }
       if (unscopedIdentityClientAllowed.has(relativePath)) continue;
+      const receivers = ownIdentityClientReceivers(sourceText(file));
+      const unscopedIdentityClientUse =
+        unscopedIdentityClientPattern(receivers);
       if (unscopedIdentityClientUse.test(sourceText(file))) {
         fail(
           `${relativePath} runs a statement on its own client outside a transaction; use identityTransaction(this.client, organizationId, ...) so the Organization is declared first (#785)`,
