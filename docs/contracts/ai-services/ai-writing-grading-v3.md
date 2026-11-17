@@ -105,7 +105,7 @@ The body is `{ success, data_micro, data, usage, metrics }`.
   or `grammatical_range_accuracy`), `code`, `name_en`, `name_vi` and
   `reason_vi`. The error code remains an open string. An empty list means no
   priority was selected; omission or a malformed entry violates the response
-  contract.
+  contract. Additional provider fields on an entry are ignored and not published.
 - `data.coT`, `data.task`, `usage` and `metrics` are not published. AIHUB reads
   `usage` and `metrics` for metering only.
 

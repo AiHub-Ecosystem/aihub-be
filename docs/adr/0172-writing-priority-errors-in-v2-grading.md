@@ -13,6 +13,7 @@ an empty list. The schema accepts at most three entries, ranks 1–3, and the
 three documented groups while leaving error codes open-ended. The dev provider
 returned this shape for both grading tasks on 2026-11-17; captures are kept in
 `test/fixtures/ai-writing/grade-v3-task{1,2}-error-priority.capture.json`.
+Additional provider fields on an entry are ignored and are not published.
 
 On rollback, N-1 replays the stored idempotency response body without grading
 again; the added field may be present and is ignored by the older response

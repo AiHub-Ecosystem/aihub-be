@@ -34,6 +34,10 @@ const ProviderCriterion = Type.Object({
   feedback_detail: Strings,
 });
 
+const ProviderErrorPriority = Type.Omit(WritingErrorPrioritySchema, [], {
+  additionalProperties: true,
+});
+
 // Shape read from the captured v3 fixtures (test/fixtures/ai-writing/
 // grade-v3-task{1,2}.*) and the provider document, nothing more. Fields the
 // customer never sees (`usage`, `metrics`, `coT`, `data.task`) are not read.
@@ -67,7 +71,7 @@ const ProviderBody = Type.Object({
         error_new: Strings,
       }),
     }),
-    error_priority: Type.Array(WritingErrorPrioritySchema, { maxItems: 3 }),
+    error_priority: Type.Array(ProviderErrorPriority, { maxItems: 3 }),
   }),
 });
 
@@ -141,7 +145,16 @@ export function parseWritingV3Response(body: unknown): WritingV2GradeResponse {
         error_new: assessment.Progress.error_new,
       },
     },
-    error_priority: data.error_priority,
+    error_priority: data.error_priority.map(
+      ({ rank, group, code, name_en, name_vi, reason_vi }) => ({
+        rank,
+        group,
+        code,
+        name_en,
+        name_vi,
+        reason_vi,
+      }),
+    ),
     data_micro,
   };
 }

@@ -102,6 +102,26 @@ describe('parseWritingV3Response', () => {
     });
   });
 
+  it('ignores additive provider fields inside error_priority entries', () => {
+    const body = withPriorityCapture(
+      fixture('grade-v3-task1.response.json'),
+      1,
+    );
+    const data = body['data'] as Record<string, unknown>;
+    const [first] = data['error_priority'] as Record<string, unknown>[];
+    data['error_priority'] = [
+      { ...first, future_optional_field: 'provider extension' },
+    ];
+
+    const result = parseWritingV3Response(body);
+
+    expect(result.error_priority[0]).toEqual(first);
+    expect(result.error_priority[0]).not.toHaveProperty(
+      'future_optional_field',
+    );
+    expect(Value.Check(WritingV2GradeResponseSchema, result)).toBe(true);
+  });
+
   it('renames keys to snake_case and keeps provider strings verbatim, leading "- " included', () => {
     const body = fixture('grade-v3-task2.response.json');
     const result = parseWritingV3Response(withPriorityCapture(body, 2));
