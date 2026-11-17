@@ -1,4 +1,4 @@
-import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/application/speaking-question-catalog';
+import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/public/question-catalog';
 import {
   BFF_CLIENT_SECRET_HEADER,
   IDEMPOTENCY_HEADER,

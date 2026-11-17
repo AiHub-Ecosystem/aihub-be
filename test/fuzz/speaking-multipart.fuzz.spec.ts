@@ -17,7 +17,7 @@ import type {
   SpeakingMultipartPart,
   SpeakingMultipartSource,
 } from '@/modules/speaking/application/audio/speaking-multipart-parser.port';
-import { FastifySpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { FastifySpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 
 import { assertWithReproducer } from './assert-with-reproducer';
 import seeds from './seeds.json';

@@ -46,7 +46,6 @@ import {
   type SpeakingV2ResultOwnershipPort,
 } from './application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from './application/speaking-v2-workflow-engine';
-import { FastifySpeakingMultipartParser } from './infrastructure/fastify-speaking-multipart.parser';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
 import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
@@ -57,6 +56,7 @@ import { SpeakingGradingJobsController } from './presentation/speaking-grading-j
 import { SpeakingGradingController } from './presentation/speaking-grading.controller';
 import { SpeakingQuestionsController } from './presentation/speaking-questions.controller';
 import { SpeakingV2Controller } from './presentation/speaking-v2.controller';
+import { FastifySpeakingMultipartParser } from './public/fastify-speaking-multipart.parser';
 
 import {
   CONCURRENCY_LIMITER,

@@ -555,6 +555,20 @@ module.exports = {
       from: { path: '^src/modules/avatar/', pathNot: '[.]spec[.]ts$' },
       to: { path: '^src/modules/gateway/' },
     },
+    {
+      name: 'no-non-module-private-import',
+      severity: 'error',
+      comment:
+        'Code outside src/modules and src/cli reaches a business module only through its public facade, application port, module composition root, Nest export, decorator, or shared request primitive (#1827). The CLI has its own composition-root rule.',
+      from: {
+        path: '^src/(?!modules/|cli/)',
+        pathNot: '[.]spec[.]ts$',
+      },
+      to: {
+        path: '^src/modules/[^/]+/',
+        pathNot: [...seamPathNots('[^/]+'), ...sharedPrimitivePaths()],
+      },
+    },
     externalAuthRule(),
     crossModuleRule(),
     cliRule(),

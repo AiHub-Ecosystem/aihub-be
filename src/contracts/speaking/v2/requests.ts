@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox';
 
-import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/public/audio-asset';
 import { SpeakingV2TestTypeSchema } from './response.shared';
 
 export const SpeakingV2QuestionGradeRequestSchema = Type.Object(

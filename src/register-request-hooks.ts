@@ -7,8 +7,10 @@ import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
 import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { registerSecurityHeaders } from './common/http/security-headers.hook';
-import { registerPublicApiMajorUsage } from './modules/metering/presentation/public-api-major-usage.hook';
-import { registerRequestCompletionLog } from './modules/metering/presentation/request-completion-log.hook';
+import {
+  registerPublicApiMajorUsage,
+  registerRequestCompletionLog,
+} from './modules/metering/public/http-hooks';
 import type { PublicApiMajorUsageSample } from './modules/metering/public/public-api-major-usage';
 
 /**

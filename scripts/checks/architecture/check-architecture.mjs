@@ -1065,6 +1065,25 @@ export function collectSourceTextFailures(options) {
     );
   }
 
+  // #1827: presentation gets configuration from the Secrets-owned port. The
+  // global appConfig token belongs to composition roots; a guard or controller
+  // importing it bypasses the seam and re-couples presentation to config.
+  for (const file of sourceFiles) {
+    if (file.endsWith('.spec.ts')) continue;
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    if (!/\/presentation\//.test(relativePath)) continue;
+    const source = sourceText(file);
+    const match =
+      /import\s*\{[^}]*\bappConfig\b[^}]*\}\s*from\s*['"]@\/config\/runtime-configuration['"]/.exec(
+        source,
+      );
+    if (match === null) continue;
+    const line = source.slice(0, match.index).split(/\r?\n/).length;
+    fail(
+      `${relativePath}:${line} imports appConfig in presentation; inject RUNTIME_PRESENTATION_CONFIGURATION from the Secrets port (#1827)`,
+    );
+  }
+
   const QUERY_VALIDATION_MARKER = 'arch-check:';
 
   /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */

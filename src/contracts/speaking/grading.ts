@@ -1,6 +1,6 @@
 import type { Blob } from 'node:buffer';
 
-import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/public/audio-asset';
 import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
 
 if (!FormatRegistry.Has('binary')) {

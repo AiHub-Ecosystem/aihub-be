@@ -5,7 +5,7 @@ import { ResponseMetaSchema } from '@/contracts/response-meta';
 import {
   SPEAKING_AUDIO_CONTENT_TYPES,
   SPEAKING_AUDIO_MAX_BYTES,
-} from '@/modules/speaking/domain/speaking-audio-asset';
+} from '@/modules/speaking/public/audio-asset';
 
 const SpeakingAudioContentTypeSchema = Type.Union(
   SPEAKING_AUDIO_CONTENT_TYPES.map((contentType) => Type.Literal(contentType)),

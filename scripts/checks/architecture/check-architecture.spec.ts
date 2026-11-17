@@ -85,6 +85,9 @@ const avatarGatewayRule = rules.find(
 const authBoundaryRule = rules.find(
   (rule) => rule.name === 'no-auth-internal-import-outside-auth',
 );
+const nonModuleRule = rules.find(
+  (rule) => rule.name === 'no-non-module-private-import',
+);
 
 function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
@@ -734,6 +737,7 @@ describe('cross-module import rule over the real tree', () => {
   let businessGatewayViolations: Array<{ from: string; to: string }>;
   let avatarGatewayViolations: Array<{ from: string; to: string }>;
   let authBoundaryViolations: Array<{ from: string; to: string }>;
+  let nonModuleViolations: Array<{ from: string; to: string }>;
 
   beforeAll(() => {
     const result = spawnSync(
@@ -781,6 +785,7 @@ describe('cross-module import rule over the real tree', () => {
     authBoundaryViolations = violationsFor(
       'no-auth-internal-import-outside-auth',
     );
+    nonModuleViolations = violationsFor('no-non-module-private-import');
   });
 
   it('reports no imports of another module internal files', () => {
@@ -947,6 +952,42 @@ describe('cross-module import rule over the real tree', () => {
   });
   it('reports no external imports of Auth internals', () => {
     expect(authBoundaryViolations).toEqual([]);
+  });
+
+  it('reports no private module imports from non-module trees (#1827)', () => {
+    expect(nonModuleViolations).toEqual([]);
+  });
+});
+
+describe('non-module import boundary fixtures (#1827)', () => {
+  it('uses public facades, ports, and module composition roots', () => {
+    const fromPath = nonModuleRule?.from.path ?? '';
+    const pathNot = nonModuleRule?.to.pathNot ?? [];
+
+    expect(nonModuleRule?.severity).toBe('error');
+    expect(matches(fromPath, 'src/main.ts')).toBe(true);
+    expect(matches(fromPath, 'src/register-request-hooks.ts')).toBe(true);
+    expect(matches(fromPath, 'src/app.module.ts')).toBe(true);
+    expect(matches(fromPath, 'src/postman/postman-example-scenarios.ts')).toBe(
+      true,
+    );
+    expect(matches(fromPath, 'src/cli/usage-report.ts')).toBe(false);
+    expect(matches(fromPath, 'src/modules/auth/auth.module.ts')).toBe(false);
+    expect(matches(pathNot, 'src/modules/metering/public/http-hooks.ts')).toBe(
+      true,
+    );
+    expect(
+      matches(
+        pathNot,
+        'src/modules/speaking/application/audio/speaking-audio-upload.port.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        pathNot,
+        'src/modules/speaking/public/fastify-speaking-multipart.parser.ts',
+      ),
+    ).toBe(true);
   });
 });
 
@@ -2322,6 +2363,31 @@ describe('Identity repositories do not run statements on their own client (#785)
       '    return identityRows(this.client, "SELECT 1", []);',
       'src/modules/identity/api-keys/infrastructure/postgres-api-key.repository.ts',
     );
+    expect(result.output).not.toContain(REJECTED);
+  });
+});
+
+describe('presentation does not import appConfig (#1827)', () => {
+  const REJECTED = 'imports appConfig in presentation';
+
+  it('rejects a guard importing the global config', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/identity/api-keys/presentation/probe.guard.ts',
+        "import { appConfig } from '@/config/runtime-configuration';\nexport const token = appConfig.KEY;",
+      ],
+    ]);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(REJECTED);
+  });
+
+  it('accepts a guard importing the Secrets port', () => {
+    const result = checkFixtures([
+      [
+        'src/modules/identity/api-keys/presentation/probe.guard.ts',
+        "import { RUNTIME_PRESENTATION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';\nexport const token = RUNTIME_PRESENTATION_CONFIGURATION;",
+      ],
+    ]);
     expect(result.output).not.toContain(REJECTED);
   });
 });

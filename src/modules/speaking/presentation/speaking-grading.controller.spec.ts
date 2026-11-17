@@ -39,7 +39,7 @@ import {
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
-import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 import {
   FakeAudioRepository,

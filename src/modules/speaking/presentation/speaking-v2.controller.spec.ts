@@ -27,7 +27,7 @@ import {
   type SpeakingV2ResultOwnershipPort,
 } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
-import { registerSpeakingMultipartParser } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');

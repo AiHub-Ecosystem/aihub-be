@@ -1,5 +1,5 @@
 import { isRecord } from '@/common/is-record';
-import { ALLOWED_EXTENSIONS } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { ALLOWED_EXTENSIONS } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 
 // The request an operational smoke helper must send, read from the OpenAPI
 // document built from source (#1403), and a comparison with what the helper

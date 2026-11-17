@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 
 import { isRecord } from '@/common/is-record';
-import { ALLOWED_EXTENSIONS } from '@/modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { ALLOWED_EXTENSIONS } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 
 import { bashExecutable } from '../support/bash';

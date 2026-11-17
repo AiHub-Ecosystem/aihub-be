@@ -23,7 +23,7 @@ import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
   type PublicApiMajorUsageBuffer,
 } from './modules/metering/public/public-api-major-usage';
-import { registerSpeakingMultipartParser } from './modules/speaking/infrastructure/fastify-speaking-multipart.parser';
+import { registerSpeakingMultipartParser } from './modules/speaking/public/fastify-speaking-multipart.parser';
 import { registerRequestHooks } from './register-request-hooks';
 
 const MAX_BODY_BYTES = 1024 * 1024;
