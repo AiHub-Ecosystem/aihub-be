@@ -10,7 +10,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { AppError } from '@/common/errors/app-error';
-import { DEFAULT_SEAWEEDFS_ENDPOINT } from '@/config/runtime-configuration';
 import type {
   AvatarStoragePort,
   AvatarUploadUrl,
@@ -25,6 +24,7 @@ import {
   type AvatarContentType,
 } from '@/modules/avatar/domain/avatar';
 import {
+  DEFAULT_SEAWEEDFS_ENDPOINT,
   objectStorageNotFound,
   objectStorageSignal,
   objectStorageUnavailable,

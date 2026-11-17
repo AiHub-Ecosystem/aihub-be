@@ -1,6 +1,6 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
-import type { DownstreamId } from '@/downstream/downstream.types';
+import type { MeteringDownstreamId } from '@/modules/metering/application/metering-downstream';
 import { DOWNSTREAM_USAGE_REPORTING } from '@/modules/metering/application/usage-recording/metering.service';
 
 export interface UsageReportWindow {
@@ -10,7 +10,7 @@ export interface UsageReportWindow {
 
 export interface UsageReportOperationDefinition {
   readonly operation: string;
-  readonly downstream: DownstreamId;
+  readonly downstream: MeteringDownstreamId;
 }
 
 export interface UsageReportSnapshotQuery extends UsageReportWindow {
@@ -34,7 +34,7 @@ export type UsageReportStatus = 'healthy' | 'alert';
 
 export interface UsageReportOperationResult {
   readonly operation: string;
-  readonly downstream: DownstreamId;
+  readonly downstream: MeteringDownstreamId;
   readonly successfulCount: number;
   readonly missingUsageCount: number;
   readonly incompletePercent: number;

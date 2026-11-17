@@ -1,5 +1,4 @@
 export {
-  calculateMonthAnchoredCutoff,
   calculateUsageRetentionCutoff,
   USAGE_PRUNE_BATCH_SIZE,
   UsagePruneError,

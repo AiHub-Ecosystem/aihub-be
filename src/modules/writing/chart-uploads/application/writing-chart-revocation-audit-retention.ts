@@ -1,5 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
-import { calculateMonthAnchoredCutoff } from '@/modules/metering/public/usage-retention';
+import { calculateMonthAnchoredCutoff } from '@/common/time/month-anchored-cutoff';
 import type { WritingChartRevocationAuditRepositoryPort } from './writing-chart-revocation.port';
 
 export const WRITING_CHART_REVOCATION_AUDIT_BATCH_SIZE = 1_000;

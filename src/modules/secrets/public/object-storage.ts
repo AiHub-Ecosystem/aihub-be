@@ -1,3 +1,5 @@
+export { DEFAULT_SEAWEEDFS_ENDPOINT } from '@/config/runtime-configuration';
+
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';

@@ -4,7 +4,7 @@ import {
   type OperationDef,
 } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
-import type { DownstreamId } from '@/downstream/downstream.types';
+import type { MeteringDownstreamId } from '@/modules/metering/application/metering-downstream';
 import type { QuotaCounterPort } from '@/modules/metering/application/quota/quota-counter.port';
 import type {
   MeteringFinalizeInput,
@@ -22,7 +22,7 @@ import type { UsageRecord, UsageRepositoryPort } from './usage-repository.port';
 export const DOWNSTREAM_USAGE_REPORTING = {
   'ai-writing': false,
   'ai-speaking': true,
-} as const satisfies Record<DownstreamId, boolean>;
+} as const satisfies Record<MeteringDownstreamId, boolean>;
 
 /**
  * Bound on how long a Metering write may hold the request path (#229).
