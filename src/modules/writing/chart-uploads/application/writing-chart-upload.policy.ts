@@ -1,3 +1,5 @@
+import { createRasterImageProcessingAdmission } from '@/common/image/raster-image';
+
 export const WRITING_CHART_MAX_BYTES = 10 * 1024 * 1024;
 export const WRITING_CHART_MAX_PIXELS = 20_000_000;
 export const WRITING_CHART_INTENT_TTL_MS = 60 * 60 * 1000;
@@ -11,3 +13,9 @@ export const WRITING_CHART_ORG_HOURLY_LIMIT = 5;
 // began earlier has been aborted and can no longer write the public object, so
 // a revocation need not wait for it (#1206).
 export const WRITING_CHART_PUBLICATION_LEASE_MS = 30 * 1000;
+
+const WRITING_CHART_RASTER_IMAGE_PROCESSING_CAPACITY = 4;
+export const reserveWritingChartRasterImageProcessing =
+  createRasterImageProcessingAdmission(
+    WRITING_CHART_RASTER_IMAGE_PROCESSING_CAPACITY,
+  );

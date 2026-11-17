@@ -1,4 +1,5 @@
 import type {
+  AvatarAuditEvent,
   AvatarRepositoryPort,
   AvatarUploadGrantRecord,
   RecordAvatarResult,
@@ -12,6 +13,8 @@ import type { Avatar } from '@/modules/avatar/domain/avatar';
  */
 export class InMemoryAvatarRepository implements AvatarRepositoryPort {
   readonly avatars = new Map<string, Avatar>();
+  /** Every recorded change, in the order it was applied (#429). */
+  readonly audits: (AvatarAuditEvent & { readonly userId: string })[] = [];
   readonly grants = new Map<
     string,
     (AvatarUploadGrantRecord & {
@@ -20,12 +23,16 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
     })[]
   >();
   beforeNextChange: (() => void) | undefined;
+  beforeNextLock: (() => Promise<void>) | undefined;
   private readonly locks = new Map<string, Promise<void>>();
 
   async withUserLock<T>(
     userId: string,
     operation: (repository: AvatarRepositoryPort) => Promise<T>,
   ): Promise<T> {
+    const beforeNextLock = this.beforeNextLock;
+    this.beforeNextLock = undefined;
+    await beforeNextLock?.();
     const previous = this.locks.get(userId) ?? Promise.resolve();
     let release = (): void => undefined;
     const current = new Promise<void>((resolve) => {
@@ -114,11 +121,15 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
     );
   }
 
-  async record(avatar: Avatar): Promise<RecordAvatarResult> {
+  async record(
+    avatar: Avatar,
+    audit: AvatarAuditEvent,
+  ): Promise<RecordAvatarResult> {
     this.runConcurrentChange();
     const existing = this.avatars.get(avatar.userId);
     if (existing === undefined) {
       this.avatars.set(avatar.userId, avatar);
+      this.audits.push({ ...audit, userId: avatar.userId });
       return { kind: 'recorded', avatar };
     }
     return existing.assetId === avatar.assetId
@@ -126,21 +137,31 @@ export class InMemoryAvatarRepository implements AvatarRepositoryPort {
       : { kind: 'exists' };
   }
 
-  async replace(previousAssetId: string, avatar: Avatar): Promise<boolean> {
+  async replace(
+    previousAssetId: string,
+    avatar: Avatar,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean> {
     this.runConcurrentChange();
     if (this.avatars.get(avatar.userId)?.assetId !== previousAssetId) {
       return false;
     }
     this.avatars.set(avatar.userId, avatar);
+    this.audits.push({ ...audit, userId: avatar.userId });
     return true;
   }
 
-  async remove(userId: string, assetId: string): Promise<boolean> {
+  async remove(
+    userId: string,
+    assetId: string,
+    audit: AvatarAuditEvent,
+  ): Promise<boolean> {
     this.runConcurrentChange();
     if (this.avatars.get(userId)?.assetId !== assetId) {
       return false;
     }
     this.avatars.delete(userId);
+    this.audits.push({ ...audit, userId });
     return true;
   }
 

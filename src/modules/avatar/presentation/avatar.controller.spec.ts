@@ -34,9 +34,12 @@ import {
   AVATAR_STORAGE,
   type AvatarStoragePort,
   type ListedAvatarObject,
+  type StagedAvatarObject,
   type StoredAvatarObject,
 } from '@/modules/avatar/application/avatar-storage.port';
+import { isAvatarContentType } from '@/modules/avatar/domain/avatar';
 import { InMemoryAvatarRepository } from '@/modules/avatar/testing/in-memory-avatar.repository';
+import sharp from 'sharp';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const OTHER_USER_ID = 'usr_01J00000000000000000000009';
@@ -46,6 +49,22 @@ const UPLOAD_URL =
   'https://s3.wispace.app/aihub-user-assets/users/usr_x/avatar/ava_x/original?X-Amz-Signature=sig';
 const MiB = 1024 * 1024;
 const PUBLIC_ORIGIN = 'https://s3.wispace.app/aihub-user-assets/';
+
+async function imageBytes(
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp',
+): Promise<Buffer> {
+  const pipeline = sharp({
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: { r: 10, g: 20, b: 30 },
+    },
+  });
+  if (contentType === 'image/jpeg') return pipeline.jpeg().toBuffer();
+  if (contentType === 'image/webp') return pipeline.webp().toBuffer();
+  return pipeline.png().toBuffer();
+}
 
 function expectErrorCode(response: { json(): unknown }, code: string): void {
   expect(response.json()).toMatchObject({ error: { code } });
@@ -62,6 +81,8 @@ function storageUnavailable(): AppError {
 class FakeAvatarStorage implements AvatarStoragePort {
   readonly objects = new Map<string, StoredAvatarObject>();
   readonly stagingObjects = new Map<string, StoredAvatarObject>();
+  readonly stagingBytes = new Map<string, Uint8Array>();
+  readonly finalBytes = new Map<string, Uint8Array>();
   readonly signed: Array<{
     objectKey: string;
     contentType: string;
@@ -95,17 +116,31 @@ class FakeAvatarStorage implements AvatarStoragePort {
     return this.stagingObjects.get(objectKey);
   }
 
-  async copyStagingToFinal(input: {
+  async readStagingObject(
+    objectKey: string,
+    _etag: string | undefined,
+    _signal?: AbortSignal,
+  ): Promise<StagedAvatarObject | undefined> {
+    if (this.unavailable) throw storageUnavailable();
+    const object = this.stagingObjects.get(objectKey);
+    const bytes = this.stagingBytes.get(objectKey);
+    return object === undefined || bytes === undefined
+      ? undefined
+      : { contentType: object.contentType, bytes };
+  }
+
+  async putFinalObject(input: {
     readonly objectKey: string;
     readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+    readonly bytes: Uint8Array;
   }) {
     if (this.unavailable) throw storageUnavailable();
-    const object = this.stagingObjects.get(input.objectKey);
-    if (object !== undefined)
-      this.objects.set(input.objectKey, {
-        ...object,
-        contentType: input.contentType,
-      });
+    this.finalBytes.set(input.objectKey, input.bytes);
+    this.objects.set(input.objectKey, {
+      contentType: input.contentType,
+      byteSize: input.bytes.byteLength,
+      lastModified: new Date(),
+    });
   }
 
   async describeFinalObject(objectKey: string) {
@@ -117,12 +152,14 @@ class FakeAvatarStorage implements AvatarStoragePort {
     if (this.deleteFails) throw storageUnavailable();
     this.stagingDeleted.push(objectKey);
     this.stagingObjects.delete(objectKey);
+    this.stagingBytes.delete(objectKey);
   }
 
   async deleteObject(objectKey: string, _signal?: AbortSignal) {
     if (this.deleteFails) throw storageUnavailable();
     this.deleted.push(objectKey);
     this.objects.delete(objectKey);
+    this.finalBytes.delete(objectKey);
   }
 
   async *listStagingObjects(): AsyncIterable<ListedAvatarObject> {}
@@ -182,12 +219,15 @@ describe('Avatar upload HTTP flow', () => {
     accountStatus = 'active';
     storage.objects.clear();
     storage.stagingObjects.clear();
+    storage.stagingBytes.clear();
+    storage.finalBytes.clear();
     storage.signed.length = 0;
     storage.deleted.length = 0;
     storage.stagingDeleted.length = 0;
     storage.unavailable = false;
     storage.deleteFails = false;
     repository.avatars.clear();
+    repository.audits.length = 0;
     repository.grants.clear();
     repository.beforeNextChange = undefined;
   });
@@ -213,7 +253,9 @@ describe('Avatar upload HTTP flow', () => {
   }
 
   async function uploadedAsset(
-    overrides: Partial<StoredAvatarObject> = {},
+    overrides: Partial<StoredAvatarObject> & {
+      readonly bytes?: Uint8Array;
+    } = {},
   ): Promise<{ assetId: string; objectKey: string }> {
     const response = await requestUpload();
     const assetId = Value.Parse(
@@ -221,11 +263,21 @@ describe('Avatar upload HTTP flow', () => {
       response.json<unknown>(),
     ).data.asset_id;
     const objectKey = `users/${USER_ID}/avatar/${assetId}/original`;
+    const { bytes: bytesOverride, ...stored } = overrides;
+    const contentType = stored.contentType;
+    const bytes =
+      bytesOverride ??
+      (contentType === undefined || contentType === 'image/png'
+        ? await imageBytes('image/png')
+        : isAvatarContentType(contentType)
+          ? await imageBytes(contentType)
+          : undefined);
+    if (bytes !== undefined) storage.stagingBytes.set(objectKey, bytes);
     storage.stagingObjects.set(objectKey, {
       contentType: 'image/png',
-      byteSize: 1234,
+      byteSize: bytes?.byteLength ?? 1234,
       lastModified: new Date(),
-      ...overrides,
+      ...stored,
     });
     return { assetId, objectKey };
   }
@@ -350,12 +402,14 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(assetId);
 
       expect(response.statusCode).toBe(201);
+      const publishedBytes = storage.finalBytes.get(objectKey);
+      expect(publishedBytes).toBeDefined();
       const body = Value.Parse(AvatarResponseSchema, response.json<unknown>());
       expect(body).toEqual({
         data: {
           asset_id: assetId,
           content_type: 'image/png',
-          byte_size: 1234,
+          byte_size: publishedBytes?.byteLength,
           accepted_at: body.data.accepted_at,
           url: `${PUBLIC_ORIGIN}${objectKey}`,
         },
@@ -366,8 +420,27 @@ describe('Avatar upload HTTP flow', () => {
         userId: USER_ID,
         objectKey,
         contentType: 'image/png',
-        byteSize: 1234,
+        byteSize: publishedBytes?.byteLength,
       });
+    });
+
+    it('records one audit event naming the account, action, asset, and request', async () => {
+      const { assetId } = await uploadedAsset();
+
+      const response = await complete(assetId);
+
+      expect(response.statusCode).toBe(201);
+      expect(repository.audits).toHaveLength(1);
+      expect(repository.audits[0]).toMatchObject({
+        action: 'avatar.set',
+        assetId,
+        requestId: REQUEST_ID,
+        userId: USER_ID,
+      });
+      expect(repository.audits[0]?.occurredAt).toBeInstanceOf(Date);
+      const serialized = JSON.stringify(repository.audits);
+      expect(serialized).not.toContain('users/');
+      expect(serialized).not.toContain('aihub-user-assets');
     });
 
     it('exposes nothing about storage beyond the public URL', async () => {
@@ -391,6 +464,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(second.statusCode).toBe(200);
       expect(second.json()).toEqual(first.json());
+      expect(repository.audits).toHaveLength(1);
     });
 
     it('answers not found while the upload has not landed, and records nothing', async () => {
@@ -484,19 +558,14 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('the completion window', () => {
-    it('propagates the ingress deadline to storage and leaves an unfinished upload retryable', async () => {
+    it('does not start storage work when the ingress deadline has expired', async () => {
       const { assetId } = await uploadedAsset();
       const timeout = jest
         .spyOn(AbortSignal, 'timeout')
         .mockReturnValue(
           AbortSignal.abort(new DOMException('expired', 'TimeoutError')),
         );
-      const describe = jest
-        .spyOn(storage, 'describeStagingObject')
-        .mockImplementation(async (_key, signal) => {
-          if (signal?.aborted) throw storageUnavailable();
-          throw new Error('caller deadline did not reach storage');
-        });
+      const describe = jest.spyOn(storage, 'describeStagingObject');
       try {
         const response = await complete(assetId);
         expect(response.statusCode).toBe(503);
@@ -507,6 +576,7 @@ describe('Avatar upload HTTP flow', () => {
           },
         });
         expect(repository.avatars.size).toBe(0);
+        expect(describe).not.toHaveBeenCalled();
       } finally {
         timeout.mockRestore();
         describe.mockRestore();
@@ -620,17 +690,27 @@ describe('Avatar upload HTTP flow', () => {
       const response = await complete(next.assetId);
 
       expect(response.statusCode).toBe(201);
+      const publishedBytes = storage.finalBytes.get(next.objectKey);
       expect(
         Value.Parse(AvatarResponseSchema, response.json<unknown>()).data,
       ).toMatchObject({
         asset_id: next.assetId,
         content_type: 'image/webp',
-        byte_size: 99,
+        byte_size: publishedBytes?.byteLength,
       });
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
       expect(storage.deleted).toEqual([previous.objectKey]);
       expect(storage.objects.has(previous.objectKey)).toBe(false);
       expect(storage.objects.has(next.objectKey)).toBe(true);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+        'avatar.replaced',
+      ]);
+      expect(repository.audits.at(-1)).toMatchObject({
+        assetId: next.assetId,
+        requestId: REQUEST_ID,
+        userId: USER_ID,
+      });
     });
 
     it('keeps the previous Avatar when the replacement is refused', async () => {
@@ -646,27 +726,22 @@ describe('Avatar upload HTTP flow', () => {
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
       expect(storage.stagingDeleted).toEqual([next.objectKey]);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+      ]);
     });
 
-    it('changes nothing when the previous object cannot be deleted, and a retry finishes', async () => {
+    it('commits replacement when previous-object cleanup fails', async () => {
       const previous = await currentAvatar();
       const next = await uploadedAsset();
       storage.deleteFails = true;
 
-      const failed = await complete(next.assetId);
+      const response = await complete(next.assetId);
 
-      expect(failed.statusCode).toBe(503);
-      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(previous.assetId);
+      expect(response.statusCode).toBe(201);
+      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
       expect(storage.objects.has(previous.objectKey)).toBe(true);
       expect(storage.objects.has(next.objectKey)).toBe(true);
-
-      storage.deleteFails = false;
-      const retried = await complete(next.assetId);
-
-      expect(retried.statusCode).toBe(201);
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(next.assetId);
-      expect(storage.objects.has(previous.objectKey)).toBe(false);
     });
 
     it('answers not found for an asset that was already replaced', async () => {
@@ -690,6 +765,8 @@ describe('Avatar upload HTTP flow', () => {
           storage.objects.set(winner.objectKey, winnerObject);
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
+          storage.objects.delete(current.objectKey);
+          storage.finalBytes.delete(current.objectKey);
           repository.avatars.set(USER_ID, {
             ...current,
             assetId: winner.assetId,
@@ -713,6 +790,8 @@ describe('Avatar upload HTTP flow', () => {
       repository.beforeNextChange = () => {
         const current = repository.avatars.get(USER_ID);
         if (current !== undefined) {
+          storage.objects.delete(current.objectKey);
+          storage.finalBytes.delete(current.objectKey);
           repository.avatars.set(USER_ID, {
             ...current,
             assetId: next.assetId,
@@ -756,8 +835,8 @@ describe('Avatar upload HTTP flow', () => {
   });
 
   describe('removing an Avatar', () => {
-    it('keeps the Avatar record when the request deadline interrupts object deletion', async () => {
-      const { assetId } = await uploadedAsset();
+    it('removes the record when the request deadline interrupts object cleanup', async () => {
+      const { assetId, objectKey } = await uploadedAsset();
       await complete(assetId);
       const timeout = jest
         .spyOn(AbortSignal, 'timeout')
@@ -776,8 +855,9 @@ describe('Avatar upload HTTP flow', () => {
           url: '/v1/me/avatar',
           headers: { authorization: 'Bearer valid.token.value' },
         });
-        expect(response.statusCode).toBe(503);
-        expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+        expect(response.statusCode).toBe(204);
+        expect(repository.avatars.has(USER_ID)).toBe(false);
+        expect(storage.objects.has(objectKey)).toBe(true);
       } finally {
         timeout.mockRestore();
         remove.mockRestore();
@@ -802,6 +882,16 @@ describe('Avatar upload HTTP flow', () => {
       expect(response.body).toBe('');
       expect(repository.avatars.size).toBe(0);
       expect(storage.objects.has(objectKey)).toBe(false);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+        'avatar.removed',
+      ]);
+      expect(repository.audits.at(-1)).toMatchObject({
+        assetId,
+        requestId: REQUEST_ID,
+        userId: USER_ID,
+      });
+      expect(repository.audits.at(-1)?.occurredAt).toBeInstanceOf(Date);
     });
 
     it('succeeds for an account without an Avatar', async () => {
@@ -809,6 +899,7 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(204);
       expect(storage.deleted).toEqual([]);
+      expect(repository.audits).toEqual([]);
     });
 
     it('is idempotent', async () => {
@@ -818,23 +909,22 @@ describe('Avatar upload HTTP flow', () => {
       expect((await remove()).statusCode).toBe(204);
       expect((await remove()).statusCode).toBe(204);
       expect(repository.avatars.size).toBe(0);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+        'avatar.removed',
+      ]);
     });
 
-    it('keeps the Avatar when the object cannot be deleted, and a retry finishes', async () => {
+    it('removes the record when object cleanup fails', async () => {
       const { assetId, objectKey } = await uploadedAsset();
       await complete(assetId);
       storage.deleteFails = true;
 
-      const failed = await remove();
+      const response = await remove();
 
-      expect(failed.statusCode).toBe(503);
-      expectErrorCode(failed, 'AVATAR_STORAGE_UNAVAILABLE');
-      expect(repository.avatars.get(USER_ID)?.assetId).toBe(assetId);
+      expect(response.statusCode).toBe(204);
+      expect(repository.avatars.has(USER_ID)).toBe(false);
       expect(storage.objects.has(objectKey)).toBe(true);
-
-      storage.deleteFails = false;
-      expect((await remove()).statusCode).toBe(204);
-      expect(repository.avatars.size).toBe(0);
     });
 
     it('answers AVATAR_CHANGED and keeps an Avatar swapped in meanwhile', async () => {
@@ -861,6 +951,9 @@ describe('Avatar upload HTTP flow', () => {
       expectErrorCode(response, 'AVATAR_CHANGED');
       expect(repository.avatars.get(USER_ID)?.assetId).toBe(winner.assetId);
       expect(storage.objects.has(winner.objectKey)).toBe(true);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+      ]);
     });
 
     it('treats a concurrent removal as done', async () => {
@@ -874,6 +967,9 @@ describe('Avatar upload HTTP flow', () => {
 
       expect(response.statusCode).toBe(204);
       expect(repository.avatars.size).toBe(0);
+      expect(repository.audits.map(({ action }) => action)).toEqual([
+        'avatar.set',
+      ]);
     });
 
     it('only ever removes the caller own Avatar', async () => {
@@ -926,10 +1022,11 @@ describe('Avatar upload HTTP flow', () => {
       );
       const avatar = body.data.avatar;
       if (avatar === null) throw new Error('expected an Avatar');
+      const publishedBytes = storage.finalBytes.get(objectKey);
       expect(body.data.avatar).toEqual({
         asset_id: assetId,
         content_type: 'image/png',
-        byte_size: 1234,
+        byte_size: publishedBytes?.byteLength,
         accepted_at: avatar.accepted_at,
         url: `${PUBLIC_ORIGIN}${objectKey}`,
       });

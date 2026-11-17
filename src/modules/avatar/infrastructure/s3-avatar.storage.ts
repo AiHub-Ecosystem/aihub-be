@@ -1,6 +1,6 @@
 import {
-  CopyObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
@@ -15,10 +15,12 @@ import type {
   AvatarStoragePort,
   AvatarUploadUrl,
   ListedAvatarObject,
+  StagedAvatarObject,
   StoredAvatarObject,
 } from '@/modules/avatar/application/avatar-storage.port';
 import {
   AVATAR_CACHE_CONTROL,
+  AVATAR_MAX_BYTES,
   AVATAR_UPLOAD_URL_TTL_SECONDS,
   type AvatarContentType,
 } from '@/modules/avatar/domain/avatar';
@@ -157,27 +159,66 @@ export class S3AvatarStorage implements AvatarStoragePort {
     return `${origin}/${path}`;
   }
 
-  async copyStagingToFinal(input: {
+  async readStagingObject(
+    objectKey: string,
+    etag: string | undefined,
+    signal = objectStorageSignal(),
+  ): Promise<StagedAvatarObject | undefined> {
+    const { client, stagingBucket } = this.requireStaging(objectKey);
+    try {
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: stagingBucket,
+          Key: objectKey,
+          ...(etag === undefined ? {} : { IfMatch: etag }),
+        }),
+        { abortSignal: signal },
+      );
+      if (response.Body === undefined) {
+        throw objectStorageUnavailable(
+          'AVATAR_STORAGE_UNAVAILABLE',
+          'Avatar storage is unavailable',
+        );
+      }
+      const bytes = await response.Body.transformToByteArray();
+      // A response larger than the ceiling cannot be an Avatar; refusing it
+      // keeps a lying HeadObject from turning into an unbounded read.
+      if (bytes.byteLength < 1 || bytes.byteLength > AVATAR_MAX_BYTES) {
+        throw objectStorageUnavailable(
+          'AVATAR_STORAGE_UNAVAILABLE',
+          'Avatar storage is unavailable',
+        );
+      }
+      return { contentType: response.ContentType, bytes };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      if (objectStorageNotFound(error)) return undefined;
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+        error,
+        signal,
+      );
+    }
+  }
+
+  async putFinalObject(input: {
     readonly objectKey: string;
     readonly contentType: AvatarContentType;
+    readonly bytes: Uint8Array;
     readonly signal?: AbortSignal;
-    readonly stagingEtag?: string | undefined;
   }): Promise<void> {
-    const { client, bucket, stagingBucket } = this.requireStaging(
-      input.objectKey,
-    );
+    const { client, bucket } = this.require(input.objectKey);
     try {
       await client.send(
-        new CopyObjectCommand({
+        new PutObjectCommand({
           Bucket: bucket,
           Key: input.objectKey,
-          CopySource: `${stagingBucket}/${input.objectKey}`,
-          MetadataDirective: 'REPLACE',
+          Body: input.bytes,
+          ContentLength: input.bytes.byteLength,
           ContentType: input.contentType,
+          ContentDisposition: 'inline',
           CacheControl: AVATAR_CACHE_CONTROL,
-          ...(input.stagingEtag !== undefined
-            ? { CopySourceIfMatch: input.stagingEtag }
-            : {}),
         }),
         { abortSignal: input.signal ?? objectStorageSignal() },
       );

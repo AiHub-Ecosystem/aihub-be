@@ -1,6 +1,6 @@
 # ADR-0068: An Avatar is a User Account-owned asset
 
-- Status: Accepted
+- Status: Accepted; decision 6 amended by [ADR-0171](0171-avatar-replacement-and-removal-commit-before-cleanup.md)
 - Date: 2026-10-02
 - Related issues: [#214](https://github.com/AiHub-Ecosystem/aihub-be/issues/214), [#215](https://github.com/AiHub-Ecosystem/aihub-be/issues/215)
 - Related: [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md), [ADR-0066](0066-cross-module-imports-are-checked-not-yet-forbidden.md), [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md)

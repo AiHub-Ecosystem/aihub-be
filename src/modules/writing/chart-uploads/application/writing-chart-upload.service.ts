@@ -6,6 +6,10 @@ import {
   uploadNotFound,
 } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
+import {
+  RasterImageProcessingAbortedError,
+  RasterImageProcessingCapacityError,
+} from '@/common/image/raster-image';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
   type WritingChartUploadIntent,
@@ -20,6 +24,7 @@ import {
   WRITING_CHART_INTENT_TTL_MS,
   WRITING_CHART_MAX_BYTES,
   WRITING_CHART_RATE_WINDOW_MS,
+  reserveWritingChartRasterImageProcessing,
 } from './writing-chart-upload.policy';
 import type {
   WritingChartUploadOwner,
@@ -34,6 +39,15 @@ function rateLimited(): AppError {
     message: 'Writing chart upload limit reached; retry later',
     retryable: true,
     retryAfterMs: WRITING_CHART_RATE_WINDOW_MS,
+  });
+}
+
+function rasterCapacityReached(): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Writing chart image processing is busy; retry shortly',
+    retryable: true,
+    retryAfterMs: 1_000,
   });
 }
 
@@ -228,29 +242,61 @@ export class WritingChartUploadService
         throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
       }
 
-      const stored = await this.storage.inspectObject(
-        {
-          environment: found.intent.environment,
-          stagingKey: found.intent.stagingKey,
-          byteSize: found.intent.byteSize,
-        },
-        input.context.signal,
-      );
-      if (stored === undefined)
-        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
-      const refusal = invalidStoredObject(stored, found.intent);
-      const sanitized =
-        refusal === undefined
-          ? await serializeWritingChartImageProcessing(() =>
-              sanitizeWritingChartImage({
-                contentType: found.intent.contentType,
-                bytes: stored.bytes,
-              }),
-            )
-          : undefined;
+      let admission: ReturnType<
+        typeof reserveWritingChartRasterImageProcessing
+      >;
+      try {
+        admission = reserveWritingChartRasterImageProcessing();
+      } catch (error) {
+        if (error instanceof RasterImageProcessingCapacityError)
+          throw rasterCapacityReached();
+        throw error;
+      }
+      let refusal: AppError | undefined;
+      let sanitized:
+        | Awaited<ReturnType<typeof sanitizeWritingChartImage>>
+        | undefined;
+      try {
+        const stored = await this.storage.inspectObject(
+          {
+            environment: found.intent.environment,
+            stagingKey: found.intent.stagingKey,
+            byteSize: found.intent.byteSize,
+          },
+          input.context.signal,
+        );
+        if (stored === undefined)
+          throw uploadNotFound(
+            'NOT_FOUND',
+            'Writing chart upload was not found',
+          );
+        refusal = invalidStoredObject(stored, found.intent);
+        sanitized =
+          refusal === undefined
+            ? await serializeWritingChartImageProcessing(
+                admission,
+                input.context.signal,
+                () =>
+                  sanitizeWritingChartImage({
+                    contentType: found.intent.contentType,
+                    bytes: stored.bytes,
+                  }),
+              )
+            : undefined;
+      } catch (error) {
+        admission.release();
+        if (error instanceof RasterImageProcessingAbortedError) {
+          throw storageUnavailable(
+            'WRITING_CHART_STORAGE_UNAVAILABLE',
+            'Writing chart storage is unavailable',
+          );
+        }
+        throw error;
+      }
       const sanitizedBytes =
         sanitized?.kind === 'sanitized' ? sanitized.bytes : undefined;
       if (refusal !== undefined || sanitizedBytes === undefined) {
+        admission.release();
         await this.repository.rejectIntent(owner, this.now());
         try {
           await this.storage.deleteStagingObject(
@@ -274,95 +320,108 @@ export class WritingChartUploadService
         );
       }
 
-      const imageUrl = this.storage.publicUrl({
-        environment: found.intent.environment,
-        publishedKey: found.intent.publishedKey,
-      });
-      const publicationStartedAt = this.now();
-      const reservation = await this.repository.beginPublication({
-        owner,
-        now: publicationStartedAt,
-      });
-      if (reservation === 'published') {
-        const current = await this.repository.findUpload(owner);
-        if (current.kind === 'asset') return current.asset;
-        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
-      }
-      if (reservation === 'limited') throw rateLimited();
-      if (reservation === 'in_progress')
-        throw storageUnavailable(
-          'WRITING_CHART_STORAGE_UNAVAILABLE',
-          'Writing chart publication is already in progress',
-        );
-      if (reservation !== 'started')
-        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
-
       try {
-        await this.storage.publishObject(
-          {
-            environment: found.intent.environment,
-            stagingKey: found.intent.stagingKey,
-            publishedKey: found.intent.publishedKey,
-            contentType: found.intent.contentType,
-            bytes: sanitizedBytes,
-          },
-          input.context.signal,
-        );
-      } catch (error) {
-        await this.repository.releasePublication(owner, publicationStartedAt);
-        throw error;
-      }
-
-      // A failed mark leaves the object written but the row reserved. Releasing
-      // returns the row to open so a retry can finish it and the Organization's
-      // publication slot is freed; a revocation still fences that retry (#915).
-      let asset: Awaited<
-        ReturnType<WritingChartUploadRepositoryPort['markPublished']>
-      >;
-      try {
-        asset = await this.repository.markPublished({
-          owner,
-          now: this.now(),
-          publicationStartedAt,
-          imageUrl,
+        const imageUrl = this.storage.publicUrl({
+          environment: found.intent.environment,
+          publishedKey: found.intent.publishedKey,
         });
-      } catch (error) {
-        await this.releaseAfterFailedMark(owner, publicationStartedAt);
-        throw error;
-      }
-      if (asset === undefined)
-        await this.releaseAfterFailedMark(owner, publicationStartedAt);
-      if (asset === 'revoked') {
-        // An operator revoked the asset while this write was in flight. Without
-        // the request signal: the removal must run even past the deadline. A
-        // failed removal is left for the operator's revoke re-run.
-        try {
-          await this.storage.deletePublishedObject({
-            environment: found.intent.environment,
-            publishedKey: found.intent.publishedKey,
-          });
-        } catch {
-          // The revoke command reports the edge still serving until re-run.
+        const publicationStartedAt = this.now();
+        const reservation = await this.repository.beginPublication({
+          owner,
+          now: publicationStartedAt,
+        });
+        if (reservation === 'published') {
+          const current = await this.repository.findUpload(owner);
+          if (current.kind === 'asset') return current.asset;
+          throw uploadNotFound(
+            'NOT_FOUND',
+            'Writing chart upload was not found',
+          );
         }
-        throw uploadNotFound('NOT_FOUND', 'Writing chart upload was not found');
+        if (reservation === 'limited') throw rateLimited();
+        if (reservation === 'in_progress')
+          throw storageUnavailable(
+            'WRITING_CHART_STORAGE_UNAVAILABLE',
+            'Writing chart publication is already in progress',
+          );
+        if (reservation !== 'started')
+          throw uploadNotFound(
+            'NOT_FOUND',
+            'Writing chart upload was not found',
+          );
+
+        try {
+          await this.storage.publishObject(
+            {
+              environment: found.intent.environment,
+              stagingKey: found.intent.stagingKey,
+              publishedKey: found.intent.publishedKey,
+              contentType: found.intent.contentType,
+              bytes: sanitizedBytes,
+            },
+            input.context.signal,
+          );
+        } catch (error) {
+          await this.repository.releasePublication(owner, publicationStartedAt);
+          throw error;
+        }
+
+        // A failed mark leaves the object written but the row reserved. Releasing
+        // returns the row to open so a retry can finish it and the Organization's
+        // publication slot is freed; a revocation still fences that retry (#915).
+        let asset: Awaited<
+          ReturnType<WritingChartUploadRepositoryPort['markPublished']>
+        >;
+        try {
+          asset = await this.repository.markPublished({
+            owner,
+            now: this.now(),
+            publicationStartedAt,
+            imageUrl,
+          });
+        } catch (error) {
+          await this.releaseAfterFailedMark(owner, publicationStartedAt);
+          throw error;
+        }
+        if (asset === undefined)
+          await this.releaseAfterFailedMark(owner, publicationStartedAt);
+        if (asset === 'revoked') {
+          // An operator revoked the asset while this write was in flight. Without
+          // the request signal: the removal must run even past the deadline. A
+          // failed removal is left for the operator's revoke re-run.
+          try {
+            await this.storage.deletePublishedObject({
+              environment: found.intent.environment,
+              publishedKey: found.intent.publishedKey,
+            });
+          } catch {
+            // The revoke command reports the edge still serving until re-run.
+          }
+          throw uploadNotFound(
+            'NOT_FOUND',
+            'Writing chart upload was not found',
+          );
+        }
+        if (asset === undefined)
+          throw storageUnavailable(
+            'WRITING_CHART_STORAGE_UNAVAILABLE',
+            'Writing chart storage is unavailable',
+          );
+        try {
+          await this.storage.deleteStagingObject(
+            {
+              environment: found.intent.environment,
+              stagingKey: found.intent.stagingKey,
+            },
+            input.context.signal,
+          );
+        } catch {
+          // The retention sweep retries staging deletion while the public asset lives.
+        }
+        return asset;
+      } finally {
+        admission.release();
       }
-      if (asset === undefined)
-        throw storageUnavailable(
-          'WRITING_CHART_STORAGE_UNAVAILABLE',
-          'Writing chart storage is unavailable',
-        );
-      try {
-        await this.storage.deleteStagingObject(
-          {
-            environment: found.intent.environment,
-            stagingKey: found.intent.stagingKey,
-          },
-          input.context.signal,
-        );
-      } catch {
-        // The retention sweep retries staging deletion while the public asset lives.
-      }
-      return asset;
     });
   }
 

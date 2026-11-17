@@ -797,6 +797,7 @@ model UserAccount {
   refreshTokens     RefreshToken[]
   avatar            UserAvatar?
   avatarUploadGrants UserAvatarUploadGrant[]
+  avatarAudits      UserAvatarAudit[]
   mfaFactor         UserMfaFactor?
   mfaRecoveryCodes  UserMfaRecoveryCode[]
   webSessions       WebSession[]
@@ -843,6 +844,26 @@ model UserAvatarUploadGrant {
   @@index([userAccountId, createdAt], map: "user_avatar_upload_grants_issuance_idx")
   @@index([expiresAt], map: "user_avatar_upload_grants_expiry_idx")
   @@map("user_avatar_upload_grants")
+}
+
+/// One accepted Avatar change, written in the same transaction as the change.
+///
+/// The account is both target and actor: every Avatar route acts on the
+/// caller's own Avatar. No image content and no URL is stored. `CHECK`
+/// constraints and the append-only trigger are owned by migration 0067.
+/// @owner avatar
+model UserAvatarAudit {
+  id            String      @id
+  userAccountId String      @map("user_account_id")
+  actorSource   String      @map("actor_source")
+  action        String
+  assetId       String      @map("asset_id")
+  requestId     String      @map("request_id")
+  occurredAt    DateTime    @map("occurred_at") @db.Timestamptz(6)
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([userAccountId, occurredAt, id], map: "user_avatar_audits_account_idx")
+  @@map("user_avatar_audits")
 }
 
 /// A TOTP second factor.

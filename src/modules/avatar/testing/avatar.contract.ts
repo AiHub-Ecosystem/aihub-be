@@ -1,4 +1,7 @@
-import type { AvatarRepositoryPort } from '@/modules/avatar/application/avatar-repository.port';
+import type {
+  AvatarAuditEvent,
+  AvatarRepositoryPort,
+} from '@/modules/avatar/application/avatar-repository.port';
 import { type Avatar, avatarObjectKey } from '@/modules/avatar/domain/avatar';
 import { ulid } from 'ulid';
 
@@ -25,46 +28,64 @@ export function avatarRepositoryContract(
     acceptedAt: new Date('2026-09-23T00:00:00.000Z'),
   });
 
+  const audit = (
+    action: AvatarAuditEvent['action'],
+    assetId: string,
+  ): AvatarAuditEvent => ({
+    action,
+    assetId,
+    requestId: 'req_01J00000000000000000000000',
+    occurredAt: new Date('2026-09-23T00:00:01.000Z'),
+  });
+
   it('records first avatar', async () => {
-    const r = await repo.record(avatar(A1));
+    const r = await repo.record(avatar(A1), audit('avatar.set', A1));
     expect(r).toEqual({ kind: 'recorded', avatar: avatar(A1) });
   });
 
   it('already_recorded on same asset', async () => {
-    await repo.record(avatar(A1));
-    const r = await repo.record(avatar(A1));
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const r = await repo.record(avatar(A1), audit('avatar.set', A1));
     expect(r.kind).toBe('already_recorded');
   });
 
   it('exists on different asset', async () => {
-    await repo.record(avatar(A1));
-    const r = await repo.record(avatar(A2));
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const r = await repo.record(avatar(A2), audit('avatar.set', A2));
     expect(r).toEqual({ kind: 'exists' });
   });
 
   it('replace succeeds with matching previous asset', async () => {
-    await repo.record(avatar(A1));
-    const ok = await repo.replace(A1, avatar(A2));
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const ok = await repo.replace(A1, avatar(A2), audit('avatar.replaced', A2));
     expect(ok).toBe(true);
     expect((await repo.findByUser(userId))?.assetId).toBe(A2);
   });
 
   it('replace fails on mismatched previous asset', async () => {
-    await repo.record(avatar(A1));
-    const ok = await repo.replace('nope', avatar(A2));
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const ok = await repo.replace(
+      'nope',
+      avatar(A2),
+      audit('avatar.replaced', A2),
+    );
     expect(ok).toBe(false);
   });
 
   it('remove succeeds with matching asset', async () => {
-    await repo.record(avatar(A1));
-    const ok = await repo.remove(userId, A1);
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const ok = await repo.remove(userId, A1, audit('avatar.removed', A1));
     expect(ok).toBe(true);
     expect(await repo.findByUser(userId)).toBeUndefined();
   });
 
   it('remove fails on mismatched asset', async () => {
-    await repo.record(avatar(A1));
-    const ok = await repo.remove(userId, 'nope');
+    await repo.record(avatar(A1), audit('avatar.set', A1));
+    const ok = await repo.remove(
+      userId,
+      'nope',
+      audit('avatar.removed', 'nope'),
+    );
     expect(ok).toBe(false);
   });
 }
