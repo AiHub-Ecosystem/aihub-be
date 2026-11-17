@@ -391,6 +391,29 @@ describe('GuardedOperationDispatcher', () => {
     expect(transport.calls).toHaveLength(0);
   });
 
+  it('answers a retryable 503 when the attempt record cannot be written because Postgres is down', async () => {
+    const { dispatcher, beginAttempt, transport } = fixture();
+    beginAttempt.mockRejectedValueOnce(
+      Object.assign(new Error('Connection terminated unexpectedly'), {
+        name: 'PrismaClientInitializationError',
+        code: 'P1001',
+      }),
+    );
+
+    const error = await rejection(
+      dispatcher.dispatch('writing.task1.grade', input, context()),
+    );
+
+    expect(error).toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+    expect(error.retryAfterMs).toBeGreaterThanOrEqual(1_000);
+    expect(error.retryAfterMs).toBeLessThan(2_000);
+    expect(transport.calls).toHaveLength(0);
+  });
+
   it('prepares the transport before admitting, so a bad operation never reserves', async () => {
     const { dispatcher, transport, reserve } = fixture();
     transport.prepare = async () => {

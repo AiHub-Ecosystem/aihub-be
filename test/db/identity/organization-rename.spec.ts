@@ -300,6 +300,32 @@ describe('Organization rename against PostgreSQL', () => {
       expect.objectContaining({ outcome: 'denied' }),
     ]);
   });
+
+  it('answers a retryable 503 when a held row lock times out the rename', async () => {
+    const holder = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(
+        'SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE',
+        [organizationId],
+      );
+
+      // A lock timeout is a database outage answer, not an internal error (#373).
+      await expect(
+        repository.renameOrganization(input()),
+      ).rejects.toMatchObject({
+        code: 'DATABASE_UNAVAILABLE',
+        httpStatus: 503,
+        retryable: true,
+      });
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+
+    expect((await organization())['name']).toBe('Acme');
+    expect(await events()).toEqual([]);
+  });
 });
 
 describe('Audit redaction of a rename', () => {

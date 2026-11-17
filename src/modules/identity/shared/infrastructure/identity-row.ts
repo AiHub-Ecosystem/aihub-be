@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import {
   databaseUnavailableError,
   isPostgresUnavailable,
@@ -33,7 +34,14 @@ export function invalidIdentityData(): AppError {
  * internal error.
  */
 export function identityStoreUnavailable(cause: unknown): AppError {
-  if (isPostgresUnavailable(cause)) return databaseUnavailableError(cause);
+  // A lock or statement timeout is the same outage answer as an unreachable
+  // server (ADR-0118); without this an Organization mutation answers 500 (#373).
+  if (
+    isPostgresUnavailable(cause) ||
+    postgresTimeoutKind(cause) !== undefined
+  ) {
+    return databaseUnavailableError(cause);
+  }
   return new AppError({
     code: 'INTERNAL_ERROR',
     message: 'Identity store is unavailable',

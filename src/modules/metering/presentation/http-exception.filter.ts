@@ -113,7 +113,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       });
       exception = databaseUnavailableError();
     } else if (
-      !(exception instanceof AppError) &&
+      // A seam that pre-wraps a driver failure as INTERNAL_ERROR hides the
+      // outage from the client; its cause still names it (#373).
+      (!(exception instanceof AppError) ||
+        exception.code === 'INTERNAL_ERROR') &&
       isPostgresUnavailable(exception)
     ) {
       this.logger.error({ event: 'postgres_unavailable' });
