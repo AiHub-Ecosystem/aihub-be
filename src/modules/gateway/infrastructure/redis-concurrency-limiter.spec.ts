@@ -346,6 +346,43 @@ describe('RedisConcurrencyLimiter', () => {
     await limiter.onModuleDestroy();
   });
 
+  it('keeps retrying a refused release through the stale window, then stops', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    // A refused connection rejects at once, so each retry takes only its delay.
+    const zrem = jest.fn(() => Promise.reject(new Error('redis down')));
+    redis.zrem = zrem;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      const decision = await limiter.acquire({
+        organizationId: 'org_refused',
+        maxConcurrent: 1,
+        requestId: 'req_refused',
+      });
+      if (!decision.allowed) throw new Error('expected a concurrency lease');
+
+      await expect(decision.lease.release()).rejects.toMatchObject({
+        code: 'REDIS_UNAVAILABLE',
+      });
+      let drained = false;
+      const drain = waitForBackgroundWork().then(() => (drained = true));
+
+      // An attempt count sized for 400 ms timeouts gave up near 95 s.
+      await jest.advanceTimersByTimeAsync(120_000);
+      expect(drained).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(CONCURRENCY_STALE_LEASE_MS - 120_000);
+      await expect(drain).resolves.toBe(true);
+      const attemptsAtStale = zrem.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(zrem).toHaveBeenCalledTimes(attemptsAtStale);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
+  });
+
   // Keep this last: beginShutdown is one-way for the module registry.
   it('keeps retrying release recovery through the 140-second background drain, then stops inside it', async () => {
     jest.useFakeTimers();

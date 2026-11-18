@@ -21,10 +21,7 @@ import type {
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
 } from '@/modules/gateway/application/concurrency-limiter.port';
-import {
-  REDIS_COMMAND_TIMEOUT_MS,
-  type RedisGatewayClient,
-} from './redis-gateway.client';
+import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<
   RedisGatewayClient,
@@ -42,10 +39,6 @@ export const LEASE_REMOVAL_RETRY_MS = 1_000;
 // event-loop delay. Derived, so a longer route timeout widens both together.
 const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS =
   backgroundDrainMs(largestRequestTimeoutMs()) - 15_000;
-const LEASE_REMOVAL_ATTEMPTS = Math.floor(
-  (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /
-    (LEASE_REMOVAL_RETRY_MS + REDIS_COMMAND_TIMEOUT_MS),
-);
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
@@ -194,12 +187,13 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     };
   }
 
-  // A retry-exhausted permit is pruned on the next acquire after its stale window.
+  // Retries run until the stale window, however fast each ZREM fails; a
+  // permit still held then is pruned on the next acquire.
   private removeLater(
     client: RedisConcurrencyClient,
     keys: readonly string[],
     requestId: string,
-    attempt = 1,
+    startedAt = Date.now(),
     settle?: () => void,
     shutdownStartedAt?: number,
   ): void {
@@ -216,7 +210,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         backgroundWorkSettled();
       };
       this.pendingRemovals.add(finish);
-      this.removeLater(client, keys, requestId, attempt, finish);
+      this.removeLater(client, keys, requestId, startedAt, finish);
       return;
     }
     const shutdownStartedAtForRetry = isShuttingDown()
@@ -244,12 +238,16 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
           },
           (error) => {
             this.health.reportDegraded(error);
-            if (attempt < LEASE_REMOVAL_ATTEMPTS && !this.stopping) {
+            if (
+              Date.now() + LEASE_REMOVAL_RETRY_MS - startedAt <
+                CONCURRENCY_STALE_LEASE_MS &&
+              !this.stopping
+            ) {
               this.removeLater(
                 client,
                 keys,
                 requestId,
-                attempt + 1,
+                startedAt,
                 settle,
                 shutdownStartedAtForRetry,
               );
