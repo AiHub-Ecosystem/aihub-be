@@ -87,7 +87,7 @@
     {
       "ruleId": "js/insufficient-password-hash",
       "path": "src/modules/identity/shared/infrastructure/identity-cache-envelope.ts",
-      "fingerprint": "5dc2953f26a84f93:1",
+      "fingerprint": "e6d3c87ed1ecd5e2:1",
       "reason": "The envelope uses HMAC-SHA-256 with the deployment integrity key; its Redis key contains a fingerprint of a 256-bit random API key, not a user password."
     },
     {
