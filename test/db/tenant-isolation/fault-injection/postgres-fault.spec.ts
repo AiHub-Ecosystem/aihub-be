@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  POSTGRES_CONNECT_TIMEOUT_MS,
   QUERY_TIMEOUT_MARGIN_MS,
   REQUEST_POSTGRES_TIMEOUTS,
 } from '@/common/postgres/postgres-pool';
@@ -33,8 +34,6 @@ import {
 } from './fault-targets';
 import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
-// A refused or unreachable server fails at connectionTimeoutMillis (1 s); a
-// server that stops answering an open connection fails at query_timeout.
 const REFUSED_BOUND_MS = 2_000;
 const STALLED_BOUND_MS =
   REQUEST_POSTGRES_TIMEOUTS.statement_timeout + QUERY_TIMEOUT_MARGIN_MS + 1_500;
@@ -238,8 +237,9 @@ it('keeps serving through a slightly slow Postgres', async () => {
 }, 30_000);
 
 it('refuses as a retryable outage inside the bound when Postgres is slower than the connect timeout', async () => {
-  // A round trip longer than the 1 s connect timeout never gets a connection.
-  const { lookup, write } = await callsOverSlowLink(1_500);
+  const { lookup, write } = await callsOverSlowLink(
+    POSTGRES_CONNECT_TIMEOUT_MS,
+  );
 
   expect(await answerFor(rejection(lookup.result))).toEqual(
     DATABASE_UNAVAILABLE_ANSWER,
@@ -247,5 +247,7 @@ it('refuses as a retryable outage inside the bound when Postgres is slower than 
   expect(await answerFor(rejection(write.result))).toEqual(
     DATABASE_UNAVAILABLE_ANSWER,
   );
-  expect(Math.max(lookup.ms, write.ms)).toBeLessThan(REFUSED_BOUND_MS + 1_000);
+  expect(Math.max(lookup.ms, write.ms)).toBeLessThan(
+    POSTGRES_CONNECT_TIMEOUT_MS + 1_000,
+  );
 }, 30_000);
