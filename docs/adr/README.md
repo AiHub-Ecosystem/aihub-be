@@ -32,3 +32,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0013](0013-vault-runtime-secret-management.md)           | Vault-backed runtime secret management                           | Accepted; amended by ADR-0171               |
 | [0171](0171-vault-runtime-login-requires-a-secret-id.md)  | Vault runtime login requires a Secret ID as well as the role ID  | Accepted; supersedes ADR-0170               |
 | [0172](0172-writing-priority-errors-in-v2-grading.md)     | Publish provider-ranked Writing priority errors in `/v2`         | Accepted; amends ADR-0143                   |
+| [0173](0173-gateway-prioritized-load-shedding.md)         | The gateway sheds load by request tier and keeps the tier local  | Accepted                                    |

@@ -264,6 +264,24 @@ Check `redis_memory_used_bytes`, command latency, and the observed 256 MiB limit
 
 `aihub_downstream_credential_failures_total` counts AI Service answers of 401 or 403, labeled by `operation` and `downstream` (#845). `AIHUBDownstreamCredentialRejected` fires when one operation in one tier sees at least three in five minutes, sustained for two minutes; a single stray rejection does not fire it. First check the `downstream_credential_rejected` log lines for the alert's `operation`: each carries the request ID, the status, and the private path, and never a token. Then compare the time of the first rejection with the last change to the AI Service credential, the internal token issuer, or the AI Service itself. Customers receive a retryable `503 AI_SERVICE_UNAVAILABLE` meanwhile, and these answers also count toward the circuit breaker, so `AIHUBDownstreamCircuitBreakerOpen` usually follows. Fix the credential; do not restart an instance just to clear the alert. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy.
 
+### Prioritized load shedding
+
+`aihub_shed_level` is the level the gateway applies: `0` sheds nothing, `1`
+refuses `best-effort` grading, `2` refuses `standard` as well; `critical` routes
+are never refused. `aihub_shed_requests_total` and `aihub_tier_requests_total`
+are labeled by `tier`, and `aihub:shed_ratio:rate5m` is their ratio per tier and
+per `instance`, so one saturated process is not averaged against an idle peer.
+`AIHUBSheddingSustained` fires when one process refuses more than 20% of one
+tier's arrivals — `best-effort` or `standard` — for ten minutes, and carries
+that `tier` and its `instance`. Read the level, then `aihub:shed_ratio:rate5m`, then the
+downstream concurrency gauges (`aihub_downstream_concurrency_limit`) and the AI
+Services' own health. Shedding is the correct answer to real saturation; the
+alert exists because ten minutes of it means capacity has to change. The level
+is shared through Redis and refreshed every second, so an instance that cannot
+read Redis keeps its last known peer level for the key's lifetime and an
+outage alone never sheds;
+`aihub_redis_unavailable_total{seam="shedding_level"}` counts those reads.
+
 ### Target health
 
 Inspect `/api/v1/targets` through the loopback Prometheus tunnel and check the affected exporter and SSH forward. A target-down alert can indicate either source unavailability or the monitoring path.

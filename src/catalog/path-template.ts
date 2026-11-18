@@ -1,4 +1,5 @@
-export function matchesPathTemplate(template: string, path: string): boolean {
+/** A template's anchored pattern, for a caller that tests many paths. */
+export function compilePathTemplate(template: string): RegExp {
   const pattern = template
     .split('/')
     .map((segment) =>
@@ -7,5 +8,9 @@ export function matchesPathTemplate(template: string, path: string): boolean {
         : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
     )
     .join('/');
-  return new RegExp(`^${pattern}$`).test(path);
+  return new RegExp(`^${pattern}$`);
+}
+
+export function matchesPathTemplate(template: string, path: string): boolean {
+  return compilePathTemplate(template).test(path);
 }
