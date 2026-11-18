@@ -6,7 +6,11 @@ import {
   FormData as UndiciFormData,
 } from 'undici/index.js';
 
-import { AppError, internalError } from '@/common/errors/app-error';
+import {
+  AppError,
+  internalError,
+  timeoutError,
+} from '@/common/errors/app-error';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -100,12 +104,7 @@ function transportError(error: unknown, signalAborted = false): AppError {
     code === 'UND_ERR_BODY_TIMEOUT' ||
     code === 'UND_ERR_CONNECT_TIMEOUT';
   const mapped = timeout
-    ? new AppError({
-        code: 'AI_SERVICE_TIMEOUT',
-        message: 'AI service request timed out',
-        retryable: true,
-        cause: error,
-      })
+    ? timeoutError(error)
     : new AppError({
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
