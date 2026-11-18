@@ -33,6 +33,10 @@ import {
 import { emailProviderRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/email-provider-retry-after.policy';
 import { emailDailySendBudgetCategory } from '@/modules/auth/email-delivery/application/send-policy/email-send-daily-budget.policy';
 import { claimEmailDeliveryBatch } from './email-delivery-poller-claim';
+import {
+  EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+  EmailProviderPause,
+} from './email-provider-pause';
 
 /**
  * How long a request this instance could not open waits before any instance
@@ -41,9 +45,6 @@ import { claimEmailDeliveryBatch } from './email-delivery-poller-claim';
  * key picks it up well inside the credential's lifetime.
  */
 export const DEFER_RETRY_MS = 5 * 60_000;
-
-/** Retry a reservation outage on the next poll pass without spending an attempt. */
-export const EMAIL_SEND_RATE_LIMIT_RETRY_MS = 5_000;
 
 export interface EmailDispatchSummary {
   readonly claimed: number;
@@ -126,7 +127,7 @@ export class EmailDeliveryPoller {
 
   private readonly batchSize: number;
   private readonly leaseMs: number;
-  private providerPausedUntil = 0;
+  private readonly pause: EmailProviderPause;
   private providerConfigurationAlerted = false;
   private readonly maintenance: EmailDeliveryPollerMaintenance;
 
@@ -144,6 +145,7 @@ export class EmailDeliveryPoller {
     this.batchSize = options.batchSize ?? EmailDeliveryPoller.BATCH_SIZE;
     this.leaseMs =
       options.leaseMs ?? EmailDeliveryPoller.leaseMsFor(this.batchSize);
+    this.pause = new EmailProviderPause(providerOutageCircuit, now);
     this.maintenance = new EmailDeliveryPollerMaintenance(
       store,
       now,
@@ -170,7 +172,7 @@ export class EmailDeliveryPoller {
       },
       this.maintenance.hasPendingAttemptReleases ||
         this.options.shouldStop?.() === true ||
-        claimAt.getTime() < this.providerPausedUntil,
+        claimAt.getTime() < this.pause.until,
     );
 
     const summary = {
@@ -189,7 +191,7 @@ export class EmailDeliveryPoller {
         const now = this.now();
         const retryAfterMs = Math.max(
           EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-          this.providerPausedUntil - now.getTime(),
+          this.pause.until - now.getTime(),
         );
         try {
           await this.maintenance.defer(request, now, retryAfterMs);
@@ -218,7 +220,7 @@ export class EmailDeliveryPoller {
         // instance. The row keeps its lease and its payload, so the next pass
         // picks it up again; swallowing here is what keeps one bad row from
         // stranding the rest of the batch.
-        if (this.now().getTime() < this.providerPausedUntil) pauseBatch = true;
+        if (this.now().getTime() < this.pause.until) pauseBatch = true;
       }
     }
     await this.maintenance.reportUnreportedFailures();
@@ -317,7 +319,7 @@ export class EmailDeliveryPoller {
       await this.maintenance.deferInvitationAtRecipientLimit(
         request,
         message.recipient,
-        now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       )
     )
@@ -329,12 +331,16 @@ export class EmailDeliveryPoller {
     } catch {
       return this.deferForProviderOutage(
         request,
-        now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       );
     }
     if (!sendPermit.allowed) {
-      return this.deferForProviderOutage(request, now, sendPermit.retryAfterMs);
+      return this.deferForProviderOutage(
+        request,
+        this.now(),
+        sendPermit.retryAfterMs,
+      );
     }
 
     // The attempt is spent before the provider is called, not recorded after it
@@ -344,19 +350,19 @@ export class EmailDeliveryPoller {
     try {
       reservation = await this.sendRateLimiter.reserve();
     } catch {
-      await this.releaseProbe(sendPermit.probeToken);
+      await this.pause.releaseProbe(sendPermit.probeToken);
       return this.maintenance.defer(
         request,
-        now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       );
     }
     if (!reservation.reserved) {
-      await this.releaseProbe(sendPermit.probeToken);
+      await this.pause.releaseProbe(sendPermit.probeToken);
       const retryAfterMs = reservation.retryAfterMs;
       return this.maintenance.defer(
         request,
-        now,
+        this.now(),
         Number.isSafeInteger(retryAfterMs) && retryAfterMs > 0
           ? retryAfterMs
           : EMAIL_SEND_RATE_LIMIT_RETRY_MS,
@@ -370,23 +376,24 @@ export class EmailDeliveryPoller {
           emailDailySendBudgetCategory(request.kind),
         );
       } catch {
-        await this.releaseProbe(sendPermit.probeToken);
+        await this.pause.releaseProbe(sendPermit.probeToken);
         return this.maintenance.defer(
           request,
-          now,
+          this.now(),
           EMAIL_SEND_RATE_LIMIT_RETRY_MS,
         );
       }
       if (!budgetReservation.reserved) {
-        await this.releaseProbe(sendPermit.probeToken);
+        await this.pause.releaseProbe(sendPermit.probeToken);
+        const deniedAt = this.now();
         const expiresAt = delivery.credential()?.expiresAt;
         const remainingCredentialLifetime =
           expiresAt === undefined
             ? Infinity
-            : Date.parse(expiresAt) - now.getTime();
+            : Date.parse(expiresAt) - deniedAt.getTime();
         return this.maintenance.defer(
           request,
-          now,
+          deniedAt,
           Number.isFinite(remainingCredentialLifetime) &&
             remainingCredentialLifetime > 0
             ? Math.min(
@@ -398,14 +405,17 @@ export class EmailDeliveryPoller {
       }
     }
 
+    // Every time from here on is read fresh: the preflight above takes as long
+    // as its dependencies do, and a backoff measured from the start of the
+    // pass would let a row become claimable early (#441).
     try {
       await this.store.reserveAttempt({
         id: request.id,
-        attemptedAt: now,
+        attemptedAt: this.now(),
         owner: this.options.owner,
       });
     } catch (error) {
-      await this.releaseProbe(sendPermit.probeToken);
+      await this.pause.releaseProbe(sendPermit.probeToken);
       throw error;
     }
 
@@ -416,7 +426,7 @@ export class EmailDeliveryPoller {
       credential !== undefined &&
       isCredentialExpired(credential.expiresAt, handoffAt)
     ) {
-      await this.releaseProbe(sendPermit.probeToken);
+      await this.pause.releaseProbe(sendPermit.probeToken);
       return this.maintenance.cancel(request, 'credential_expired', handoffAt);
     }
 
@@ -426,7 +436,7 @@ export class EmailDeliveryPoller {
     } catch (error) {
       if (error instanceof EmailProviderTransportError) {
         const failedAt = this.now();
-        const retryAfterMs = await this.openProviderCircuit(
+        const retryAfterMs = await this.pause.open(
           0,
           failedAt,
           sendPermit.probeToken,
@@ -437,8 +447,12 @@ export class EmailDeliveryPoller {
         );
         return 'provider_outage';
       }
-      await this.releaseProbe(sendPermit.probeToken);
-      return this.maintenance.recordFailure(request, errorCodeOf(error), now);
+      await this.pause.releaseProbe(sendPermit.probeToken);
+      return this.maintenance.recordFailure(
+        request,
+        errorCodeOf(error),
+        this.now(),
+      );
     }
 
     const responseReceivedAt = this.now();
@@ -448,7 +462,7 @@ export class EmailDeliveryPoller {
         response.retryAfter,
         responseReceivedAt,
       );
-      const circuitDelayMs = await this.openProviderCircuit(
+      const circuitDelayMs = await this.pause.open(
         retryAfterMs,
         responseReceivedAt,
         sendPermit.probeToken,
@@ -463,7 +477,7 @@ export class EmailDeliveryPoller {
     }
 
     if (response.status >= 500 && response.status < 600) {
-      const retryAfterMs = await this.openProviderCircuit(
+      const retryAfterMs = await this.pause.open(
         0,
         responseReceivedAt,
         sendPermit.probeToken,
@@ -475,22 +489,30 @@ export class EmailDeliveryPoller {
       return 'provider_outage';
     }
 
-    await this.closeProviderCircuit(sendPermit.probeToken);
+    await this.pause.close(sendPermit.probeToken);
 
     if (response.status === 401 || response.status === 403) {
-      this.providerPausedUntil = responseReceivedAt.getTime() + DEFER_RETRY_MS;
+      this.pause.until = responseReceivedAt.getTime() + DEFER_RETRY_MS;
       this.reportProviderConfigurationFailure(response.status);
       await this.maintenance.releaseUnspentAttempt(
         request,
-        new Date(this.providerPausedUntil),
+        new Date(this.pause.until),
       );
       return 'configuration_failure';
+    }
+
+    if (response.status === 409 && response.idempotencyConflict !== undefined) {
+      return this.maintenance.recordIdempotencyConflict(
+        request,
+        response.idempotencyConflict,
+        responseReceivedAt,
+      );
     }
 
     if (response.status === 400 || response.status === 422) {
       await this.store.markFailed({
         id: request.id,
-        failedAt: now,
+        failedAt: responseReceivedAt,
         errorCode: 'provider_permanent_rejection',
         owner: this.options.owner,
       });
@@ -498,12 +520,16 @@ export class EmailDeliveryPoller {
     }
 
     if (response.status < 200 || response.status >= 300) {
-      return this.maintenance.recordFailure(request, 'provider_rejected', now);
+      return this.maintenance.recordFailure(
+        request,
+        'provider_rejected',
+        responseReceivedAt,
+      );
     }
 
     await this.store.markProviderAccepted({
       id: request.id,
-      attemptedAt: now,
+      attemptedAt: responseReceivedAt,
       owner: this.options.owner,
     });
     this.providerConfigurationAlerted = false;
@@ -519,76 +545,13 @@ export class EmailDeliveryPoller {
       Number.isSafeInteger(retryAfterMs) && retryAfterMs >= 0
         ? retryAfterMs
         : EMAIL_SEND_RATE_LIMIT_RETRY_MS;
-    this.providerPausedUntil = Math.max(
-      this.providerPausedUntil,
-      now.getTime() + safeRetryAfterMs,
-    );
+    this.pause.extend(now.getTime() + safeRetryAfterMs);
     await this.maintenance.defer(
       request,
       now,
       Math.max(EMAIL_SEND_RATE_LIMIT_RETRY_MS, safeRetryAfterMs),
     );
     return 'provider_outage';
-  }
-
-  private async releaseProbe(probeToken: string | undefined): Promise<void> {
-    if (probeToken === undefined) return;
-    try {
-      await this.providerOutageCircuit.releaseProbe(probeToken);
-    } catch {
-      // Redis expires the probe lock with its bounded recovery TTL, and the
-      // acquire script takes over a probe held past its stale margin (#1113).
-    }
-  }
-
-  private async openProviderCircuit(
-    retryAfterMs: number,
-    openedAt: Date,
-    probeToken?: string,
-  ): Promise<number> {
-    try {
-      const circuitDelayMs =
-        await this.providerOutageCircuit.recordProviderFailure(
-          retryAfterMs,
-          probeToken,
-        );
-      const safeDelayMs =
-        Number.isSafeInteger(circuitDelayMs) && circuitDelayMs >= 0
-          ? Math.max(retryAfterMs, circuitDelayMs)
-          : Math.max(retryAfterMs, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        openedAt.getTime() + safeDelayMs,
-      );
-      return safeDelayMs;
-    } catch {
-      // Nothing reached shared state, so the probe this attempt held would
-      // strand every poller until the outage key expires (#1113).
-      await this.releaseProbe(probeToken);
-      const fallbackDelayMs = Math.max(
-        retryAfterMs,
-        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-      );
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        openedAt.getTime() + fallbackDelayMs,
-      );
-      return fallbackDelayMs;
-    }
-  }
-
-  private async closeProviderCircuit(probeToken?: string): Promise<void> {
-    try {
-      await this.providerOutageCircuit.recordProviderReachable();
-    } catch {
-      // The state this DEL failed to clear still holds the probe, and a held
-      // probe strands every poller until it is released or taken over (#1113).
-      await this.releaseProbe(probeToken);
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        this.now().getTime() + EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-      );
-    }
   }
 
   private async deliver(

@@ -11,6 +11,7 @@ import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_KIND_POLICIES,
 } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import type { EmailIdempotencyConflict } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { invitationRecipientRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/invitation-recipient-rate-limit';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
@@ -160,6 +161,31 @@ export class EmailDeliveryPollerMaintenance {
       owner: this.options.owner,
     });
     return 'retried';
+  }
+
+  /**
+   * A reused provider key is never a definitive rejection (#441). `concurrent`
+   * means the provider is still processing an earlier attempt under the key, so
+   * it spends one of the bounded attempts and is retried. `payload_changed`
+   * means an earlier attempt under the key reached the provider and may have
+   * been delivered, so the request ends as `outcome_unknown`, which alerts,
+   * rather than being sent again.
+   */
+  async recordIdempotencyConflict(
+    request: EmailDeliveryRequestRecord,
+    conflict: EmailIdempotencyConflict,
+    at: Date,
+  ): Promise<'retried' | 'failed'> {
+    if (conflict === 'concurrent') {
+      return this.recordFailure(request, 'outcome_unknown', at);
+    }
+    await this.store.markFailed({
+      id: request.id,
+      failedAt: at,
+      errorCode: 'outcome_unknown',
+      owner: this.options.owner,
+    });
+    return 'failed';
   }
 
   async cancel(

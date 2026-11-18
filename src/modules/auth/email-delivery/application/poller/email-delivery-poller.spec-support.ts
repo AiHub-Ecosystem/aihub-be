@@ -139,11 +139,16 @@ export class FakeStore implements EmailDispatchStorePort {
     }
   }
 
+  /** When each failed attempt was recorded; the claim's backoff starts there. */
+  failedAttemptTimes: Date[] = [];
+
   async recordFailedAttempt(input: {
     id: string;
     errorCode: string;
+    attemptedAt: Date;
   }): Promise<void> {
     this.attempts.push({ id: input.id, errorCode: input.errorCode });
+    this.failedAttemptTimes.push(input.attemptedAt);
   }
 
   async reserveAttempt(input: { id: string }): Promise<void> {
