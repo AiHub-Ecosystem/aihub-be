@@ -76,13 +76,9 @@ export type MeteringGatheredEvidence = Omit<
 export function getMeteringEvidence(
   request: unknown,
 ): MeteringEvidence | undefined {
-  return isMeteringEvidenceRequest(request) ? request.aihubMetering : undefined;
-}
-
-function isMeteringEvidenceRequest(
-  value: unknown,
-): value is { aihubMetering?: MeteringEvidence } {
-  return isRecord(value);
+  if (!isRecord(request)) return undefined;
+  // The writer is the only producer of this key; readers only read it back.
+  return request['aihubMetering'] as MeteringEvidence | undefined;
 }
 
 /**

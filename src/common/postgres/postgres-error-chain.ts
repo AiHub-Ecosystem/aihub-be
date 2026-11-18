@@ -30,11 +30,10 @@ export function findPostgresErrorLink(
     if (seen.has(candidate)) continue;
     seen.add(candidate);
 
-    const record = candidate;
     const link: PostgresErrorLink = {
-      code: record['code'] ?? record['originalCode'],
-      message: record['message'] ?? record['originalMessage'],
-      kind: record['kind'],
+      code: candidate['code'] ?? candidate['originalCode'],
+      message: candidate['message'] ?? candidate['originalMessage'],
+      kind: candidate['kind'],
       wrapped: next.wrapped,
     };
     if (matches(link)) return link;
@@ -45,9 +44,9 @@ export function findPostgresErrorLink(
       name.startsWith('PrismaClient') ||
       name === 'DriverAdapterError';
     for (const key of ['cause', 'meta', 'driverAdapterError']) {
-      if (record[key] !== undefined) {
+      if (candidate[key] !== undefined) {
         pending.push({
-          value: record[key],
+          value: candidate[key],
           wrapped: wrapped || key === 'driverAdapterError',
         });
       }

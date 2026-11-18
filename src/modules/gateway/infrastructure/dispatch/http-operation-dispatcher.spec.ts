@@ -200,14 +200,10 @@ function readLogLine(
   const call = loggerError.mock.calls[0];
   expect(call).toHaveLength(1);
   const payload: unknown = call?.[0];
-  if (!isLogPayload(payload)) {
+  if (!isRecord(payload)) {
     throw new Error('the dispatcher failure log is not an object');
   }
   return payload;
-}
-
-function isLogPayload(value: unknown): value is Record<string, unknown> {
-  return isRecord(value);
 }
 
 function expectFailureLogLine(

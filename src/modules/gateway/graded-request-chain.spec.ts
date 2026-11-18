@@ -16,6 +16,7 @@ import { MockAgent } from 'undici/index.js';
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
@@ -97,12 +98,8 @@ function providerFailureSample(name: string) {
   const sample = fixture(name);
   if (
     typeof sample['status'] !== 'number' ||
-    typeof sample['headers'] !== 'object' ||
-    sample['headers'] === null ||
-    Array.isArray(sample['headers']) ||
-    typeof sample['body'] !== 'object' ||
-    sample['body'] === null ||
-    Array.isArray(sample['body'])
+    !isRecord(sample['headers']) ||
+    !isRecord(sample['body'])
   ) {
     throw new Error('provider failure sample is incomplete');
   }

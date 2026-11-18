@@ -20,24 +20,18 @@ export function decodeCursor(
     const parsed: unknown = JSON.parse(raw);
     if (
       isRecord(parsed) &&
-      'page' in parsed &&
-      'limit' in parsed &&
-      typeof (parsed as { page: unknown }).page === 'number' &&
-      typeof (parsed as { limit: unknown }).limit === 'number' &&
-      Number.isInteger((parsed as { page: number }).page) &&
-      (parsed as { page: number }).page >= 1
+      typeof parsed['page'] === 'number' &&
+      typeof parsed['limit'] === 'number' &&
+      Number.isInteger(parsed['page']) &&
+      parsed['page'] >= 1
     ) {
-      if ((parsed as { limit: number }).limit !== currentLimit) {
+      if (parsed['limit'] !== currentLimit) {
         throw invalidRequest('Cursor cannot be reused with a different limit');
       }
-      return { page: (parsed as { page: number }).page };
+      return { page: parsed['page'] };
     }
   } catch (error) {
-    if (
-      isRecord(error) &&
-      'code' in error &&
-      (error as { code: unknown }).code === 'INVALID_REQUEST'
-    ) {
+    if (isRecord(error) && error['code'] === 'INVALID_REQUEST') {
       throw error;
     }
   }
