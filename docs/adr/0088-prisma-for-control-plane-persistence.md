@@ -136,10 +136,19 @@ handshake occasionally exceeded the 250 ms acquisition deadline under the
 container's shared CPU quota, answering `503 DATABASE_UNAVAILABLE` even though
 PostgreSQL was healthy.
 
-Each shared pool now sets `min: 1`, so one connection stays open across the gap
-and a sparse caller finds it warm. The 250 ms acquisition bound and the
-30-second idle timeout are unchanged, and the extra connection is one per pool
-inside the existing per-role `max` budget.
+Each shared pool sets `min: 1`, so one connection stays open across the gap
+and a sparse caller finds it warm. The 250 ms bound on waiting for a slot and
+the 30-second idle timeout are unchanged, and the extra connection is one per
+pool inside the existing per-role `max` budget.
+
+Keeping the connection warm did not end the refusals: the same 503 continued
+while PostgreSQL logged `connection authorized` and then `could not receive
+data from client: Connection reset by peer` in the same second. The 250 ms
+acquisition deadline also covered the handshake, and `expire()` and
+`connectionTimeoutMillis` both destroyed the socket when it fired. An attempt
+that already holds a slot now gets `POSTGRES_CONNECT_TIMEOUT_MS` (3 s) for the
+handshake, so waiting for a slot and opening one are separate budgets; the
+request deadline stays 5 s.
 
 Operator work uses a separate explicit profile: 5-minute statements,
 30-second lock waits, and 60-second idle transactions. The Prisma-backed

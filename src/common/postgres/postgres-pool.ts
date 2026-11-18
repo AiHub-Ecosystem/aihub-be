@@ -43,6 +43,19 @@ export const QUERY_TIMEOUT_MARGIN_MS = 1_000;
 /** Leaves time for PgBouncer's queue timeout and the HTTP error response. */
 export const POSTGRES_ACQUISITION_TIMEOUT_MS = 250;
 
+/**
+ * What an opening connection gets, once it holds a slot.
+ *
+ * A queued request must give up in 250 ms, but that budget is for waiting, not
+ * for a TCP, TLS, and authentication handshake. Cutting the handshake there
+ * answered `503 DATABASE_UNAVAILABLE` while PostgreSQL was healthy: the server
+ * logged `connection authorized`, then `could not receive data from client:
+ * Connection reset by peer` in the same second as the refusal. Observed
+ * durations on the production host ran to 2656 ms, and the request deadline is
+ * 5000 ms, so the attempt is bounded well inside it.
+ */
+export const POSTGRES_CONNECT_TIMEOUT_MS = 3_000;
+
 export const OPERATOR_POSTGRES_TIMEOUTS = {
   statement_timeout: 300_000,
   lock_timeout: 30_000,
@@ -178,6 +191,14 @@ class TransactionSafePool extends Pool {
     if (request.settled) return;
     request.started = true;
     this.active += 1;
+    // The deadline covered the wait for a slot. Now that the slot is held, the
+    // attempt gets its own budget so a slow handshake is not mistaken for a
+    // database outage.
+    clearTimeout(request.timer);
+    request.timer = setTimeout(
+      () => this.expire(request),
+      POSTGRES_CONNECT_TIMEOUT_MS,
+    );
     this.attempt(request);
   }
 
@@ -346,7 +367,8 @@ interface PendingConnect {
   readonly callback: PoolConnectCallback | undefined;
   readonly resolve: ((client: PoolClient) => void) | undefined;
   readonly reject: ((error: Error) => void) | undefined;
-  readonly timer: ReturnType<typeof setTimeout>;
+  /** The wait-for-slot timer, replaced by the connect budget once started. */
+  timer: ReturnType<typeof setTimeout>;
   /** When the request's acquisition budget, retries included, runs out. */
   readonly deadline: number;
   settled: boolean;
@@ -460,7 +482,9 @@ export function postgresPoolOptions(
     // than that gap (the 60 s Sandbox probe) does not pay a cold TCP, TLS, and
     // auth handshake inside its 250 ms acquisition budget.
     min: 1,
-    connectionTimeoutMillis: POSTGRES_ACQUISITION_TIMEOUT_MS,
+    // pg-pool applies this to its own client socket, so it bounds the handshake
+    // rather than the wait for a slot; the two budgets are separate.
+    connectionTimeoutMillis: POSTGRES_CONNECT_TIMEOUT_MS,
     idleTimeoutMillis: 30_000,
     ...(!transactionPoolerEnabled ? timeouts : {}),
     // statement_timeout is enforced by the server, so a server that stops
