@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { withWritingErrorPriorityCapture } from '../../../test/support/writing-error-priority-fixture';
 import {
   writingV3Task1GradeAdapter,
   writingV3Task2GradeAdapter,
@@ -14,6 +15,13 @@ function fixture(name: string): unknown {
       resolve(process.cwd(), `test/fixtures/ai-writing/${name}`),
       'utf8',
     ),
+  );
+}
+
+function gradeResponseFixture(task: 1 | 2): unknown {
+  return withWritingErrorPriorityCapture(
+    fixture(`grade-v3-task${task}.response.json`) as Record<string, unknown>,
+    task,
   );
 }
 
@@ -77,7 +85,7 @@ describe('writingV3Task1GradeAdapter', () => {
     const parsed = writingV3Task1GradeAdapter.parseResponse({
       status: 200,
       headers: {},
-      body: fixture('grade-v3-task1.response.json'),
+      body: gradeResponseFixture(1),
     });
 
     expect(parsed.criteria[0]?.id).toBe('task_achievement');
@@ -135,7 +143,7 @@ describe('writingV3Task2GradeAdapter', () => {
     const parsed = writingV3Task2GradeAdapter.parseResponse({
       status: 200,
       headers: {},
-      body: fixture('grade-v3-task2.response.json'),
+      body: gradeResponseFixture(2),
     });
 
     expect(parsed.criteria[0]?.id).toBe('task_response');
