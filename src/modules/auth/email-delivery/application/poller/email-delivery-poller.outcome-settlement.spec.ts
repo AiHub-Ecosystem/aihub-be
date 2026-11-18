@@ -1,3 +1,4 @@
+import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeEmailProviderOutageCircuit,
   NOW,
@@ -149,6 +150,36 @@ describe('EmailDeliveryPoller conflict whose terminal write is rejected (#441)',
     await poller.runOnce();
 
     // Nothing is left to settle, so claiming resumes.
+    expect(store.claims).toHaveLength(1);
+  });
+
+  it('relinquishes a pending outcome once its lease can have lapsed', async () => {
+    const { now, advanceMs } = clock();
+    const sender = new RecordingSender();
+    sender.response = {
+      status: 409,
+      retryAfter: undefined,
+      idempotencyConflict: 'payload_changed',
+    };
+    const { poller, store } = harness({ sender, now });
+    store.claimResult = [claimed()];
+    // The write never matches again: another poller owns the row.
+    store.failMarkFailed = 100;
+    store.dispatchState = {
+      status: 'queued',
+      attempts: 1,
+      lastAttemptAt: NOW,
+      leaseExpiresAt: null,
+    };
+    await poller.runOnce();
+
+    store.claims = [];
+    store.claimResult = [];
+    await poller.runOnce();
+    expect(store.claims).toEqual([]);
+
+    advanceMs(EmailDeliveryPoller.leaseMsFor(EmailDeliveryPoller.BATCH_SIZE));
+    await poller.runOnce();
     expect(store.claims).toHaveLength(1);
   });
 

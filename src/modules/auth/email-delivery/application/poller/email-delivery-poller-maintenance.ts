@@ -51,7 +51,15 @@ export class EmailDeliveryPollerMaintenance {
    */
   private readonly pendingConflictFailures = new Map<
     string,
-    Parameters<EmailDispatchStorePort['markFailed']>[0]
+    {
+      readonly input: Parameters<EmailDispatchStorePort['markFailed']>[0];
+      /**
+       * The write is fenced by this poller's lease on the row. Once that lease
+       * can have lapsed, another poller may own the row and the write can
+       * never match again, so settling it passes to whoever claims the row.
+       */
+      readonly relinquishAtMs: number;
+    }
   >();
 
   /** Outcomes known to the provider but not yet durable: no claim until settled. */
@@ -207,7 +215,10 @@ export class EmailDeliveryPollerMaintenance {
     } as const;
     // Remembered until the write lands: a rejected write leaves the row queued,
     // and the next pass settles it before it can claim anything.
-    this.pendingConflictFailures.set(request.id, input);
+    this.pendingConflictFailures.set(request.id, {
+      input,
+      relinquishAtMs: at.getTime() + this.leaseMs,
+    });
     await this.store.markFailed(input);
     this.pendingConflictFailures.delete(request.id);
     return 'failed';
@@ -266,7 +277,12 @@ export class EmailDeliveryPollerMaintenance {
   }
 
   private async retryPendingConflictFailures(): Promise<void> {
-    for (const [id, input] of this.pendingConflictFailures) {
+    for (const [id, { input, relinquishAtMs }] of this
+      .pendingConflictFailures) {
+      if (this.now().getTime() >= relinquishAtMs) {
+        this.pendingConflictFailures.delete(id);
+        continue;
+      }
       try {
         await this.store.markFailed(input);
         this.pendingConflictFailures.delete(id);
