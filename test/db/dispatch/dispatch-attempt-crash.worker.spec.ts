@@ -12,7 +12,7 @@ import {
   SHEDDING_LEVEL,
   type SheddingLevelPort,
 } from '@/modules/gateway/application/shedding/shedding-level.port';
-import { recordTierOutcome } from '@/modules/gateway/infrastructure/dispatch/shedding-metrics';
+import { recordTierOutcome } from '@/modules/gateway/presentation/shedding-metrics';
 import { registerRequestHooks } from '@/register-request-hooks';
 
 describe('AIHUB crash worker', () => {

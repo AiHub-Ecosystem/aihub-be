@@ -7,13 +7,15 @@ import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
 import { registerRequestTiming } from './common/http/request-timing.hook';
 import { registerRequestTracing } from './common/http/request-tracing.hook';
 import { registerSecurityHeaders } from './common/http/security-headers.hook';
+import type { SheddingLevelPort } from './modules/gateway/application/shedding/shedding-level.port';
+import {
+  type RequestTier,
+  registerSheddingGuard,
+} from './modules/gateway/public/http-hooks';
 import {
   registerPublicApiMajorUsage,
   registerRequestCompletionLog,
 } from './modules/metering/public/http-hooks';
-import type { RequestTier } from './modules/gateway/application/shedding/request-tier';
-import type { SheddingLevelPort } from './modules/gateway/application/shedding/shedding-level.port';
-import { registerSheddingGuard } from './modules/gateway/presentation/shedding.hook';
 import type { PublicApiMajorUsageSample } from './modules/metering/public/public-api-major-usage';
 
 /** Prioritized load shedding, bound to wherever the gateway reports its tiers. */
