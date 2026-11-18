@@ -59,6 +59,8 @@ case "$1" in
   logs)
     if [[ "${FAKE_DOCKER_DRIVER:-json-file}" == syslog ]]; then
       printf 'Error response from daemon: configured logging driver does not support reading\n' >&2
+    elif [[ -n "${FAKE_DOCKER_LOG_LINES:-}" ]]; then
+      printf '%s\n' "$FAKE_DOCKER_LOG_LINES"
     fi
     ;;
   exec)
@@ -114,6 +116,7 @@ run_status() {
   if output="$(PATH="$bin_dir:$PATH" \
     FAKE_FETCH_SHIM="$fetch_shim" \
     FAKE_DOCKER_DRIVER="$log_driver" \
+    FAKE_DOCKER_LOG_LINES="${FAKE_DOCKER_LOG_LINES:-}" \
     FAKE_DOCKER_STARTED_AT="$started_at" \
     AIHUB_APP_LOG_DIR="$app_log_dir" \
     FAKE_READY_MODE="$mode" \
@@ -199,6 +202,36 @@ run_status normal 200 "$all_up" syslog "$app_log_started_at"
 [[ "$exit_code" == 0 ]] || fail "untimed app log affected health verdict"
 assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
 assert_contains "$output" 'errors=unavailable since=2026-10-21T00:00:00Z'
+
+# HttpExceptionFilter logs every rejected 4xx at level warn, and its context
+# name contains "Exception". Only the level field decides whether a line is an
+# error, so these warnings must not be counted and a real error still must be.
+level_log_started_at='2026-10-22T00:00:00Z'
+level_log_started_ms="$(date -u -d "$level_log_started_at" +%s%3N)"
+rm -f -- "$app_log_dir"/aihub-app-*.log*
+printf '{"level":"warn","time":%s,"context":"HttpExceptionFilter","diagnostic":"Expected string length less or equal to 200"}\n' \
+  "$level_log_started_ms" >"$app_log_dir/aihub-app-production.log"
+printf '{"level":"error","time":%s,"msg":"a real failure"}\n' \
+  "$((level_log_started_ms + 2))" >>"$app_log_dir/aihub-app-production.log"
+printf '{"level":"warn","time":%s,"context":"HttpExceptionFilter","diagnostic":"Expected string length less or equal to 200"}\n' \
+  "$level_log_started_ms" >"$app_log_dir/aihub-app-sandbox.log"
+
+run_status normal 200 "$all_up" syslog "$level_log_started_at"
+[[ "$exit_code" == 0 ]] || fail "level-based syslog status exited $exit_code"
+assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=1 since=2026-10-22T00:00:00Z'
+assert_contains "$output" 'sandbox    ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=0 since=2026-10-22T00:00:00Z'
+
+FAKE_DOCKER_LOG_LINES="$(printf '%s\n%s\n%s' \
+  '{"level":"warn","context":"HttpExceptionFilter","diagnostic":"Expected string length less or equal to 200"}' \
+  '{"level":"error","msg":"a real failure"}' \
+  '{"level":"warn","context":"HttpExceptionFilter","diagnostic":"Expected string length less or equal to 200"}')"
+run_status normal 200 "$all_up" json-file
+[[ "$exit_code" == 0 ]] || fail "level-based json-file status exited $exit_code"
+assert_contains "$output" 'production ok   revision=0123456 state=running health=healthy health_probe=200 readiness_probe=200'
+assert_contains "$output" 'errors=1 since='
+FAKE_DOCKER_LOG_LINES=''
 
 run_status normal 200 '{"status":"ok"}'
 [[ "$exit_code" == 1 ]] || fail "readiness response without dependencies exited $exit_code"
