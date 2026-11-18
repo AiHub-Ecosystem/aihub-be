@@ -1009,10 +1009,6 @@ jobs:
       name: production
     permissions:
       contents: read
-    outputs:
-      production_sha: ${{ steps.revisions.outputs.production_sha }}
-      sandbox_sha: ${{ steps.revisions.outputs.sandbox_sha }}
-      sandbox_disabled: ${{ steps.revisions.outputs.sandbox_disabled }}
     steps:
       - name: Configure read-only host access
         shell: bash
@@ -1051,7 +1047,6 @@ jobs:
           printf 'AIHUB_SSH_CONFIG=%s\n' "$ssh_dir/config" >> "$GITHUB_ENV"
 
       - name: Read active tier revisions
-        id: revisions
         shell: bash
         env:
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
@@ -1076,15 +1071,21 @@ jobs:
             exit 1
           }
           sandbox_sha="$(sed -nE 's/^sandbox active_slot=[ab] sha=([a-f0-9]{40}) service=.*/\1/p' <<< "$state")"
-          sandbox_disabled=false
           if [[ ! "$sandbox_sha" =~ ^[a-f0-9]{40}$ ]] && ! grep -Fxq 'sandbox disabled' <<< "$state"; then
             printf 'Sandbox active revision is missing or unknown\n' >&2
             exit 1
           elif [[ ! "$sandbox_sha" =~ ^[a-f0-9]{40}$ ]]; then
-            sandbox_disabled=true
+            sandbox_sha=disabled
           fi
-          printf 'production_sha=%s\nsandbox_sha=%s\nsandbox_disabled=%s\n' \
-            "$production_sha" "$sandbox_sha" "$sandbox_disabled" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$production_sha" "$sandbox_sha" > "$RUNNER_TEMP/active-release.txt"
+
+      - name: Upload active release revisions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: active-release-revisions
+          path: ${{ runner.temp }}/active-release.txt
+          if-no-files-found: error
+          overwrite: true
 
   image:
     name: Image boot
@@ -1275,14 +1276,34 @@ jobs:
           grype "docker:$image_id" --output table >> "$GITHUB_STEP_SUMMARY" || true
           grype "docker:$image_id" --only-fixed --fail-on high
 
+      - name: Download active release revisions
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: active-release-revisions
+          path: ${{ runner.temp }}
+
       - name: Select active per-tier release revisions
         id: previous_release
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          ACTIVE_PRODUCTION_SHA: ${{ needs.resolve-active-release.outputs.production_sha }}
-          ACTIVE_SANDBOX_SHA: ${{ needs.resolve-active-release.outputs.sandbox_sha }}
-          ACTIVE_SANDBOX_DISABLED: ${{ needs.resolve-active-release.outputs.sandbox_disabled }}
-        run: node --import tsx scripts/ci/n-minus-one/previous-deployed-release.ts
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mapfile -t active_revisions < "$RUNNER_TEMP/active-release.txt"
+            if [[ ${#active_revisions[@]} -ne 2 || ! "${active_revisions[0]}" =~ ^[a-f0-9]{40}$ || ! "${active_revisions[1]}" =~ ^(disabled|[a-f0-9]{40})$ ]]; then
+              printf 'Active release artifact must contain the Production SHA and the Sandbox SHA or disabled\n' >&2
+              exit 1
+            fi
+            export ACTIVE_PRODUCTION_SHA="${active_revisions[0]}"
+            if [[ "${active_revisions[1]}" == disabled ]]; then
+              export ACTIVE_SANDBOX_DISABLED=true
+            else
+              export ACTIVE_SANDBOX_SHA="${active_revisions[1]}"
+            fi
+          fi
+          node --import tsx scripts/ci/n-minus-one/previous-deployed-release.ts
 
       - name: Recover active-tier image digests
         id: previous_digests
