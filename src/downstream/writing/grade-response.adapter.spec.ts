@@ -1,16 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { Value } from '@sinclair/typebox/value';
 
 import { AppError } from '@/common/errors/app-error';
 import { GradeResponseSchema } from '@/contracts/writing/grading';
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { parseGradeResponse } from './grade-response.adapter';
 
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
-
 function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf-8'));
+  return fixtureJson('ai-writing', name);
 }
 
 describe('parseGradeResponse', () => {

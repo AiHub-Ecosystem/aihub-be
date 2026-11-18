@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -24,18 +21,15 @@ import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/a
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { QUOTA_COUNTER } from '@/modules/metering/public/quota-counter';
+import { fixtureJson } from '../../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
-const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 const PROVIDER_URL = 'https://ai-writing.test';
 const ORGANIZATION_ID = 'org_writing_v2';
 const USER_ID = 'learner_v2';
 
 function rawFixture(name: string): unknown {
-  const parsed: unknown = JSON.parse(
-    readFileSync(join(FIXTURES, name), 'utf8'),
-  );
-  return parsed;
+  return fixtureJson('ai-writing', name);
 }
 
 const task1Fixture = rawFixture('grade-v3-task1.request.json') as {

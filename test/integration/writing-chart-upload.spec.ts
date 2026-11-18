@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -51,10 +48,14 @@ import {
   type WritingChartUploadIntent,
 } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
-const FIXTURES = join(__dirname, '../fixtures/ai-writing');
-const task1 = JSON.parse(
-  readFileSync(join(FIXTURES, 'grade-task1.request.json'), 'utf8'),
-) as { question: string; url: string; topic: string; essay: string };
+import { fixtureJson } from '../support/json-fixtures';
+
+const task1 = fixtureJson('ai-writing', 'grade-task1.request.json') as {
+  question: string;
+  url: string;
+  topic: string;
+  essay: string;
+};
 
 function uploadGrant(response: { json(): unknown }) {
   return Value.Parse(WritingChartUploadGrantResponseSchema, response.json());
@@ -65,10 +66,7 @@ function chartAsset(response: { json(): unknown }) {
 }
 
 function rawResponseFixture(): unknown {
-  const parsed: unknown = JSON.parse(
-    readFileSync(join(FIXTURES, 'grade-task1.response.json'), 'utf8'),
-  );
-  return parsed;
+  return fixtureJson('ai-writing', 'grade-task1.response.json');
 }
 
 const VALID_CHART_PNG = Buffer.from(
