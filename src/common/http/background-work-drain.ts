@@ -1,7 +1,7 @@
 import { waitForBackgroundWork as waitForTrackedWork } from '@/common/background-work-tracker';
 import { backgroundDrainMs, largestRequestTimeoutMs } from './shutdown-budget';
 
-let shuttingDown = false;
+let shutdownBeganAt: number | undefined;
 
 /**
  * Shutdown has begun: background loops start no new round, and a round already
@@ -11,11 +11,16 @@ let shuttingDown = false;
  * clear loads a fresh copy of this module in a fresh test module registry.
  */
 export function beginShutdown(): void {
-  shuttingDown = true;
+  shutdownBeganAt ??= Date.now();
 }
 
 export function isShuttingDown(): boolean {
-  return shuttingDown;
+  return shutdownBeganAt !== undefined;
+}
+
+/** When shutdown began, so work that starts mid-drain still ends inside it. */
+export function shutdownStartedAt(): number | undefined {
+  return shutdownBeganAt;
 }
 
 export function waitForBackgroundWork(): Promise<void> {

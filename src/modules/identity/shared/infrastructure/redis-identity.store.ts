@@ -1,5 +1,6 @@
 import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 
+import { isRecord } from '@/common/is-record';
 import {
   type ApiKeyCacheInvalidationSeam,
   recordRedisUnavailable,
@@ -67,22 +68,19 @@ interface ApiKeyCacheData {
 }
 
 function parseApiKeyCacheData(value: unknown): ApiKeyCacheData | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const data = value as Record<string, unknown>;
+  if (!isRecord(value)) return undefined;
   if (
-    (data['type'] !== 'record' && data['type'] !== 'miss') ||
-    typeof data['freshUntil'] !== 'number' ||
-    !Number.isSafeInteger(data['freshUntil']) ||
-    (data['type'] === 'record' && data['record'] === undefined)
+    (value['type'] !== 'record' && value['type'] !== 'miss') ||
+    typeof value['freshUntil'] !== 'number' ||
+    !Number.isSafeInteger(value['freshUntil']) ||
+    (value['type'] === 'record' && value['record'] === undefined)
   ) {
     return undefined;
   }
   return {
-    type: data['type'],
-    freshUntil: data['freshUntil'],
-    record: data['record'],
+    type: value['type'],
+    freshUntil: value['freshUntil'],
+    record: value['record'],
   };
 }
 
@@ -91,14 +89,10 @@ function localJwksKey(organizationId: string, configVersion: string): string {
 }
 
 function parseJwksCacheEntry(value: unknown): JwksCacheEntry | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  const jwks = parsePublicJsonWebKeySet(record['jwks']);
-  const freshUntil = record['freshUntil'];
-  const staleUntil = record['staleUntil'];
+  if (!isRecord(value)) return undefined;
+  const jwks = parsePublicJsonWebKeySet(value['jwks']);
+  const freshUntil = value['freshUntil'];
+  const staleUntil = value['staleUntil'];
   if (
     jwks === undefined ||
     typeof freshUntil !== 'number' ||

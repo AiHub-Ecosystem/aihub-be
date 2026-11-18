@@ -6,7 +6,12 @@ import {
   FormData as UndiciFormData,
 } from 'undici/index.js';
 
-import { AppError, internalError } from '@/common/errors/app-error';
+import {
+  AppError,
+  internalError,
+  timeoutError,
+} from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -103,12 +108,7 @@ function transportError(error: unknown, signalAborted = false): AppError {
     code === 'UND_ERR_BODY_TIMEOUT' ||
     code === 'UND_ERR_CONNECT_TIMEOUT';
   const mapped = timeout
-    ? new AppError({
-        code: 'AI_SERVICE_TIMEOUT',
-        message: 'AI service request timed out',
-        retryable: true,
-        cause: error,
-      })
+    ? timeoutError(error)
     : new AppError({
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
@@ -134,9 +134,7 @@ function errorName(error: unknown): string {
 }
 
 function errorCode(error: unknown): string {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String(error.code)
-    : '';
+  return isRecord(error) && 'code' in error ? String(error['code']) : '';
 }
 
 function isTransportFailure(error: unknown): boolean {
@@ -307,7 +305,7 @@ export class DownstreamHttpClient {
 
   /**
    * The live adaptive capacity per origin. Read by the shedding governor: the
-   * limiter's own `inFlight / limit` is the overload signal (ADR-0172), so
+   * limiter's own `inFlight / limit` is the overload signal (ADR-0173), so
    * there is no second limiter to disagree with it.
    */
   concurrencySnapshot(): readonly DownstreamConcurrencySample[] {
@@ -399,12 +397,7 @@ export class DownstreamHttpClient {
 }
 
 function isMultipartBody(value: unknown): value is DownstreamMultipartBody {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'multipart'
-  );
+  return isRecord(value) && 'kind' in value && value['kind'] === 'multipart';
 }
 
 function toRequestBody(

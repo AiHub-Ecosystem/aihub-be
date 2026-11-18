@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import { SpeakingV2QuestionResultSchema } from '@/contracts/speaking/v2/question-result';
 import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
 import type {
@@ -114,12 +115,7 @@ export async function clearExpiredKeyedJobs(
 }
 
 export function isKeyUniquenessViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { readonly code?: unknown }).code === '23505'
-  );
+  return isRecord(error) && 'code' in error && error['code'] === '23505';
 }
 
 function invalidStoredJob(): never {

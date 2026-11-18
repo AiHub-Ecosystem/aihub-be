@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 
+import { isRecord } from '@/common/is-record';
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import {
   CONNECTION_TIMEOUT_MS,
@@ -75,9 +76,7 @@ export async function bootstrap(): Promise<void> {
     process.on('message', (message) => {
       if (
         message === 'shutdown' ||
-        (typeof message === 'object' &&
-          message !== null &&
-          (message as { type?: string }).type === 'shutdown')
+        (isRecord(message) && message['type'] === 'shutdown')
       ) {
         process.emit('SIGTERM');
       }

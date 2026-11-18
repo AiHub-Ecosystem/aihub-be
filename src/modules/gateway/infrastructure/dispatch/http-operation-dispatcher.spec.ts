@@ -3,6 +3,7 @@ import { MockAgent } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
 import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
+import { isRecord } from '@/common/is-record';
 import { getMetrics } from '@/common/observability/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SpeakingGradeJsonInput } from '@/contracts/speaking/grading';
@@ -199,14 +200,10 @@ function readLogLine(
   const call = loggerError.mock.calls[0];
   expect(call).toHaveLength(1);
   const payload: unknown = call?.[0];
-  if (!isLogPayload(payload)) {
+  if (!isRecord(payload)) {
     throw new Error('the dispatcher failure log is not an object');
   }
   return payload;
-}
-
-function isLogPayload(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function expectFailureLogLine(

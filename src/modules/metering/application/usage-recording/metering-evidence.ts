@@ -1,4 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import type {
   MeteringFinalizeInput,
   MeteringModel,
@@ -75,13 +76,9 @@ export type MeteringGatheredEvidence = Omit<
 export function getMeteringEvidence(
   request: unknown,
 ): MeteringEvidence | undefined {
-  return isObject(request) ? request.aihubMetering : undefined;
-}
-
-function isObject(
-  value: unknown,
-): value is { aihubMetering?: MeteringEvidence } {
-  return typeof value === 'object' && value !== null;
+  if (!isRecord(request)) return undefined;
+  // The writer is the only producer of this key; readers only read it back.
+  return request['aihubMetering'] as MeteringEvidence | undefined;
 }
 
 /**

@@ -1,11 +1,8 @@
 import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
+import { isRecord } from '@/common/is-record';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 type JsonRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null;
-}
 
 function collectObjectSchemas(
   value: unknown,

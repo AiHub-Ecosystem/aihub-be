@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -24,18 +21,23 @@ import { API_KEY_AUTHENTICATOR } from '@/modules/identity/api-keys/application/a
 import { USER_IDENTITY_RESOLVER } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { QUOTA_COUNTER } from '@/modules/metering/public/quota-counter';
+import { fixtureJson } from '../../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
+import { withWritingErrorPriorityCapture } from '../../../../../test/support/writing-error-priority-fixture';
 
-const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 const PROVIDER_URL = 'https://ai-writing.test';
 const ORGANIZATION_ID = 'org_writing_v2';
 const USER_ID = 'learner_v2';
 
 function rawFixture(name: string): unknown {
-  const parsed: unknown = JSON.parse(
-    readFileSync(join(FIXTURES, name), 'utf8'),
+  return fixtureJson('ai-writing', name);
+}
+
+function gradeFixture(task: 1 | 2): unknown {
+  return withWritingErrorPriorityCapture(
+    rawFixture(`grade-v3-task${task}.response.json`) as Record<string, unknown>,
+    task,
   );
-  return parsed;
 }
 
 const task1Fixture = rawFixture('grade-v3-task1.request.json') as {
@@ -193,7 +195,7 @@ describe('Writing /v2 grading HTTP flow', () => {
       essay: task2Fixture.essay,
     }).reply(200, () => {
       downstreamCalls += 1;
-      return rawFixture('grade-v3-task2.response.json');
+      return gradeFixture(2);
     });
 
     const response = await post('task2', task2Payload);
@@ -206,6 +208,13 @@ describe('Writing /v2 grading HTTP flow', () => {
     expect(body.data.overall_assessment.progress.status).toEqual(
       expect.any(String),
     );
+    expect(body.data.error_priority).toMatchObject([
+      {
+        rank: 1,
+        group: 'task_achievement_response_coherence_cohesion',
+        code: 'CC01',
+      },
+    ]);
     for (const hidden of ['coT', 'layer1_errors', '"usage"', '"metrics"']) {
       expect(response.payload).not.toContain(hidden);
     }
@@ -223,7 +232,7 @@ describe('Writing /v2 grading HTTP flow', () => {
       url: task1Fixture.url,
     }).reply(200, () => {
       downstreamCalls += 1;
-      return rawFixture('grade-v3-task1.response.json');
+      return gradeFixture(1);
     });
 
     const response = await post('task1', task1Payload);
@@ -233,6 +242,13 @@ describe('Writing /v2 grading HTTP flow', () => {
     const body = Value.Parse(GradingResponseSchema, response.json());
     expect(body.meta.operation).toBe('writing.v2.task1.grade');
     expect(body.data.criteria[0]?.id).toBe('task_achievement');
+    expect(body.data.error_priority).toMatchObject([
+      {
+        rank: 1,
+        group: 'task_achievement_response_coherence_cohesion',
+        code: 'CC01',
+      },
+    ]);
   });
 
   it.each([

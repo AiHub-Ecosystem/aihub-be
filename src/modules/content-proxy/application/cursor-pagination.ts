@@ -1,4 +1,5 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { isRecord } from '@/common/is-record';
 
 export interface CursorPayload {
   readonly page: number;
@@ -18,27 +19,19 @@ export function decodeCursor(
     const raw = Buffer.from(cursor, 'base64url').toString('utf8');
     const parsed: unknown = JSON.parse(raw);
     if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'page' in parsed &&
-      'limit' in parsed &&
-      typeof (parsed as { page: unknown }).page === 'number' &&
-      typeof (parsed as { limit: unknown }).limit === 'number' &&
-      Number.isInteger((parsed as { page: number }).page) &&
-      (parsed as { page: number }).page >= 1
+      isRecord(parsed) &&
+      typeof parsed['page'] === 'number' &&
+      typeof parsed['limit'] === 'number' &&
+      Number.isInteger(parsed['page']) &&
+      parsed['page'] >= 1
     ) {
-      if ((parsed as { limit: number }).limit !== currentLimit) {
+      if (parsed['limit'] !== currentLimit) {
         throw invalidRequest('Cursor cannot be reused with a different limit');
       }
-      return { page: (parsed as { page: number }).page };
+      return { page: parsed['page'] };
     }
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code: unknown }).code === 'INVALID_REQUEST'
-    ) {
+    if (isRecord(error) && error['code'] === 'INVALID_REQUEST') {
       throw error;
     }
   }

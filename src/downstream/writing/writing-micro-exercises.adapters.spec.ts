@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { Value } from '@sinclair/typebox/value';
 
+import { isRecord } from '@/common/is-record';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type CreateLongWritingExerciseRequest,
@@ -29,10 +30,10 @@ function fixture(name: string): unknown {
 
 function fixtureRecord(name: string): Record<string, unknown> {
   const parsed = fixture(name);
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new Error('fixture is not an object');
   }
-  return parsed as Record<string, unknown>;
+  return parsed;
 }
 
 interface CapturedReference {

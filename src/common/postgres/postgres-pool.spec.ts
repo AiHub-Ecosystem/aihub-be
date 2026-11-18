@@ -2,7 +2,12 @@ import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient, type TransactionStatus } from 'pg';
 
 import { getMetrics } from '@/common/observability/metrics';
-import { createPostgresPool, postgresPoolOptions } from './postgres-pool';
+import {
+  POSTGRES_ACQUISITION_TIMEOUT_MS,
+  POSTGRES_CONNECT_TIMEOUT_MS,
+  createPostgresPool,
+  postgresPoolOptions,
+} from './postgres-pool';
 
 type ConnectCallback = (
   error: Error | undefined,
@@ -130,6 +135,53 @@ describe('Postgres pool options', () => {
     // finds a warm connection instead of paying a cold handshake.
     expect(options.min).toBe(1);
     expect(options.idleTimeoutMillis).toBe(30_000);
+  });
+
+  it('gives a connection establishment its own budget, not the queue budget', () => {
+    const options = postgresPoolOptions('postgres://runtime', 44);
+
+    // `connectionTimeoutMillis` bounds pg-pool's own socket, i.e. the
+    // handshake. Sharing 250 ms with the slot queue cut healthy connections
+    // and answered a database outage (ADR-0088).
+    expect(options.connectionTimeoutMillis).toBe(POSTGRES_CONNECT_TIMEOUT_MS);
+    expect(options.connectionTimeoutMillis).toBeGreaterThan(
+      POSTGRES_ACQUISITION_TIMEOUT_MS,
+    );
+  });
+});
+
+describe('Postgres pool connect budget', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('does not cut an opening connection at the queue deadline', async () => {
+    jest.useFakeTimers();
+    const connect = jest.spyOn(Pool.prototype, 'connect');
+    const callbacks: ConnectCallback[] = [];
+    connect.mockImplementation(((callback: ConnectCallback) => {
+      callbacks.push(callback);
+    }) as never);
+    const pool = createPostgresPool('integration-test', { max: 1 });
+
+    const pending = pool.connect();
+    // A cold TCP, TLS, and authentication handshake outlasts the 250 ms a
+    // queued request may wait, and truncating it is what answered
+    // 503 DATABASE_UNAVAILABLE while PostgreSQL was healthy.
+    jest.advanceTimersByTime(400);
+
+    const release = jest.fn<undefined, [Error | boolean | undefined]>();
+    const client = {
+      getTransactionStatus: () => 'I',
+      release,
+    } as unknown as PoolClient;
+    callbacks[0]?.(undefined, client, (error) => client.release(error));
+
+    const borrowedClient = await pending;
+    borrowedClient.release();
+
+    expect(release).toHaveBeenCalledWith();
   });
 });
 

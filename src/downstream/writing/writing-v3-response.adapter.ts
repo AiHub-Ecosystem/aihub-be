@@ -2,7 +2,10 @@ import { type Static, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { CRITERION_IDS, type CriterionId } from '@/contracts/writing/grading';
-import type { WritingV2GradeResponse } from '@/contracts/writing/v2/grading';
+import {
+  WritingErrorPrioritySchema,
+  type WritingV2GradeResponse,
+} from '@/contracts/writing/v2/grading';
 import { contractViolation } from '@/downstream/contract-violation';
 
 const Strings = Type.Array(Type.String());
@@ -29,6 +32,10 @@ const ProviderCriterion = Type.Object({
     }),
   ),
   feedback_detail: Strings,
+});
+
+const ProviderErrorPriority = Type.Omit(WritingErrorPrioritySchema, [], {
+  additionalProperties: true,
 });
 
 // Shape read from the captured v3 fixtures (test/fixtures/ai-writing/
@@ -64,6 +71,7 @@ const ProviderBody = Type.Object({
         error_new: Strings,
       }),
     }),
+    error_priority: Type.Array(ProviderErrorPriority, { maxItems: 3 }),
   }),
 });
 
@@ -137,6 +145,16 @@ export function parseWritingV3Response(body: unknown): WritingV2GradeResponse {
         error_new: assessment.Progress.error_new,
       },
     },
+    error_priority: data.error_priority.map(
+      ({ rank, group, code, name_en, name_vi, reason_vi }) => ({
+        rank,
+        group,
+        code,
+        name_en,
+        name_vi,
+        reason_vi,
+      }),
+    ),
     data_micro,
   };
 }

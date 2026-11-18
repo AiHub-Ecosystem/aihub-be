@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   isRowlessWrite,
   normalizeRawRows,
@@ -41,10 +42,10 @@ export function authQueryRows<T extends object = Record<string, unknown>>(
  * the code Prisma gives a model operation for the same violation.
  */
 export function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
+  if (!isRecord(error) || !('code' in error)) {
     return false;
   }
-  const { code } = error as { code?: unknown };
+  const code = error['code'];
   return code === '23505' || code === 'P2002';
 }
 

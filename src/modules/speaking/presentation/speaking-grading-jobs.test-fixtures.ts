@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { type AppError, internalError } from '@/common/errors/app-error';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
@@ -25,6 +23,8 @@ import type {
   SpeakingAudioEnvironment,
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+
+import { fixtureJson } from '../../../../test/support/json-fixtures';
 
 export const JOB_ID = 'sgj_01J00000000000000000000001';
 export const ASSET_ID = 'aud_01J00000000000000000000001';
@@ -446,11 +446,10 @@ export function speakingAsset(
 }
 
 function speakingResult(): SpeakingV2QuestionResult {
-  const fixturePath = join(
-    __dirname,
-    '../../../../test/fixtures/ai-speaking/grading-v2-question-post.200.json',
-  );
-  const parsed = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
+  const parsed = fixtureJson(
+    'ai-speaking',
+    'grading-v2-question-post.200.json',
+  ) as {
     readonly data: SpeakingV2QuestionResult;
   };
   const result = parsed.data;

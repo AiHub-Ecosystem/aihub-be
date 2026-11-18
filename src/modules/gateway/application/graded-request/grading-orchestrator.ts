@@ -9,6 +9,7 @@ import {
 } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { WritingV2StoredGradeResponseSchema } from '@/contracts/writing/v2/grading';
 import {
   readDispatchTelemetry,
   withDispatchTelemetry,
@@ -58,7 +59,7 @@ function decodeStoredResult<K extends OperationId>(
     isRecord(value) &&
     !isMalformed(value, operation) &&
     def.responseContract !== 'unresolved'
-      ? parseStoredData(def.responseContract, value['data'])
+      ? parseStoredData(def.responseContract, value['data'], operation)
       : undefined;
   if (!isRecord(value) || data === undefined) {
     const operationGroup = operation.split('.')[0] ?? 'graded';
@@ -81,11 +82,24 @@ function decodeStoredResult<K extends OperationId>(
  * (#754), so unknown members are cleaned away rather than refused. `Convert`
  * stays out: a known member of the wrong type is still a malformed body.
  */
-function parseStoredData(contract: TSchema, data: unknown): unknown {
+function parseStoredData(
+  contract: TSchema,
+  data: unknown,
+  operation: OperationId,
+): unknown {
+  // Older completed Writing v2 results lack this field; preserve their shape
+  // on replay. Fresh provider responses remain strict in the adapter.
+  const storedContract =
+    isRecord(data) &&
+    (operation === 'writing.v2.task1.grade' ||
+      operation === 'writing.v2.task2.grade') &&
+    !('error_priority' in data)
+      ? WritingV2StoredGradeResponseSchema
+      : contract;
   try {
     return Value.Parse(
       ['Clone', 'Clean', 'Default', 'Assert', 'Decode'],
-      contract,
+      storedContract,
       data,
     );
   } catch {

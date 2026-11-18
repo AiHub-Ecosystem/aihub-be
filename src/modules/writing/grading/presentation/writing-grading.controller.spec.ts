@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -27,9 +24,8 @@ import {
   QUOTA_COUNTER,
   type QuotaCounterPort,
 } from '@/modules/metering/public/quota-counter';
+import { fixtureJson } from '../../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
-
-const FIXTURES = join(__dirname, '../../../../../test/fixtures/ai-writing');
 
 const Task1FixtureSchema = Type.Object(
   {
@@ -63,17 +59,11 @@ const GradingResponseSchema = Type.Object({
 });
 
 function fixture<T extends TSchema>(name: string, schema: T): Static<T> {
-  return Value.Parse(
-    schema,
-    JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')),
-  );
+  return Value.Parse(schema, fixtureJson('ai-writing', name));
 }
 
 function rawFixture(name: string): unknown {
-  const parsed: unknown = JSON.parse(
-    readFileSync(join(FIXTURES, name), 'utf8'),
-  );
-  return parsed;
+  return fixtureJson('ai-writing', name);
 }
 
 function gradingResponse(response: { json(): unknown }) {

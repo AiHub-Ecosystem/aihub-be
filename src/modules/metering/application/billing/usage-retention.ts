@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import { calculateMonthAnchoredCutoff } from '@/common/time/month-anchored-cutoff';
 
 export const USAGE_PRUNE_BATCH_SIZE = 1000;
@@ -112,15 +113,13 @@ export function compareUsageRetentionCursor(
 
 function validCursor(value: unknown): value is UsageRetentionCursor {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
+    isRecord(value) &&
     'createdAt' in value &&
-    value.createdAt instanceof Date &&
-    validDate(value.createdAt) &&
+    value['createdAt'] instanceof Date &&
+    validDate(value['createdAt']) &&
     'requestId' in value &&
-    typeof value.requestId === 'string' &&
-    value.requestId.length > 0
+    typeof value['requestId'] === 'string' &&
+    value['requestId'].length > 0
   );
 }
 
@@ -174,8 +173,7 @@ export class UsageRetentionService {
       }
 
       if (
-        typeof batch !== 'object' ||
-        batch === null ||
+        !isRecord(batch) ||
         !Number.isSafeInteger(batch.deleted) ||
         batch.deleted < 0 ||
         batch.deleted > this.batchSize

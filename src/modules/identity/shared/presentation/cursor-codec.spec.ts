@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   CURSOR_VERSION,
   computeScopeHash,
@@ -12,14 +13,8 @@ interface TestPosition {
 }
 
 function isTestPosition(value: unknown): value is TestPosition {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate['username'] === 'string' &&
-    candidate['username'].length > 0
-  );
+  if (!isRecord(value)) return false;
+  return typeof value['username'] === 'string' && value['username'].length > 0;
 }
 
 describe('cursor-codec', () => {

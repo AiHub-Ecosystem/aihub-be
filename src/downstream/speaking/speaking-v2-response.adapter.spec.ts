@@ -1,17 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { parseSpeakingV2PartResult } from './speaking-v2-part-response.adapter';
 import { parseSpeakingV2QuestionResult } from './speaking-v2-question-response.adapter';
 import { parseSpeakingV2TestResult } from './speaking-v2-test-response.adapter';
-
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
-
-function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
-}
 
 function forbiddenPaths(value: unknown, path = '$'): string[] {
   if (Array.isArray(value)) {
@@ -19,9 +12,7 @@ function forbiddenPaths(value: unknown, path = '$'): string[] {
       forbiddenPaths(item, `${path}[${index}]`),
     );
   }
-  if (typeof value !== 'object' || value === null) {
-    return [];
-  }
+  if (!isRecord(value)) return [];
   return Object.entries(value).flatMap(([key, item]) => {
     const current = `${path}.${key}`;
     const hidden =
@@ -44,12 +35,12 @@ describe('Speaking v2 response adapters', () => {
     ['grading-v2-test-post.200.json', parseSpeakingV2TestResult],
     ['grading-v2-test-get.200.json', parseSpeakingV2TestResult],
   ])('projects captured result %s without private fields', (name, parse) => {
-    expect(forbiddenPaths(parse(fixture(name)))).toEqual([]);
+    expect(forbiddenPaths(parse(fixtureJson('ai-speaking', name)))).toEqual([]);
   });
 
   it('exposes the transcript and located findings of a question result', () => {
     const result = parseSpeakingV2QuestionResult(
-      fixture('grading-v2-question-post.200.json'),
+      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
     );
 
     expect(result.transcript.text.length).toBeGreaterThan(0);
@@ -77,7 +68,7 @@ describe('Speaking v2 response adapters', () => {
   ])(
     'gives aggregate result %s criteria without a transcript',
     (name, parse) => {
-      const result = parse(fixture(name));
+      const result = parse(fixtureJson('ai-speaking', name));
 
       expect(result).not.toHaveProperty('transcript');
       expect(result.criteria.pronunciation.summary.reason_for_band_vi).toEqual(
@@ -88,13 +79,19 @@ describe('Speaking v2 response adapters', () => {
   );
 
   it('fails closed when criteria or the transcript is missing', () => {
-    const noCriteria = fixture('grading-v2-question-post.200.json') as {
+    const noCriteria = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: Record<string, unknown>;
     };
     delete noCriteria.data['criteria'];
     expect(() => parseSpeakingV2QuestionResult(noCriteria)).toThrow(AppError);
 
-    const noTranscript = fixture('grading-v2-question-post.200.json') as {
+    const noTranscript = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: Record<string, unknown>;
     };
     noTranscript.data['transcript'] = null;
@@ -104,7 +101,10 @@ describe('Speaking v2 response adapters', () => {
   it('accepts the nulls the provider returns for ids the caller did not send and for audio with no speech', () => {
     // A real call with no test_id, no part_result_id and a recording without
     // speech returned null for all three; the captured fixtures supplied them.
-    const body = fixture('grading-v2-question-post.200.json') as {
+    const body = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: {
         meta: Record<string, unknown>;
         transcript: { stats: Record<string, unknown> };
@@ -128,7 +128,9 @@ describe('Speaking v2 response adapters', () => {
   ])(
     'accepts a null total_speaking_seconds on %s, which the provider returns for recordings without speech',
     (name, parse) => {
-      const body = fixture(name) as { data: { meta: Record<string, unknown> } };
+      const body = fixtureJson('ai-speaking', name) as {
+        data: { meta: Record<string, unknown> };
+      };
       body.data.meta['total_speaking_seconds'] = null;
 
       expect(parse(body).meta.total_speaking_seconds).toBeNull();
@@ -136,7 +138,10 @@ describe('Speaking v2 response adapters', () => {
   );
 
   it('accepts a located finding whose codes and advice are null, which a real recording returned', () => {
-    const body = fixture('grading-v2-question-post.200.json') as {
+    const body = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: {
         criteria: Record<string, { diagnostics: Record<string, unknown>[] }>;
       };
@@ -157,13 +162,19 @@ describe('Speaking v2 response adapters', () => {
   });
 
   it('fails closed when a required score is missing or mistyped', () => {
-    const missing = fixture('grading-v2-question-post.200.json') as {
+    const missing = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: { scores: Record<string, unknown> };
     };
     delete missing.data.scores['overall'];
     expect(() => parseSpeakingV2QuestionResult(missing)).toThrow(AppError);
 
-    const mistyped = fixture('grading-v2-question-post.200.json') as {
+    const mistyped = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    ) as {
       data: { scores: Record<string, unknown> };
     };
     mistyped.data.scores['overall'] = '7.5';

@@ -1,4 +1,4 @@
-# ADR-0172: The gateway sheds load by request tier and keeps the tier local
+# ADR-0173: The gateway sheds load by request tier and keeps the tier local
 
 - Status: Accepted
 - Date: 2026-11-17

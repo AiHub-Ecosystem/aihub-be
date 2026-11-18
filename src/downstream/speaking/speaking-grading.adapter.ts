@@ -1,6 +1,7 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
+import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   SpeakingGradeInput,
@@ -68,11 +69,10 @@ export function parseSpeakingGradingError(
 ): DownstreamErrorHint | undefined {
   if (
     status >= 500 &&
-    typeof body === 'object' &&
-    body !== null &&
+    isRecord(body) &&
     'detail' in body &&
-    typeof body.detail === 'string' &&
-    body.detail.includes(UNREADABLE_AUDIO_MARKER)
+    typeof body['detail'] === 'string' &&
+    body['detail'].includes(UNREADABLE_AUDIO_MARKER)
   ) {
     return {
       code: 'AUDIO_UNREADABLE',

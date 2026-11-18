@@ -6,6 +6,7 @@ import { AppError, internalError } from '@/common/errors/app-error';
 
 import { S3Client } from '@aws-sdk/client-s3';
 
+import { isRecord } from '@/common/is-record';
 import { setObjectStorageQueueSource } from '@/common/observability/metrics';
 import {
   DEFAULT_SEAWEEDFS_ENDPOINT,
@@ -100,9 +101,7 @@ export function createSeaweedFsS3Client(
       try {
         const result = await next(args);
         const body =
-          typeof result.output === 'object' &&
-          result.output !== null &&
-          'Body' in result.output
+          isRecord(result.output) && 'Body' in result.output
             ? result.output.Body
             : undefined;
         if (

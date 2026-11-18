@@ -19,6 +19,7 @@ import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import { METRICS_ROUTE_PATH, getMetrics } from '@/common/observability/metrics';
 import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import {
@@ -73,10 +74,6 @@ const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 
 function matchesPattern(value: unknown, pattern: RegExp): boolean {
   return typeof value === 'string' && pattern.test(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Stands in for container stdout, so assertions read the real log lines. */

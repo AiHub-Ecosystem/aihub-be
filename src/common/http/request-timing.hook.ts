@@ -1,4 +1,4 @@
-import { isObject } from './is-object';
+import { isRecord } from '@/common/is-record';
 
 interface TimingHookableInstance {
   addHook(...args: never[]): unknown;
@@ -19,7 +19,7 @@ export function registerRequestTiming(instance: TimingHookableInstance): void {
   Reflect.apply(instance.addHook.bind(instance), instance, [
     'onRequest',
     (request: TimedRequest, _reply: unknown, done: () => void): void => {
-      if (isObject(request.raw)) {
+      if (isRecord(request.raw)) {
         timingByRequest.set(request.raw, { startedAt: performance.now() });
       }
       done();
@@ -31,7 +31,7 @@ export function requestDurationMs(
   rawRequest: unknown,
   fallbackMs: number,
 ): number {
-  const timing = isObject(rawRequest)
+  const timing = isRecord(rawRequest)
     ? timingByRequest.get(rawRequest)
     : undefined;
   return timing === undefined
@@ -41,7 +41,7 @@ export function requestDurationMs(
 
 /** Called after guards and body validation, before gateway orchestration starts. */
 export function markRequestAdmission(rawRequest: unknown): void {
-  const timing = isObject(rawRequest)
+  const timing = isRecord(rawRequest)
     ? timingByRequest.get(rawRequest)
     : undefined;
   if (timing !== undefined && timing.admissionMs === undefined) {
@@ -53,7 +53,7 @@ export function markRequestAdmission(rawRequest: unknown): void {
 }
 
 export function requestAdmissionMs(rawRequest: unknown): number | undefined {
-  const timing = isObject(rawRequest)
+  const timing = isRecord(rawRequest)
     ? timingByRequest.get(rawRequest)
     : undefined;
   return timing?.admissionMs;

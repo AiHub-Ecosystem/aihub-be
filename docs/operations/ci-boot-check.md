@@ -19,13 +19,18 @@ candidate writes through both images. CI publishes only after both checks pass.
 
 ## N-1 release compatibility
 
-`scripts/ci/n-minus-one/previous-deployed-release.ts` selects the newest
-completed CD run whose Production cutover and smoke step passed, even when a
-later Sandbox step failed and left Production on the newer SHA. If any main CD
-run is still active, the lookup fails closed; rerun CI after that deployment
-settles. The gate pulls the immutable Production SHA tag from GHCR, migrates
-the isolated database with the candidate image, and runs both images
-concurrently against the same database and Redis endpoint. It fails if N-1
+On a push to `main`, the read-only VPS job passes the active Production and
+Sandbox revisions to `Image boot` in a same-run artifact. GitHub can suppress
+job outputs when a SHA happens to contain a masked substring. Missing or invalid
+revision data fails the lane before it can choose a different predecessor.
+Pull requests continue to look up the deployed revisions from GitHub history.
+
+`scripts/ci/n-minus-one/previous-deployed-release.ts` finds the deployed image
+for each tier, including when a Sandbox cutover fails after Production has
+advanced. If any main CD run is still active, the lookup fails closed. Rerun CI
+after that deployment settles. The gate pulls the immutable Production digest
+from GHCR, migrates the isolated database with the candidate image, and runs
+both images concurrently against the same database and Redis endpoint. It fails if N-1
 cannot start, cannot read candidate-written idempotency, audit, usage, or
 email-outbox data, or returns a server error to those reads.
 

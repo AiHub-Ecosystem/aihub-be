@@ -1281,6 +1281,11 @@ The response uses the common `{ "data", "meta" }` envelope. `data` has:
 - `overall_assessment`: `summary` (`overall`, `detail`, `cta`) and `progress`
   (`status`, and the lists `error_recur`, `error_impro` and `error_new`), which
   reports on this essay against the End-User's earlier results.
+- `error_priority`: up to three provider-ranked Writing priority errors. Each
+  entry has `rank`, `group`, `code`, `name_en`, `name_vi` and `reason_vi`; the
+  provider's order is preserved. `code` is open-ended, and `group` is one of
+  `task_achievement_response_coherence_cohesion`, `lexical_resource` or
+  `grammatical_range_accuracy`.
 - `data_micro`: the errors grouped by criterion and then by code, as
   `{ "<criterion>": { "<code>": { "prompt", "question_type", "comments": [{ "quote", "explanation" }] } } }`.
   It is empty (`{}`) when no error was found. Exercise routes take one selected
@@ -1803,7 +1808,7 @@ own profile. `best-effort` is where retries are harmless: a Writing or Speaking
 grading call you retry later costs you nothing.
 
 Tier is a gateway decision only. AIHUB does not forward it to the AI Services;
-the documented AI Service contract is unchanged (ADR-0172). Recovery is
+the documented AI Service contract is unchanged (ADR-0173). Recovery is
 hysteretic: AIHUB restores a shed tier only after saturation stays below its
 threshold for a sustained window, so a single quiet second does not cause the
 next one to flood.

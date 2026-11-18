@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.9.0"
+    "version": "2.10.0"
   },
   "servers": [
     {
@@ -906,6 +906,7 @@
                         "overall_band",
                         "criteria",
                         "overall_assessment",
+                        "error_priority",
                         "data_micro"
                       ],
                       "properties": {
@@ -1096,6 +1097,57 @@
                                     "type": "string"
                                   }
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "error_priority": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "rank",
+                              "group",
+                              "code",
+                              "name_en",
+                              "name_vi",
+                              "reason_vi"
+                            ],
+                            "properties": {
+                              "rank": {
+                                "minimum": 1,
+                                "maximum": 3,
+                                "type": "integer"
+                              },
+                              "group": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement_response_coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "name_en": {
+                                "type": "string"
+                              },
+                              "name_vi": {
+                                "type": "string"
+                              },
+                              "reason_vi": {
+                                "type": "string"
                               }
                             }
                           }
@@ -1328,6 +1380,7 @@
                         "overall_band",
                         "criteria",
                         "overall_assessment",
+                        "error_priority",
                         "data_micro"
                       ],
                       "properties": {
@@ -1518,6 +1571,57 @@
                                     "type": "string"
                                   }
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "error_priority": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "rank",
+                              "group",
+                              "code",
+                              "name_en",
+                              "name_vi",
+                              "reason_vi"
+                            ],
+                            "properties": {
+                              "rank": {
+                                "minimum": 1,
+                                "maximum": 3,
+                                "type": "integer"
+                              },
+                              "group": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement_response_coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "name_en": {
+                                "type": "string"
+                              },
+                              "name_vi": {
+                                "type": "string"
+                              },
+                              "reason_vi": {
+                                "type": "string"
                               }
                             }
                           }

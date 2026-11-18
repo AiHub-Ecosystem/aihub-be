@@ -9,7 +9,11 @@ import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
-import { isShuttingDown } from '@/common/http/background-work-drain';
+import { shutdownStartedAt } from '@/common/http/background-work-drain';
+import {
+  backgroundDrainMs,
+  largestRequestTimeoutMs,
+} from '@/common/http/shutdown-budget';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   ConcurrencyDecision,
@@ -17,10 +21,7 @@ import type {
   ConcurrencyLimiterPort,
   ConcurrencyRequest,
 } from '@/modules/gateway/application/concurrency-limiter.port';
-import {
-  REDIS_COMMAND_TIMEOUT_MS,
-  type RedisGatewayClient,
-} from './redis-gateway.client';
+import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<
   RedisGatewayClient,
@@ -34,13 +35,10 @@ export const CONCURRENCY_RETRY_AFTER_MS = 500;
 // being graded would free its own slot. redis-concurrency-limiter.spec.ts pins it.
 export const CONCURRENCY_STALE_LEASE_MS = 135_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
-// Keep 15 seconds of the 75-second background drain this budget was sized
-// against for event-loop delay.
-const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS = 60_000;
-const LEASE_REMOVAL_ATTEMPTS = Math.floor(
-  (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /
-    (LEASE_REMOVAL_RETRY_MS + REDIS_COMMAND_TIMEOUT_MS),
-);
+// Retry for as long as the background drain waits, keeping 15 seconds of it for
+// event-loop delay. Derived, so a longer route timeout widens both together.
+const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS =
+  backgroundDrainMs(largestRequestTimeoutMs()) - 15_000;
 
 export const ACQUIRE_CONCURRENCY_SCRIPT = `
 local server_time = redis.call('TIME')
@@ -189,14 +187,14 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     };
   }
 
-  // A retry-exhausted permit is pruned on the next acquire after its stale window.
+  // Retries run until the stale window, however fast each ZREM fails; a
+  // permit still held then is pruned on the next acquire.
   private removeLater(
     client: RedisConcurrencyClient,
     keys: readonly string[],
     requestId: string,
-    attempt = 1,
+    startedAt = Date.now(),
     settle?: () => void,
-    shutdownStartedAt?: number,
   ): void {
     if (settle === undefined) {
       backgroundWorkStarted();
@@ -211,17 +209,16 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         backgroundWorkSettled();
       };
       this.pendingRemovals.add(finish);
-      this.removeLater(client, keys, requestId, attempt, finish);
+      this.removeLater(client, keys, requestId, startedAt, finish);
       return;
     }
-    const shutdownStartedAtForRetry = isShuttingDown()
-      ? (shutdownStartedAt ?? Date.now())
-      : undefined;
+    // Measured from shutdown itself: a release deferred until background work
+    // settles can first fail well into the drain.
+    const shutdownAt = shutdownStartedAt();
     if (
       this.stopping ||
-      (shutdownStartedAtForRetry !== undefined &&
-        Date.now() - shutdownStartedAtForRetry >=
-          LEASE_REMOVAL_SHUTDOWN_BUDGET_MS)
+      (shutdownAt !== undefined &&
+        Date.now() - shutdownAt >= LEASE_REMOVAL_SHUTDOWN_BUDGET_MS)
     ) {
       settle();
       return;
@@ -239,15 +236,12 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
           },
           (error) => {
             this.health.reportDegraded(error);
-            if (attempt < LEASE_REMOVAL_ATTEMPTS && !this.stopping) {
-              this.removeLater(
-                client,
-                keys,
-                requestId,
-                attempt + 1,
-                settle,
-                shutdownStartedAtForRetry,
-              );
+            if (
+              Date.now() + LEASE_REMOVAL_RETRY_MS - startedAt <
+                CONCURRENCY_STALE_LEASE_MS &&
+              !this.stopping
+            ) {
+              this.removeLater(client, keys, requestId, startedAt, settle);
             } else {
               settle();
             }

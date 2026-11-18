@@ -13,6 +13,7 @@ import {
   type PublicRouteDef,
   isPublicRouteId,
 } from '@/catalog/public-routes';
+import { isRecord } from '@/common/is-record';
 import { Type } from '@sinclair/typebox';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
@@ -63,10 +64,6 @@ interface OpenApiDocument {
     readonly responses: Record<string, unknown>;
   };
   readonly paths: Record<string, OpenApiPathItem>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 const OPENAPI_METHODS = new Set([

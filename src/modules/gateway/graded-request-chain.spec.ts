@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import fastifyCookie from '@fastify/cookie';
 import {
   GUARDS_METADATA,
@@ -16,6 +13,7 @@ import { MockAgent } from 'undici/index.js';
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
@@ -57,6 +55,7 @@ import {
   WritingGradingController,
   WritingV2GradingController,
 } from '@/modules/writing/public/grading';
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
@@ -64,8 +63,6 @@ import {
   GRADED_REQUEST_INTERCEPTORS,
   GRADED_REQUEST_OPERATIONS,
 } from './presentation/graded-request.decorator';
-
-const FIXTURES = join(__dirname, '../../..', 'test/fixtures/ai-writing');
 
 function operationsServedBy(controller: { prototype: object }): string[] {
   const prototype = controller.prototype as Record<string, unknown>;
@@ -87,22 +84,17 @@ function operationsServedBy(controller: { prototype: object }): string[] {
 }
 
 function fixture(name: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as Record<
-    string,
-    unknown
-  >;
+  const value = fixtureJson('ai-writing', name);
+  if (!isRecord(value)) throw new Error(`Fixture ${name} must be an object`);
+  return value;
 }
 
 function providerFailureSample(name: string) {
   const sample = fixture(name);
   if (
     typeof sample['status'] !== 'number' ||
-    typeof sample['headers'] !== 'object' ||
-    sample['headers'] === null ||
-    Array.isArray(sample['headers']) ||
-    typeof sample['body'] !== 'object' ||
-    sample['body'] === null ||
-    Array.isArray(sample['body'])
+    !isRecord(sample['headers']) ||
+    !isRecord(sample['body'])
   ) {
     throw new Error('provider failure sample is incomplete');
   }

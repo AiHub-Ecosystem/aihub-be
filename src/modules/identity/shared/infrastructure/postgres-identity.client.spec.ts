@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 
+import { isRecord } from '@/common/is-record';
 import { Prisma, PrismaClient } from '@prisma-client/client';
 
 import {
@@ -191,7 +192,7 @@ describe('Identity transaction lifetime on Prisma', () => {
       },
     ]);
     const firstRow = rows[0];
-    if (typeof firstRow !== 'object' || firstRow === null) {
+    if (!isRecord(firstRow)) {
       throw new Error('The raw query returned no row');
     }
     expect(Buffer.isBuffer(Reflect.get(firstRow, 'binary'))).toBe(true);

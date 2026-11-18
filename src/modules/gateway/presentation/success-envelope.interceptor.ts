@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   type CallHandler,
   type ExecutionContext,
@@ -40,15 +41,11 @@ interface DispatchResultLike {
 }
 
 function isDispatchResult(value: unknown): value is DispatchResultLike {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<DispatchResultLike>;
+  if (!isRecord(value)) return false;
   return (
-    typeof candidate.operation === 'string' &&
-    typeof candidate.downstreamMs === 'number' &&
-    'data' in candidate
+    typeof value['operation'] === 'string' &&
+    typeof value['downstreamMs'] === 'number' &&
+    'data' in value
   );
 }
 

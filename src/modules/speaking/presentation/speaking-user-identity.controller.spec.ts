@@ -11,6 +11,7 @@ import { AppModule } from '@/app.module';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
@@ -47,10 +48,6 @@ interface CapturedOutboundRequest {
   readonly operation: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: CapturedBody;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function jsonBody(value: unknown): Record<string, unknown> {

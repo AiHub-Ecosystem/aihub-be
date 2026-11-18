@@ -1,12 +1,13 @@
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { type FastifyRequest, LogController } from 'fastify';
 
+import { isRecord } from '@/common/is-record';
 import { createRequestLogging } from './request-logger';
 
 describe('createRequestLogging', () => {
   function level(value?: string): unknown {
     const { logger } = createRequestLogging(undefined, value);
-    return typeof logger === 'object' ? logger.level : undefined;
+    return isRecord(logger) ? logger['level'] : undefined;
   }
 
   it('defaults to the validated configuration value', () => {

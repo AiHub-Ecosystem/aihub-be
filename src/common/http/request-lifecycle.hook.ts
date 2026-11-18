@@ -4,11 +4,11 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { timeoutError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   type DisconnectableRequest,
   createClientDisconnectSignal,
 } from './client-disconnect-signal';
-import { isObject } from './is-object';
 import { pathnameOf } from './request-path';
 
 const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
@@ -59,15 +59,15 @@ const lifecycleByRequest = new WeakMap<object, RequestLifecycleState>();
 
 function isPayloadStream(value: unknown): value is PayloadStream {
   return (
-    isObject(value) &&
+    isRecord(value) &&
     'on' in value &&
-    typeof value.on === 'function' &&
+    typeof value['on'] === 'function' &&
     'once' in value &&
-    typeof value.once === 'function' &&
+    typeof value['once'] === 'function' &&
     'pipe' in value &&
-    typeof value.pipe === 'function' &&
+    typeof value['pipe'] === 'function' &&
     'destroy' in value &&
-    typeof value.destroy === 'function'
+    typeof value['destroy'] === 'function'
   );
 }
 
@@ -150,7 +150,7 @@ export function createRequestLifecycleState(
 export function getRequestLifecycle(
   rawRequest: unknown,
 ): RequestLifecycleState | undefined {
-  return isObject(rawRequest) ? lifecycleByRequest.get(rawRequest) : undefined;
+  return isRecord(rawRequest) ? lifecycleByRequest.get(rawRequest) : undefined;
 }
 
 export function registerRequestLifecycle(
@@ -170,7 +170,7 @@ export function registerRequestLifecycle(
         TIMED_ROUTES.find(
           (route) => route.method === request.method && route.path.test(path),
         )?.timeoutMs;
-      if (timeoutMs === undefined || !isObject(request.raw)) {
+      if (timeoutMs === undefined || !isRecord(request.raw)) {
         done();
         return;
       }

@@ -1,14 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { GradeTask2Request } from '@/contracts/writing/grading';
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { task2GradeAdapter } from './task2-grade.adapter';
 
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-writing');
-
 function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
+  return fixtureJson('ai-writing', name);
 }
 
 const context = createRequestContext({

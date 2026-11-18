@@ -16,6 +16,8 @@
  * drops the rest on purpose.
  */
 
+import { isRecord } from '@/common/is-record';
+
 export type DriftKind = 'nullable' | 'optional' | 'type' | 'enum' | 'extra-key';
 
 export interface Drift {
@@ -43,9 +45,8 @@ interface Shape {
 }
 
 function isSchema(value: unknown): value is Schema {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
-
 function resolve(node: unknown, doc: Schema): Schema {
   let current = node;
   while (isSchema(current) && typeof current['$ref'] === 'string') {

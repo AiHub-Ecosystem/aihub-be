@@ -25,7 +25,7 @@ function peakUtilization(
 
 /**
  * Turns the adaptive concurrency limiter's saturation into a shedding level
- * (#1591, ADR-0172).
+ * (#1591, ADR-0173).
  *
  * The policy lives in the application layer and is pure; this timer only reads
  * the sample, folds it in, and writes the result where the request hook reads

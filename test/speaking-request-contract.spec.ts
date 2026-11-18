@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { Response } from 'undici/index.js';
 
+import { isRecord } from '@/common/is-record';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
@@ -17,10 +18,10 @@ import {
 
 type Json = Record<string, unknown>;
 function jsonObject(value: unknown): Json {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error('expected a JSON object');
   }
-  return value as Json;
+  return value;
 }
 const doc = jsonObject(
   JSON.parse(

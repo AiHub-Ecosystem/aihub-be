@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common';
 import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { AppError } from '@/common/errors/app-error';
+import { AppError, timeoutError } from '@/common/errors/app-error';
 import { containsUnstorableText } from '@/common/http/unstorable-text';
 import {
   type SpeakingAudio,
@@ -62,14 +62,6 @@ function payloadTooLarge(): AppError {
   });
 }
 
-function uploadTimedOut(): AppError {
-  return new AppError({
-    code: 'AI_SERVICE_TIMEOUT',
-    message: 'AI service request timed out',
-    retryable: true,
-  });
-}
-
 function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf('.');
   return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
@@ -86,7 +78,7 @@ async function readAudio(
   signal: AbortSignal,
 ): Promise<Blob> {
   if (signal.aborted) {
-    throw uploadTimedOut();
+    throw timeoutError();
   }
 
   const chunks: Uint8Array[] = [];
@@ -95,7 +87,7 @@ async function readAudio(
   try {
     for await (const chunk of part.bytes) {
       if (signal.aborted) {
-        throw uploadTimedOut();
+        throw timeoutError();
       }
 
       const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
@@ -113,7 +105,7 @@ async function readAudio(
     return new Blob(chunks);
   } catch (error) {
     if (signal.aborted) {
-      throw uploadTimedOut();
+      throw timeoutError();
     }
     throw error;
   }
@@ -279,7 +271,7 @@ export class FastifySpeakingMultipartParser
         throw payloadTooLarge();
       }
       if (signal.aborted) {
-        throw uploadTimedOut();
+        throw timeoutError();
       }
       throw invalidRequest();
     } finally {

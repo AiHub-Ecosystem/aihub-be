@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type { PostgresBreakerState } from '@/common/observability/postgres-pool-resilience-metrics';
 
 /**
@@ -26,10 +27,7 @@ export function nextBackoffMs(
  * another statement-level code would fail the same way again.
  */
 export function isRetryableConnectError(error: unknown): boolean {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? error.code
-      : undefined;
+  const code = isRecord(error) && 'code' in error ? error['code'] : undefined;
   return !(
     typeof code === 'string' &&
     /^[0-9A-Z]{5}$/.test(code) &&

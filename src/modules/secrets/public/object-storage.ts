@@ -3,23 +3,19 @@ export { DEFAULT_SEAWEEDFS_ENDPOINT } from '@/config/runtime-configuration';
 import { AppError } from '@/common/errors/app-error';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
+import { isRecord } from '@/common/is-record';
 import {
   type ObjectStorageFailureReason,
   recordObjectStorageFailure,
 } from '@/common/observability/metrics';
 
 export function objectStorageNotFound(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const { name, $metadata } = error as {
-    name?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
+  if (!isRecord(error)) return false;
+  const name = error['name'];
+  const metadata = error['$metadata'];
   return (
     name === 'NotFound' ||
-    (typeof $metadata === 'object' &&
-      $metadata !== null &&
-      'httpStatusCode' in $metadata &&
-      ($metadata as { httpStatusCode?: unknown }).httpStatusCode === 404)
+    (isRecord(metadata) && metadata['httpStatusCode'] === 404)
   );
 }
 
@@ -34,31 +30,28 @@ function failureReason(
 ): ObjectStorageFailureReason {
   if (signal?.aborted) {
     const reason: unknown = signal.reason;
-    return typeof reason === 'object' &&
-      reason !== null &&
-      'name' in reason &&
-      reason.name === 'TimeoutError'
+    return isRecord(reason) && reason['name'] === 'TimeoutError'
       ? 'deadline'
       : 'cancelled';
   }
-  if (typeof error !== 'object' || error === null) return 'unavailable';
+  if (!isRecord(error)) return 'unavailable';
   if (
     'diagnostic' in error &&
-    error.diagnostic === 'object_storage:bulkhead_exhausted'
+    error['diagnostic'] === 'object_storage:bulkhead_exhausted'
   ) {
     return 'bulkhead_exhausted';
   }
   const message =
-    'message' in error && typeof error.message === 'string'
-      ? error.message
+    'message' in error && typeof error['message'] === 'string'
+      ? error['message']
       : '';
   // The SDK can wrap a transport error without copying its code.
   if (
-    ('code' in error && error.code === 'ECONNREFUSED') ||
+    ('code' in error && error['code'] === 'ECONNREFUSED') ||
     message.includes('ECONNREFUSED')
   )
     return 'connection_refused';
-  if ('name' in error && error.name === 'TimeoutError') {
+  if ('name' in error && error['name'] === 'TimeoutError') {
     if (message.includes('did not establish a connection'))
       return 'connection_timeout';
     if (message.includes('requestTimeout')) return 'request_timeout';
