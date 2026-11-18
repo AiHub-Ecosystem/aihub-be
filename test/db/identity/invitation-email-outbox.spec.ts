@@ -118,6 +118,7 @@ interface SealedRequest {
   readonly kind: EmailDeliveryKind;
   readonly status: string;
   readonly payload_ciphertext: string | null;
+  readonly credential_id: string | null;
 }
 
 let pool: Pool;
@@ -224,7 +225,7 @@ function invite(headers: Record<string, string> = {}) {
 
 async function queuedRequests(): Promise<readonly SealedRequest[]> {
   const result = await pool.query<SealedRequest>(
-    'SELECT id, kind, status, payload_ciphertext FROM email_delivery_requests ORDER BY created_at',
+    'SELECT id, kind, status, payload_ciphertext, credential_id FROM email_delivery_requests ORDER BY created_at',
   );
   return result.rows;
 }
@@ -296,6 +297,19 @@ describe('organization invitation email outbox over HTTP', () => {
     expect(sealedPayload(requests[0]).token).toEqual(expect.any(String));
     // The provider is no longer called in the request path.
     expect(sender.calls).toHaveLength(0);
+
+    // Support can follow the invitation to its request and back (#441).
+    const invitation = await pool.query<{ id: string }>(
+      'SELECT id FROM organization_invitations',
+    );
+    expect(requests[0]?.credential_id).toBe(invitation.rows[0]?.id);
+    const audit = await pool.query<{ detail: Record<string, unknown> }>(
+      'SELECT detail FROM organization_audit_events',
+    );
+    expect(audit.rows[0]?.detail).toEqual({
+      role: 'member',
+      emailDeliveryRequestId: requests[0]?.id,
+    });
   });
 
   it('emails the credential it committed rather than a re-minted one', async () => {

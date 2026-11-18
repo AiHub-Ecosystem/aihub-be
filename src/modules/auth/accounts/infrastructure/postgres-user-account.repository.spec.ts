@@ -47,6 +47,7 @@ function scriptedEmailOutbox(reserve: boolean): EmailOutboxPort & {
     reserveAuthenticationEmailRecipient: async () => reserve,
     queue: async (_transaction, request) => {
       queued.push(request);
+      return 'edr_queued';
     },
     withdraw: async () => undefined,
   };
@@ -60,6 +61,7 @@ const emailDelivery = {
     expiresAt: '2026-09-20T00:00:00.000Z',
   },
   createdAt: input.now,
+  credentialId: input.tokenId,
 } as const;
 
 describe('PostgresUserAccountRepository', () => {

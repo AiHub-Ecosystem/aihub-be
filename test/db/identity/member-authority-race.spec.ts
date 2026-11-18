@@ -193,6 +193,7 @@ function recordingOutbox() {
     reserveAuthenticationEmailRecipient: async () => true,
     queue: async (_transaction, input) => {
       queued.push(input.kind);
+      return 'edr_queued';
     },
     withdraw: async () => undefined,
   };

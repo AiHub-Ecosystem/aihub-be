@@ -264,7 +264,7 @@ describe('organization invitation management idempotency seam', () => {
         return operation();
       },
       reserveAuthenticationEmailRecipient: async () => true,
-      queue: async () => undefined,
+      queue: async () => 'edr_queued',
       withdraw: async () => undefined,
     };
     repository = new ManagementRepository();

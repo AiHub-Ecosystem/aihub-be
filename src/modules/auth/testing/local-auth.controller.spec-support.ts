@@ -440,7 +440,7 @@ export async function createLocalAuthTestContext(
         return operation();
       },
       reserveAuthenticationEmailRecipient: async () => true,
-      queue: async () => undefined,
+      queue: async () => 'edr_queued',
       withdraw: async () => undefined,
     } satisfies EmailOutboxPort)
     .overrideProvider(USER_ACCESS_TOKEN_ISSUER)

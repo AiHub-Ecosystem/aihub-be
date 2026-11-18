@@ -114,6 +114,7 @@ export class LocalRegistrationService implements LocalRegistrationPort {
               expiresAt: issued.expiresAt.toISOString(),
             },
             now,
+            issued.id,
           ),
           now,
         });
@@ -252,6 +253,7 @@ export class LocalRegistrationService implements LocalRegistrationPort {
             expiresAt: issued.expiresAt.toISOString(),
           },
           now,
+          issued.id,
         ),
         now,
       });
