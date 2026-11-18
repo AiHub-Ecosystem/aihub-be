@@ -10,6 +10,10 @@ import {
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
 import { isShuttingDown } from '@/common/http/background-work-drain';
+import {
+  backgroundDrainMs,
+  largestRequestTimeoutMs,
+} from '@/common/http/shutdown-budget';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   ConcurrencyDecision,
@@ -34,9 +38,10 @@ export const CONCURRENCY_RETRY_AFTER_MS = 500;
 // being graded would free its own slot. redis-concurrency-limiter.spec.ts pins it.
 export const CONCURRENCY_STALE_LEASE_MS = 135_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
-// Keep 15 seconds of the 75-second background drain this budget was sized
-// against for event-loop delay.
-const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS = 60_000;
+// Retry for as long as the background drain waits, keeping 15 seconds of it for
+// event-loop delay. Derived, so a longer route timeout widens both together.
+const LEASE_REMOVAL_SHUTDOWN_BUDGET_MS =
+  backgroundDrainMs(largestRequestTimeoutMs()) - 15_000;
 const LEASE_REMOVAL_ATTEMPTS = Math.floor(
   (CONCURRENCY_STALE_LEASE_MS - LEASE_REMOVAL_RETRY_MS) /
     (LEASE_REMOVAL_RETRY_MS + REDIS_COMMAND_TIMEOUT_MS),

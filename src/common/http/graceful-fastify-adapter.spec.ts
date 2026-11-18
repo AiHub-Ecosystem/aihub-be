@@ -19,4 +19,42 @@ describe('GracefulFastifyAdapter', () => {
     // that is ending and not for loops that keep starting more.
     expect(seenWhileClosing).toEqual([true, true]);
   });
+
+  // A Redis adapter quits its client in onModuleDestroy, so background cleanup
+  // that still needs that client (#1003) must settle before destroy hooks run.
+  it('lets tracked background work settle before Nest runs module destroy hooks', async () => {
+    const { Module } = await import('@nestjs/common');
+    const { NestFactory } = await import('@nestjs/core');
+    const { GracefulFastifyAdapter } = await import(
+      './graceful-fastify-adapter'
+    );
+    const { backgroundWorkStarted, backgroundWorkSettled } = await import(
+      '@/common/background-work-tracker'
+    );
+    const events: string[] = [];
+
+    class RedisBackedAdapter {
+      onModuleDestroy(): void {
+        events.push('module destroyed');
+      }
+    }
+    @Module({ providers: [RedisBackedAdapter] })
+    class ShutdownOrderModule {}
+
+    const app = await NestFactory.create(
+      ShutdownOrderModule,
+      new GracefulFastifyAdapter(),
+      { logger: false },
+    );
+    await app.init();
+    backgroundWorkStarted();
+    setTimeout(() => {
+      events.push('background work settled');
+      backgroundWorkSettled();
+    }, 50);
+
+    await app.close();
+
+    expect(events).toEqual(['background work settled', 'module destroyed']);
+  });
 });

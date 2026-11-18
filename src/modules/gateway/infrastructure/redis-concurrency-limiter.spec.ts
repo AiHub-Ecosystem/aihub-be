@@ -346,10 +346,17 @@ describe('RedisConcurrencyLimiter', () => {
     await limiter.onModuleDestroy();
   });
 
-  it('bounds release recovery to the graceful shutdown budget', async () => {
+  // Keep this last: beginShutdown is one-way for the module registry.
+  it('keeps retrying release recovery through the 140-second background drain, then stops inside it', async () => {
     jest.useFakeTimers();
     const redis = new FakeRedis();
-    const zrem = jest.fn(() => Promise.reject(new Error('redis down')));
+    // Each ZREM fails at the command timeout, as a down Redis does.
+    const zrem = jest.fn(
+      () =>
+        new Promise<number>((_resolve, reject) =>
+          setTimeout(() => reject(new Error('redis down')), 400),
+        ),
+    );
     redis.zrem = zrem;
     const limiter = new RedisConcurrencyLimiter(redis);
 
@@ -361,14 +368,20 @@ describe('RedisConcurrencyLimiter', () => {
       });
       if (!decision.allowed) throw new Error('expected a concurrency lease');
 
-      await expect(decision.lease.release()).rejects.toMatchObject({
-        code: 'REDIS_UNAVAILABLE',
-      });
-      const drain = waitForBackgroundWork();
+      const release = decision.lease.release().catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(400);
+      expect(await release).toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+      let drained = false;
+      const drain = waitForBackgroundWork().then(() => (drained = true));
       beginShutdown();
 
-      await jest.advanceTimersByTimeAsync(61_000);
-      await expect(drain).resolves.toBeUndefined();
+      // The old 60-second budget gave up here, leaving the permit counted.
+      await jest.advanceTimersByTimeAsync(120_000);
+      expect(drained).toBe(false);
+
+      // Retries stop at the budget, before the drain's own 140-second ceiling.
+      await jest.advanceTimersByTimeAsync(10_000);
+      await expect(drain).resolves.toBe(true);
       const attemptsAtDrain = zrem.mock.calls.length;
       await jest.advanceTimersByTimeAsync(10_000);
       expect(zrem).toHaveBeenCalledTimes(attemptsAtDrain);
