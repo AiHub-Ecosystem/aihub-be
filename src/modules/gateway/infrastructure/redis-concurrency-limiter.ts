@@ -9,7 +9,7 @@ import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
-import { isShuttingDown } from '@/common/http/background-work-drain';
+import { shutdownStartedAt } from '@/common/http/background-work-drain';
 import {
   backgroundDrainMs,
   largestRequestTimeoutMs,
@@ -195,7 +195,6 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
     requestId: string,
     startedAt = Date.now(),
     settle?: () => void,
-    shutdownStartedAt?: number,
   ): void {
     if (settle === undefined) {
       backgroundWorkStarted();
@@ -213,14 +212,13 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
       this.removeLater(client, keys, requestId, startedAt, finish);
       return;
     }
-    const shutdownStartedAtForRetry = isShuttingDown()
-      ? (shutdownStartedAt ?? Date.now())
-      : undefined;
+    // Measured from shutdown itself: a release deferred until background work
+    // settles can first fail well into the drain.
+    const shutdownAt = shutdownStartedAt();
     if (
       this.stopping ||
-      (shutdownStartedAtForRetry !== undefined &&
-        Date.now() - shutdownStartedAtForRetry >=
-          LEASE_REMOVAL_SHUTDOWN_BUDGET_MS)
+      (shutdownAt !== undefined &&
+        Date.now() - shutdownAt >= LEASE_REMOVAL_SHUTDOWN_BUDGET_MS)
     ) {
       settle();
       return;
@@ -243,14 +241,7 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
                 CONCURRENCY_STALE_LEASE_MS &&
               !this.stopping
             ) {
-              this.removeLater(
-                client,
-                keys,
-                requestId,
-                startedAt,
-                settle,
-                shutdownStartedAtForRetry,
-              );
+              this.removeLater(client, keys, requestId, startedAt, settle);
             } else {
               settle();
             }

@@ -412,13 +412,26 @@ describe('RedisConcurrencyLimiter', () => {
       const drain = waitForBackgroundWork().then(() => (drained = true));
       beginShutdown();
 
+      // A release deferred until detached work settles first fails mid-drain.
+      await jest.advanceTimersByTimeAsync(20_000);
+      const late = await limiter.acquire({
+        organizationId: 'org_shutdown_budget',
+        maxConcurrent: 2,
+        requestId: 'req_released_mid_drain',
+      });
+      if (!late.allowed) throw new Error('expected a concurrency lease');
+      const lateRelease = late.lease.release().catch((error: unknown) => error);
+      await jest.advanceTimersByTimeAsync(400);
+      expect(await lateRelease).toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+
       // The old 60-second budget gave up here, leaving the permit counted.
-      await jest.advanceTimersByTimeAsync(120_000);
+      await jest.advanceTimersByTimeAsync(99_600);
       expect(drained).toBe(false);
 
-      // Retries stop at the budget, before the drain's own 140-second ceiling.
+      // Both stop at the budget counted from shutdown, inside the 140 s drain.
       await jest.advanceTimersByTimeAsync(10_000);
-      await expect(drain).resolves.toBe(true);
+      expect(drained).toBe(true);
+      await drain;
       const attemptsAtDrain = zrem.mock.calls.length;
       await jest.advanceTimersByTimeAsync(10_000);
       expect(zrem).toHaveBeenCalledTimes(attemptsAtDrain);
