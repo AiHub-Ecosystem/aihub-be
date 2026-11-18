@@ -1,12 +1,13 @@
+import { isRecord } from '@/common/is-record';
 import Ajv2020 from 'ajv/dist/2020';
 
 type Json = Record<string, unknown>;
 
 function object(value: unknown): Json {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error('provider request schema has an unexpected shape');
   }
-  return value as Json;
+  return value;
 }
 
 export function requestSchema(doc: Json, path: string, media: string): Json {

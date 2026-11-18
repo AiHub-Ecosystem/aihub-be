@@ -39,7 +39,7 @@ import {
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
-import { aiSpeakingFixture } from '../../../../test/support/ai-speaking-fixtures';
+import { aiSpeakingFixture } from '../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 import {
   FakeAudioRepository,

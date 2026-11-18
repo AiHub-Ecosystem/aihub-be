@@ -26,7 +26,7 @@ import {
 } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
-import { aiSpeakingFixture } from '../../../../test/support/ai-speaking-fixtures';
+import { aiSpeakingFixture } from '../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const PROVIDER = 'https://ai-speaking.test';

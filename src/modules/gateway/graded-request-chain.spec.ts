@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import fastifyCookie from '@fastify/cookie';
 import {
   GUARDS_METADATA,
@@ -58,6 +55,7 @@ import {
   WritingGradingController,
   WritingV2GradingController,
 } from '@/modules/writing/public/grading';
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 import {
@@ -65,8 +63,6 @@ import {
   GRADED_REQUEST_INTERCEPTORS,
   GRADED_REQUEST_OPERATIONS,
 } from './presentation/graded-request.decorator';
-
-const FIXTURES = join(__dirname, '../../..', 'test/fixtures/ai-writing');
 
 function operationsServedBy(controller: { prototype: object }): string[] {
   const prototype = controller.prototype as Record<string, unknown>;
@@ -88,10 +84,9 @@ function operationsServedBy(controller: { prototype: object }): string[] {
 }
 
 function fixture(name: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as Record<
-    string,
-    unknown
-  >;
+  const value = fixtureJson('ai-writing', name);
+  if (!isRecord(value)) throw new Error(`Fixture ${name} must be an object`);
+  return value;
 }
 
 function providerFailureSample(name: string) {

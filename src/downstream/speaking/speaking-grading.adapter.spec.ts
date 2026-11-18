@@ -1,10 +1,9 @@
 import { Blob } from 'node:buffer';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { UserIdentityMode } from '@/common/request-context/request-context';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { fixtureJson } from '../../../test/support/json-fixtures';
 import { speakingGradingJsonAdapter } from './speaking-grading-json.adapter';
 import {
   parseSpeakingGradingError,
@@ -12,8 +11,6 @@ import {
   requiredSpeakingUserId,
   speakingGradingAdapter,
 } from './speaking-grading.adapter';
-
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
 
 function captureError(action: () => unknown): unknown {
   try {
@@ -25,7 +22,7 @@ function captureError(action: () => unknown): unknown {
 }
 
 function capture(name: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
+  return fixtureJson('ai-speaking', name);
 }
 
 function context(

@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { isRecord } from '@/common/is-record';
+
 type Runner = (...args: readonly unknown[]) => unknown;
 
 interface RunnerDescriptor {
@@ -15,10 +17,6 @@ interface RunnerDescriptor {
 
 interface RunnerLoader {
   readonly loadCliRunner: (descriptor: RunnerDescriptor) => Promise<Runner>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isRunnerLoader(value: unknown): value is RunnerLoader {

@@ -1,13 +1,14 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync } from 'node:fs';
 
 import { isRecord } from '@/common/is-record';
-
-const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
+import {
+  fixtureDirectory,
+  fixtureJson,
+} from '../../../test/support/json-fixtures';
 
 // Every captured AI Speaking body: the success fixture and the failure
 // captures (#247). They are scrubbed by hand; this keeps them scrubbed.
-const CAPTURES = readdirSync(FIXTURES).filter((name) =>
+const CAPTURES = readdirSync(fixtureDirectory('ai-speaking')).filter((name) =>
   /^grading.*\.json$/.test(name),
 );
 
@@ -47,9 +48,7 @@ describe('captured AI Speaking fixtures', () => {
   it.each(CAPTURES)(
     '%s carries no Vietnamese text and no transcript',
     (name) => {
-      const body: unknown = JSON.parse(
-        readFileSync(join(FIXTURES, name), 'utf8'),
-      );
+      const body: unknown = fixtureJson('ai-speaking', name);
       const found = strings(body, '$');
 
       expect(

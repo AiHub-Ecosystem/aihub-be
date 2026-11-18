@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { isRecord } from '@/common/is-record';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
 import { parseSpeakingGradeResponse } from '@/downstream/speaking/speaking-grading-response.adapter';
 
@@ -22,10 +23,6 @@ interface Allowed {
   readonly kind: string;
   readonly path: string;
   readonly reason: string;
-}
-
-function isRecord(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isAllowedList(value: unknown): value is Allowed[] {

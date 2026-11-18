@@ -1,6 +1,4 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import {
   FastifyAdapter,
@@ -45,6 +43,7 @@ import {
 } from '@/modules/metering/public/quota-counter';
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
+import { fixtureJson } from '../../support/json-fixtures';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,
@@ -64,11 +63,9 @@ const DEMO_ORGANIZATION_ID = 'org_sandbox_demo_config_test';
 const ASSERTION_ISSUER = 'https://identity.customer.test';
 const GRADE_PATH = '/v1/ielts/writing/task1/grade';
 const TASK2_PATH = '/v1/ielts/writing/task2/grade';
-const GRADE_REQUEST_FIXTURE = JSON.parse(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/ai-writing/grade-task1.request.json'),
-    'utf8',
-  ),
+const GRADE_REQUEST_FIXTURE = fixtureJson(
+  'ai-writing',
+  'grade-task1.request.json',
 ) as {
   question: string;
   topic: string;
@@ -81,34 +78,26 @@ const GRADE_INPUT = {
   essay: GRADE_REQUEST_FIXTURE.essay,
   image_url: GRADE_REQUEST_FIXTURE.url,
 };
-const GRADE_RESPONSE: unknown = JSON.parse(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/ai-writing/grade-task1.response.json'),
-    'utf8',
-  ),
+const GRADE_RESPONSE: unknown = fixtureJson(
+  'ai-writing',
+  'grade-task1.response.json',
 );
-const TASK2_REQUEST_FIXTURE = JSON.parse(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/ai-writing/grade-task2.request.json'),
-    'utf8',
-  ),
+const TASK2_REQUEST_FIXTURE = fixtureJson(
+  'ai-writing',
+  'grade-task2.request.json',
 ) as { question: string; topic: string; essay: string };
 const TASK2_INPUT = {
   question: TASK2_REQUEST_FIXTURE.question,
   topic: TASK2_REQUEST_FIXTURE.topic,
   essay: TASK2_REQUEST_FIXTURE.essay,
 };
-const TASK2_RESPONSE: unknown = JSON.parse(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/ai-writing/grade-task2.response.json'),
-    'utf8',
-  ),
+const TASK2_RESPONSE: unknown = fixtureJson(
+  'ai-writing',
+  'grade-task2.response.json',
 );
-const SPEAKING_RESPONSE: unknown = JSON.parse(
-  readFileSync(
-    join(process.cwd(), 'test/fixtures/ai-speaking/grading.response.json'),
-    'utf8',
-  ),
+const SPEAKING_RESPONSE: unknown = fixtureJson(
+  'ai-speaking',
+  'grading.response.json',
 );
 
 function redisQuotaKey(): string {
