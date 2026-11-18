@@ -1,5 +1,6 @@
 import { type TSchema, Type } from '@sinclair/typebox';
 
+import { isRecord } from '@/common/is-record';
 import { OPERATION_CATALOG } from './operation-catalog';
 import { PUBLIC_ROUTES } from './public-routes';
 
@@ -67,10 +68,6 @@ const EXCEPTIONS: RouteExceptions = {
     permits: LEGACY_SPEAKING_GRADING,
   },
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 /** Whether a JSON Schema object lists `name` as a required property. */
 function requires(schema: unknown, name: string): boolean {

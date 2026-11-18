@@ -1,5 +1,7 @@
 import type { FastifyRequest } from 'fastify';
 
+import { isRecord } from '@/common/is-record';
+
 function rawCookieHeader(request: FastifyRequest): string | undefined {
   const header = request.headers.cookie;
   return Array.isArray(header) ? header.join(';') : header;
@@ -28,12 +30,7 @@ export function hasDuplicateCookie(
 }
 
 function hasQueryValue(source: unknown): boolean {
-  return (
-    typeof source === 'object' &&
-    source !== null &&
-    !Array.isArray(source) &&
-    Object.keys(source).length > 0
-  );
+  return isRecord(source) && Object.keys(source).length > 0;
 }
 
 /**

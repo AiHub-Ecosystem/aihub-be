@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { EmailOutboxPort } from '@/modules/auth/email-delivery/application/email-outbox.port';
 import type {
@@ -153,10 +154,6 @@ class ManagementRepository implements IdempotencyRepositoryPort {
       input.idempotencyKey,
     ].join(':');
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function decodeInvitation(value: unknown): InvitedOrganizationMember {

@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type {
   EmailCredentialState,
   EmailDeliveryCancelReason,
@@ -16,10 +17,7 @@ export function cancelReasonOf(
 }
 
 export function errorCodeOf(error: unknown): EmailDeliveryErrorCode {
-  return typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'TimeoutError'
+  return isRecord(error) && 'name' in error && error['name'] === 'TimeoutError'
     ? 'timeout'
     : 'provider_rejected';
 }

@@ -1,5 +1,6 @@
 import { AppModule } from '@/app.module';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
+import { isRecord } from '@/common/is-record';
 import { MfaController } from '@/modules/auth/mfa/presentation/mfa.controller';
 import { SandboxDemoKeyValidationController } from '@/modules/identity/user-assertions/presentation/sandbox-demo-key-validation.controller';
 import { RequestMethod } from '@nestjs/common';
@@ -33,10 +34,7 @@ function controllersOf(
   seen = new Set<unknown>(),
 ): Set<Controller> {
   const found = new Set<Controller>();
-  const module =
-    typeof root === 'object' && root !== null && 'module' in root
-      ? root.module
-      : root;
+  const module = isRecord(root) && 'module' in root ? root['module'] : root;
   if (typeof module !== 'function' || seen.has(module)) return found;
   seen.add(module);
 

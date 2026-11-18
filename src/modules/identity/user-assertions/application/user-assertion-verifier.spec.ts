@@ -8,6 +8,7 @@ import {
   importJWK,
 } from 'jose';
 
+import { isRecord } from '@/common/is-record';
 import { getMetrics } from '@/common/observability/metrics';
 import type {
   PublicJsonWebKey,
@@ -31,10 +32,6 @@ async function rejectedAuthCount(): Promise<number> {
       sample.startsWith('aihub_rejected_total{reason="auth"} '),
     );
   return Number(line?.split(' ').at(-1) ?? 0);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function toJwk(key: PublicJsonWebKey): JWK {

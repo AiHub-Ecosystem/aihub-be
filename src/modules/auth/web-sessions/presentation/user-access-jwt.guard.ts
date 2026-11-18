@@ -9,6 +9,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '@/common/errors/app-error';
 import { authenticationConfigurationInvalid } from '@/common/errors/auth-boundary-errors';
+import { isRecord } from '@/common/is-record';
 import {
   databaseUnavailableError,
   isPostgresUnavailable,
@@ -59,13 +60,7 @@ function hasAlternateTokenSource(request: FastifyRequest): boolean {
     (request as FastifyRequest & { readonly cookies?: unknown }).cookies,
   ];
   return sources.some((source) => {
-    if (
-      typeof source !== 'object' ||
-      source === null ||
-      Array.isArray(source)
-    ) {
-      return false;
-    }
+    if (!isRecord(source)) return false;
     return Object.keys(source).some((key) =>
       ['access_token', 'accesstoken', 'authorization', 'token'].includes(
         key.toLowerCase(),

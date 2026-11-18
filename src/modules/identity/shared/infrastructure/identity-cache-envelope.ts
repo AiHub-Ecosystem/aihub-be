@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 
+import { isRecord } from '@/common/is-record';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { canonicalJson } from '@/common/serialization/canonical-json';
 
@@ -40,7 +41,7 @@ function parseEnvelope(serialized: string): unknown {
 }
 
 function containsOwnProtoKey(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
+  if (!Array.isArray(value) && !isRecord(value)) return false;
   return (
     Object.hasOwn(value, '__proto__') ||
     Object.values(value).some(containsOwnProtoKey)
@@ -63,15 +64,11 @@ export function verifyIdentityCacheEntry(input: {
   readonly serialized: string;
 }): IdentityCacheVerificationResult {
   const envelope: unknown = parseEnvelope(input.serialized);
-  if (
-    typeof envelope !== 'object' ||
-    envelope === null ||
-    Array.isArray(envelope)
-  ) {
+  if (!isRecord(envelope)) {
     return { authenticated: false };
   }
 
-  const record = envelope as Record<string, unknown>;
+  const record = envelope;
   if (
     record['version'] !== ENVELOPE_VERSION ||
     record['kind'] !== input.kind ||

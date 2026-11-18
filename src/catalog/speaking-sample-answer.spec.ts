@@ -1,13 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { isRecord } from '@/common/is-record';
 import { SPEAKING_SAMPLE_ANSWER } from '@/modules/speaking/application/speaking-question-catalog';
 
 const REPO_ROOT = join(__dirname, '../..');
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function findPostmanItem(
   value: unknown,

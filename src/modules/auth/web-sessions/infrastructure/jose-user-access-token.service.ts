@@ -10,6 +10,7 @@ import {
 } from 'jose';
 
 import { AppError, internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS,
   userAccessTokenRsaModulusIsAcceptable,
@@ -169,11 +170,9 @@ export class JoseUserAccessTokenService
 }
 
 function isUserAccessSession(value: unknown): value is UserAccessSession {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const kind = 'kind' in value ? value.kind : undefined;
-  const id = 'id' in value ? value.id : undefined;
+  if (!isRecord(value)) return false;
+  const kind = value['kind'];
+  const id = value['id'];
   return (
     (kind === 'refresh' || kind === 'web') &&
     typeof id === 'string' &&

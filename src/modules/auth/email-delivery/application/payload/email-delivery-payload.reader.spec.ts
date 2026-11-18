@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import {
   type EmailPayloadCipherPort,
   EnvelopeCipherError,
@@ -22,8 +23,8 @@ function cipherThrowing(error: Error): EmailPayloadCipherPort {
 function asDelivery(
   read: ReturnType<typeof readEmailPayload>,
 ): Exclude<ReturnType<typeof readEmailPayload>, string | undefined> {
-  if (typeof read !== 'object') {
-    throw new Error(`expected a delivery, got ${String(read)}`);
+  if (read === undefined || typeof read === 'string' || !isRecord(read)) {
+    throw new Error('expected a delivery');
   }
   return read;
 }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 
 import { parseSpeakingV2PartResult } from './speaking-v2-part-response.adapter';
 import { parseSpeakingV2QuestionResult } from './speaking-v2-question-response.adapter';
@@ -19,9 +20,7 @@ function forbiddenPaths(value: unknown, path = '$'): string[] {
       forbiddenPaths(item, `${path}[${index}]`),
     );
   }
-  if (typeof value !== 'object' || value === null) {
-    return [];
-  }
+  if (!isRecord(value)) return [];
   return Object.entries(value).flatMap(([key, item]) => {
     const current = `${path}.${key}`;
     const hidden =

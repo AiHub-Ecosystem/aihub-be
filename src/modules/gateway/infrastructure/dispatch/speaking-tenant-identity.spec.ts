@@ -4,6 +4,7 @@ import { MockAgent, FormData as UndiciFormData } from 'undici/index.js';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import type {
   RequestContext,
   UserIdentityMode,
@@ -111,10 +112,6 @@ function sandboxBudgetFake() {
     allowanceFor: async () => null,
   };
   return { budget, reserve, release };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function jsonBody(body: unknown): Record<string, unknown> {

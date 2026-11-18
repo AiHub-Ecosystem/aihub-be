@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 
 import { Prisma } from '@prisma-client/client';
 
@@ -85,22 +86,19 @@ const PRISMA_CODE_SQLSTATE: Readonly<Record<string, string>> = {
  * statement, and from Prisma's code for a model operation.
  */
 export function postgresError(error: unknown): unknown {
-  if (typeof error !== 'object' || error === null) {
+  if (!isRecord(error)) {
     return error;
   }
   const metadata: unknown = Reflect.get(error, 'meta');
-  const driverError: unknown =
-    typeof metadata === 'object' && metadata !== null
-      ? Reflect.get(metadata, 'driverAdapterError')
-      : undefined;
-  const cause: unknown =
-    typeof driverError === 'object' && driverError !== null
-      ? Reflect.get(driverError, 'cause')
-      : undefined;
-  const originalCode: unknown =
-    typeof cause === 'object' && cause !== null
-      ? Reflect.get(cause, 'originalCode')
-      : undefined;
+  const driverError: unknown = isRecord(metadata)
+    ? Reflect.get(metadata, 'driverAdapterError')
+    : undefined;
+  const cause: unknown = isRecord(driverError)
+    ? Reflect.get(driverError, 'cause')
+    : undefined;
+  const originalCode: unknown = isRecord(cause)
+    ? Reflect.get(cause, 'originalCode')
+    : undefined;
   const prismaCode: unknown = Reflect.get(error, 'code');
   const code =
     typeof originalCode === 'string'
@@ -111,10 +109,9 @@ export function postgresError(error: unknown): unknown {
   if (code === undefined) {
     return error;
   }
-  const message: unknown =
-    typeof cause === 'object' && cause !== null
-      ? Reflect.get(cause, 'originalMessage')
-      : undefined;
+  const message: unknown = isRecord(cause)
+    ? Reflect.get(cause, 'originalMessage')
+    : undefined;
   return Object.assign(
     internalError(
       typeof message === 'string'
@@ -184,8 +181,7 @@ export function runGuardedTransaction<T>(
       if (
         typeof property === 'string' &&
         !property.startsWith('$') &&
-        typeof value === 'object' &&
-        value !== null
+        isRecord(value)
       ) {
         return new Proxy(value, {
           get(delegate, method) {

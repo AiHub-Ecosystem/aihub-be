@@ -11,6 +11,7 @@ import {
   internalError,
   timeoutError,
 } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
@@ -130,9 +131,7 @@ function errorName(error: unknown): string {
 }
 
 function errorCode(error: unknown): string {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String(error.code)
-    : '';
+  return isRecord(error) && 'code' in error ? String(error['code']) : '';
 }
 
 function isTransportFailure(error: unknown): boolean {
@@ -386,12 +385,7 @@ export class DownstreamHttpClient {
 }
 
 function isMultipartBody(value: unknown): value is DownstreamMultipartBody {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'multipart'
-  );
+  return isRecord(value) && 'kind' in value && value['kind'] === 'multipart';
 }
 
 function toRequestBody(

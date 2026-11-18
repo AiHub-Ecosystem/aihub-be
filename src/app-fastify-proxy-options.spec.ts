@@ -4,20 +4,22 @@ import { join } from 'node:path';
 
 import Fastify from 'fastify';
 
+import { isRecord } from '@/common/is-record';
+
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
 import { loadRuntimeConfiguration } from './config/runtime-configuration';
 
 function isCallerIpResponse(
   value: unknown,
 ): value is { ip: string | null; ips: (string | null)[] } {
-  if (typeof value !== 'object' || value === null || !('ip' in value)) {
+  if (!isRecord(value) || !('ip' in value)) {
     return false;
   }
   if (!('ips' in value)) return false;
   return (
-    (typeof value.ip === 'string' || value.ip === null) &&
-    Array.isArray(value.ips) &&
-    value.ips.every((ip: unknown) => typeof ip === 'string' || ip === null)
+    (typeof value['ip'] === 'string' || value['ip'] === null) &&
+    Array.isArray(value['ips']) &&
+    value['ips'].every((ip: unknown) => typeof ip === 'string' || ip === null)
   );
 }
 

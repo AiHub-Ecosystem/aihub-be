@@ -1,4 +1,5 @@
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { isRecord } from '@/common/is-record';
 import {
   parseQuotaMonth,
   quotaPeriod,
@@ -172,11 +173,7 @@ function orderedSnapshots(
   }
   return snapshots
     .filter((snapshot) => {
-      if (
-        typeof snapshot !== 'object' ||
-        snapshot === null ||
-        Array.isArray(snapshot)
-      ) {
+      if (!isRecord(snapshot)) {
         throw new QuotaReconciliationSnapshotError();
       }
       return snapshot.monthlyRequestQuota !== null;

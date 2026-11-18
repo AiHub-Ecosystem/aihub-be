@@ -3,6 +3,7 @@ import { MockAgent } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
 import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
+import { isRecord } from '@/common/is-record';
 import { getMetrics } from '@/common/observability/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SpeakingGradeJsonInput } from '@/contracts/speaking/grading';
@@ -206,7 +207,7 @@ function readLogLine(
 }
 
 function isLogPayload(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 function expectFailureLogLine(

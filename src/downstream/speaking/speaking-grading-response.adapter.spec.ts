@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
 
@@ -11,10 +12,6 @@ const FIXTURE = join(
 );
 
 type Json = Record<string, unknown>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function providerResponse(): { status: string; data: Json } {
   const parsed: unknown = JSON.parse(readFileSync(FIXTURE, 'utf8'));

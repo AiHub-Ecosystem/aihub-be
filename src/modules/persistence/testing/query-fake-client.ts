@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import type { PrismaClient } from '@prisma-client/client';
 
 /** The one statement entry point a query-shaped fake or wrapper implements. */
@@ -128,8 +129,7 @@ export function interceptStatements(
         if (
           typeof property === 'string' &&
           !property.startsWith('$') &&
-          typeof value === 'object' &&
-          value !== null
+          isRecord(value)
         ) {
           return new Proxy(value, {
             get(delegate, action) {

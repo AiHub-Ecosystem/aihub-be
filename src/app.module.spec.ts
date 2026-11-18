@@ -17,6 +17,7 @@ import {
 import { PUBLIC_ROUTES } from './catalog/public-routes';
 import { AppError } from './common/errors/app-error';
 import { registerBodySizeGuard } from './common/http/body-size.hook';
+import { isRecord } from './common/is-record';
 import { generateRequestId } from './common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from './modules/auth/accounts/application/user-account.port';
 import {
@@ -86,7 +87,7 @@ function missingPublicRoutes(
   const documentedRoutes = new Set<string>();
 
   for (const [path, pathItem] of Object.entries(paths)) {
-    if (typeof pathItem !== 'object' || pathItem === null) {
+    if (!isRecord(pathItem)) {
       continue;
     }
 

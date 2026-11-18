@@ -12,6 +12,7 @@ import { exportPKCS8, generateKeyPair } from 'jose';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   appConfig,
@@ -201,11 +202,7 @@ describe('Sandbox assertion HTTP flow', () => {
     const body = response.json<{ data: { assertion: string } }>();
     const logPayload = logged.find(
       (entry): entry is Record<string, unknown> =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        !Array.isArray(entry) &&
-        (entry as Record<string, unknown>)['event'] ===
-          'sandbox_assertion_minted',
+        isRecord(entry) && entry['event'] === 'sandbox_assertion_minted',
     );
 
     expect(logPayload).toBeDefined();

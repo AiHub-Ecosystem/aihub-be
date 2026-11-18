@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { isRecord } from '@/common/is-record';
+
 const FIXTURES = join(__dirname, '../../../test/fixtures/ai-speaking');
 
 // Every captured AI Speaking body: the success fixture and the failure
@@ -23,7 +25,7 @@ function strings(
   if (Array.isArray(value)) {
     return value.flatMap((item, index) => strings(item, `${path}[${index}]`));
   }
-  if (typeof value === 'object' && value !== null) {
+  if (isRecord(value)) {
     return Object.entries(value).flatMap(([key, item]) =>
       strings(item, `${path}.${key}`),
     );

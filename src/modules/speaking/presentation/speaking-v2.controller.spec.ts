@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
   FastifyAdapter,
   type NestFastifyApplication,
@@ -12,6 +9,7 @@ import { AppModule } from '@/app.module';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { isRecord } from '@/common/is-record';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
@@ -28,9 +26,9 @@ import {
 } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from '@/modules/speaking/application/speaking-v2-workflow-engine';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
+import { aiSpeakingFixture } from '../../../../test/support/ai-speaking-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
-const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const PROVIDER = 'https://ai-speaking.test';
 const PROVIDER_AUTH = {
   'x-client-id': 'speaking-client',
@@ -94,18 +92,6 @@ class FakeResultOwnership implements SpeakingV2ResultOwnershipPort {
   ): Promise<readonly string[]> {
     return ids.filter((id) => this.rows.has(this.key(owner, kind, id)));
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fixture(name: string): Record<string, unknown> {
-  const value: unknown = JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
-  if (!isRecord(value)) {
-    throw new Error(`Fixture ${name} must be a JSON object`);
-  }
-  return value;
 }
 
 function jsonBody(value: unknown): Record<string, unknown> | undefined {
@@ -197,43 +183,43 @@ describe('Speaking v2 HTTP flow', () => {
       'POST',
       '/api/v2/speaking/questions/grading',
       200,
-      fixture('grading-v2-question-post.200.json'),
+      aiSpeakingFixture('grading-v2-question-post.200.json'),
     );
     provider(
       'POST',
       '/api/v2/speaking/parts/grading',
       200,
-      fixture('grading-v2-part-post.200.json'),
+      aiSpeakingFixture('grading-v2-part-post.200.json'),
     );
     provider(
       'POST',
       '/api/v2/speaking/tests/grading',
       200,
-      fixture('grading-v2-test-post.200.json'),
+      aiSpeakingFixture('grading-v2-test-post.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/responses/resp-1',
       200,
-      fixture('grading-v2-question-get.200.json'),
+      aiSpeakingFixture('grading-v2-question-get.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/parts/part-1',
       200,
-      fixture('grading-v2-part-get.200.json'),
+      aiSpeakingFixture('grading-v2-part-get.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/tests/test-1',
       200,
-      fixture('grading-v2-test-get.200.json'),
+      aiSpeakingFixture('grading-v2-test-get.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/responses/missing',
       404,
-      fixture('grading-v2-not-found.404.json'),
+      aiSpeakingFixture('grading-v2-not-found.404.json'),
     );
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })

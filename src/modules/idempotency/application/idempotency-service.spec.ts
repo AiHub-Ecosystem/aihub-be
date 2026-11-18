@@ -1,4 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type {
   CompleteIdempotencyInput,
   HasCompletedIdempotencyMatchInput,
@@ -164,14 +165,13 @@ describe('IdempotencyService', () => {
       work,
       (value) => {
         if (
-          typeof value !== 'object' ||
-          value === null ||
+          !isRecord(value) ||
           !('value' in value) ||
-          typeof value.value !== 'string'
+          typeof value['value'] !== 'string'
         ) {
           throw new Error('invalid replay');
         }
-        return { value: value.value };
+        return { value: value['value'] };
       },
     );
     repository.nextReservations.push({
@@ -181,14 +181,13 @@ describe('IdempotencyService', () => {
     });
     const replay = await service.execute(input('req_2'), work, (value) => {
       if (
-        typeof value !== 'object' ||
-        value === null ||
+        !isRecord(value) ||
         !('value' in value) ||
-        typeof value.value !== 'string'
+        typeof value['value'] !== 'string'
       ) {
         throw new Error('invalid replay');
       }
-      return { value: value.value };
+      return { value: value['value'] };
     });
 
     expect(first).toEqual({ result: { value: 'graded' }, replay: false });
@@ -815,14 +814,13 @@ describe('IdempotencyService', () => {
       work,
       (value) => {
         if (
-          typeof value !== 'object' ||
-          value === null ||
+          !isRecord(value) ||
           !('invitationId' in value) ||
-          typeof value.invitationId !== 'string'
+          typeof value['invitationId'] !== 'string'
         ) {
           throw new Error('invalid replay');
         }
-        return { invitationId: value.invitationId };
+        return { invitationId: value['invitationId'] };
       },
     );
 

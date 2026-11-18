@@ -1,4 +1,5 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { isRecord } from '@/common/is-record';
 
 export interface CursorPayload {
   readonly page: number;
@@ -18,8 +19,7 @@ export function decodeCursor(
     const raw = Buffer.from(cursor, 'base64url').toString('utf8');
     const parsed: unknown = JSON.parse(raw);
     if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
+      isRecord(parsed) &&
       'page' in parsed &&
       'limit' in parsed &&
       typeof (parsed as { page: unknown }).page === 'number' &&
@@ -34,8 +34,7 @@ export function decodeCursor(
     }
   } catch (error) {
     if (
-      typeof error === 'object' &&
-      error !== null &&
+      isRecord(error) &&
       'code' in error &&
       (error as { code: unknown }).code === 'INVALID_REQUEST'
     ) {

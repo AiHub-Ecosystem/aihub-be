@@ -4,6 +4,7 @@ import * as fc from 'fast-check';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { isOperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 
 import { PROPERTY_OPTIONS } from '../../../../test/support/property-options';
 import {
@@ -37,7 +38,7 @@ const inputArbitrary = fc.record({
 /** The same object with its own keys inserted in reverse order, recursively. */
 function reverseKeyOrder(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(reverseKeyOrder);
-  if (typeof value === 'object' && value !== null) {
+  if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value)
         .reverse()

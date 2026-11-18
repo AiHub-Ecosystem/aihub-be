@@ -1,6 +1,7 @@
 import { Resolver } from 'node:dns/promises';
 import { BlockList, type LookupFunction, isIP } from 'node:net';
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 
 import { unsafeJwksUrl } from '@/modules/identity/shared/application/jwks-errors';
 import { sourceUnavailable } from './jwks-source-errors';
@@ -82,10 +83,9 @@ export const defaultJwksResolverFactory: DnsResolverFactory = () =>
 
 function isNoDnsRecord(error: unknown): boolean {
   return (
-    typeof error === 'object' &&
-    error !== null &&
+    isRecord(error) &&
     'code' in error &&
-    (error.code === 'ENODATA' || error.code === 'ENOTFOUND')
+    (error['code'] === 'ENODATA' || error['code'] === 'ENOTFOUND')
   );
 }
 

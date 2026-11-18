@@ -1,3 +1,5 @@
+import { isRecord } from '@/common/is-record';
+
 /** One error in the chain Prisma and its driver adapter nest a failure in. */
 export interface PostgresErrorLink {
   readonly code: unknown;
@@ -24,11 +26,11 @@ export function findPostgresErrorLink(
     const next = pending.pop();
     if (next === undefined) break;
     const candidate = next.value;
-    if (typeof candidate !== 'object' || candidate === null) continue;
+    if (!isRecord(candidate)) continue;
     if (seen.has(candidate)) continue;
     seen.add(candidate);
 
-    const record = candidate as Record<string, unknown>;
+    const record = candidate;
     const link: PostgresErrorLink = {
       code: record['code'] ?? record['originalCode'],
       message: record['message'] ?? record['originalMessage'],

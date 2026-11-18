@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import { buildOpenApiDocument } from '@/openapi/build-openapi-document';
 import {
   METRICS_ROUTE_PATH,
@@ -37,10 +38,8 @@ describe('metrics scrape endpoint', () => {
     await app.listen(0, '127.0.0.1');
 
     const address = app.getHttpServer().address();
-    baseUrl =
-      typeof address === 'object' && address !== null
-        ? `http://127.0.0.1:${address.port}`
-        : '';
+    const port = isRecord(address) ? address['port'] : undefined;
+    baseUrl = typeof port === 'number' ? `http://127.0.0.1:${port}` : '';
   });
 
   afterAll(async () => {

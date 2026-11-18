@@ -1,5 +1,6 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { isRecord } from '@/common/is-record';
 import type { MeteringDownstreamId } from '@/modules/metering/application/metering-downstream';
 import { DOWNSTREAM_USAGE_REPORTING } from '@/modules/metering/application/usage-recording/metering.service';
 
@@ -181,9 +182,7 @@ function snapshotMap(
   const result = new Map<string, UsageReportSnapshotRow>();
   for (const row of rows) {
     if (
-      typeof row !== 'object' ||
-      row === null ||
-      Array.isArray(row) ||
+      !isRecord(row) ||
       typeof row.operation !== 'string' ||
       !eligible.has(row.operation) ||
       result.has(row.operation) ||

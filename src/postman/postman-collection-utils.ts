@@ -8,10 +8,8 @@ export function stripKey<T>(value: T, key: string): T {
     const entries: readonly unknown[] = value;
     return entries.map((entry) => stripKey(entry, key)) as unknown as T;
   }
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).filter(
-      ([k]) => k !== key,
-    );
+  if (isRecord(value)) {
+    const entries = Object.entries(value).filter(([k]) => k !== key);
     return Object.fromEntries(
       entries.map(([k, v]) => [k, stripKey(v, key)]),
     ) as T;

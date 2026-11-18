@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import type {
   EmailDailyBudgetReservation,
   EmailDailySendBudgetCategory,
@@ -87,10 +88,7 @@ SELECT EXISTS(SELECT 1 FROM reservation) AS reserved,
 `;
 
 function rowProperty(value: unknown, property: string): unknown {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  return Reflect.get(value, property);
+  return isRecord(value) ? Reflect.get(value, property) : undefined;
 }
 
 function safeNonnegativeInteger(value: unknown): number | undefined {

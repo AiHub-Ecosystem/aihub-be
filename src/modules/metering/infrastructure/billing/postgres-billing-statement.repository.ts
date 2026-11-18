@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { isRecord } from '@/common/is-record';
 import { asDate } from '@/common/postgres/row-readers';
 import {
   type BillingActorSource,
@@ -134,17 +135,18 @@ function date(value: unknown, field: string): Date {
 }
 
 function target(value: unknown): BillingAdjustmentTarget {
-  if (typeof value === 'object' && value !== null) {
-    const record = value as Record<string, unknown>;
+  if (isRecord(value)) {
+    const requestIds = value['request_ids'];
     if (
-      Array.isArray(record['request_ids']) &&
-      record['request_ids'].every((id) => typeof id === 'string')
+      Array.isArray(requestIds) &&
+      requestIds.every((id) => typeof id === 'string')
     ) {
-      return { requestIds: record['request_ids'] as string[] };
+      return { requestIds };
     }
-    const period = record['period'] as Record<string, unknown> | undefined;
+    const period = value['period'];
     if (
-      typeof period?.['from'] === 'string' &&
+      isRecord(period) &&
+      typeof period['from'] === 'string' &&
       typeof period['to'] === 'string'
     ) {
       return { period: { from: period['from'], to: period['to'] } };

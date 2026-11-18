@@ -1,4 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
+import { isRecord } from '@/common/is-record';
 import type {
   DispatchResult,
   RequestFor,
@@ -72,7 +73,7 @@ export interface GradedPipelineEnginePort {
 export async function completeGradedPipelineResponse(
   value: unknown,
 ): Promise<void> {
-  if (typeof value !== 'object' || value === null) return;
+  if (!isRecord(value)) return;
   const completion: unknown = Object.getOwnPropertyDescriptor(
     value,
     GRADED_PIPELINE_COMPLETION,

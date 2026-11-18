@@ -1,3 +1,5 @@
+import { isRecord } from '@/common/is-record';
+
 /**
  * A NUL character, or half of a UTF-16 surrogate pair standing alone. Neither
  * survives PostgreSQL: a NUL cannot be stored or compared in text (SQLSTATE
@@ -20,7 +22,7 @@ function isUnstorable(text: string): boolean {
 export function containsUnstorableText(value: unknown): boolean {
   if (typeof value === 'string') return isUnstorable(value);
   if (Array.isArray(value)) return value.some(containsUnstorableText);
-  if (typeof value === 'object' && value !== null) {
+  if (isRecord(value)) {
     return Object.entries(value).some(
       ([key, entry]) => isUnstorable(key) || containsUnstorableText(entry),
     );

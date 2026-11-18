@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import {
@@ -17,6 +15,7 @@ import { AppError } from '@/common/errors/app-error';
 import { registerBodySizeGuard } from '@/common/http/body-size.hook';
 import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { isRecord } from '@/common/is-record';
 import { getMetrics } from '@/common/observability/metrics';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { SpeakingGradeResponseSchema } from '@/contracts/speaking/grading';
@@ -40,13 +39,13 @@ import {
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
+import { aiSpeakingFixture } from '../../../../test/support/ai-speaking-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 import {
   FakeAudioRepository,
   speakingAsset,
 } from './speaking-grading-jobs.test-fixtures';
 
-const FIXTURES = join(__dirname, '../../../../test/fixtures/ai-speaking');
 const speakingResponseSchema = Type.Object({
   meta: Type.Object({ operation: Type.String() }),
   data: SpeakingGradeResponseSchema,
@@ -72,18 +71,6 @@ function expectError(
 
 function speakingResponse(response: { readonly payload: string }) {
   return Value.Parse(speakingResponseSchema, responseBody(response));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fixture(name: string): Record<string, unknown> {
-  const value: unknown = JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
-  if (!isRecord(value)) {
-    throw new Error(`Fixture ${name} must be a JSON object`);
-  }
-  return value;
 }
 
 function jsonBody(value: unknown): Record<string, unknown> | undefined {
@@ -172,7 +159,7 @@ describe('Speaking grading HTTP flow', () => {
     });
     providerResponse = {
       statusCode: 200,
-      body: fixture('grading.response.json'),
+      body: aiSpeakingFixture('grading.response.json'),
     };
 
     mockAgent = new MockAgent();
@@ -708,7 +695,7 @@ describe('Speaking grading HTTP flow', () => {
 
     providerResponse = {
       statusCode: 200,
-      body: fixture('grading.response.json'),
+      body: aiSpeakingFixture('grading.response.json'),
     };
   });
 
@@ -746,7 +733,7 @@ describe('Speaking grading HTTP flow', () => {
       } finally {
         providerResponse = {
           statusCode: 200,
-          body: fixture('grading.response.json'),
+          body: aiSpeakingFixture('grading.response.json'),
         };
       }
     },
@@ -803,7 +790,7 @@ describe('Speaking grading HTTP flow', () => {
   });
 
   it('preserves a null fluency_metrics group from the provider', async () => {
-    const providerBody = fixture('grading.response.json');
+    const providerBody = aiSpeakingFixture('grading.response.json');
     if (!isRecord(providerBody['data'])) {
       throw new Error('Fixture data must be an object');
     }
@@ -831,7 +818,7 @@ describe('Speaking grading HTTP flow', () => {
 
     providerResponse = {
       statusCode: 200,
-      body: fixture('grading.response.json'),
+      body: aiSpeakingFixture('grading.response.json'),
     };
   });
 
@@ -1129,7 +1116,7 @@ describe('Speaking grading HTTP flow', () => {
 
     providerResponse = {
       statusCode: 200,
-      body: fixture('grading.response.json'),
+      body: aiSpeakingFixture('grading.response.json'),
     };
   });
 
@@ -1160,7 +1147,7 @@ describe('Speaking grading HTTP flow', () => {
 
       providerResponse = {
         statusCode: 200,
-        body: fixture('grading.response.json'),
+        body: aiSpeakingFixture('grading.response.json'),
       };
     },
   );
@@ -1187,14 +1174,14 @@ describe('Speaking grading HTTP flow', () => {
 
     providerResponse = {
       statusCode: 200,
-      body: fixture('grading.response.json'),
+      body: aiSpeakingFixture('grading.response.json'),
     };
   });
 
   it('answers audio the provider cannot read with a non-retryable 422, not a retryable 502', async () => {
     providerResponse = {
       statusCode: 500,
-      body: fixture('grading-convert-audio.500.json'),
+      body: aiSpeakingFixture('grading-convert-audio.500.json'),
     };
     const request = multipartPayload(
       { part: '1', question_id: 'p1_hometown' },
@@ -1216,7 +1203,7 @@ describe('Speaking grading HTTP flow', () => {
     } finally {
       providerResponse = {
         statusCode: 200,
-        body: fixture('grading.response.json'),
+        body: aiSpeakingFixture('grading.response.json'),
       };
     }
   });
@@ -1246,7 +1233,7 @@ describe('Speaking grading HTTP flow', () => {
     } finally {
       providerResponse = {
         statusCode: 200,
-        body: fixture('grading.response.json'),
+        body: aiSpeakingFixture('grading.response.json'),
       };
     }
   });
