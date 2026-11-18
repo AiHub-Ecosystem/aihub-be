@@ -10,8 +10,14 @@
 -- Notice kinds carry no credential and leave it NULL. Rows queued before this
 -- migration, or by an N-1 writer during a rolling deploy, also stay NULL.
 ALTER TABLE email_delivery_requests
-  ADD COLUMN credential_id text
-    CHECK (credential_id ~ '^(evt|prt|oiv)_[0-9A-HJKMNP-TV-Z]{26}$');
+  ADD COLUMN credential_id text;
+
+-- NOT VALID, as in 0047 and 0049, so the install does not scan the table under
+-- ACCESS EXCLUSIVE. Every existing row is NULL, which the check admits, and new
+-- rows are checked from now on.
+ALTER TABLE email_delivery_requests
+  ADD CONSTRAINT email_delivery_requests_credential_id_check
+    CHECK (credential_id ~ '^(evt|prt|oiv)_[0-9A-HJKMNP-TV-Z]{26}$') NOT VALID;
 
 -- Migration 0027's inline comment listed cancel reasons as `last_error_code`
 -- values. The codes the dispatcher actually writes are recorded here instead,

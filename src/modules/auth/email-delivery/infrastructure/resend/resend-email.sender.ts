@@ -15,7 +15,10 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 interface ResendResponse {
   readonly status: number;
   readonly headers: Pick<Headers, 'get'>;
-  readonly body?: { cancel(): Promise<void> } | null;
+  readonly body?: {
+    cancel(): Promise<void>;
+    getReader?(): ReadableStreamDefaultReader<Uint8Array>;
+  } | null;
   text?(): Promise<string>;
 }
 
@@ -28,7 +31,7 @@ const IDEMPOTENCY_CONFLICTS: Readonly<
 };
 
 /** A Resend error document is a few hundred bytes; anything larger is not one. */
-const MAX_ERROR_BODY_CHARS = 4_096;
+const MAX_ERROR_BODY_BYTES = 4_096;
 
 /**
  * Undici holds the connection until a body is read or cancelled, so every
@@ -42,16 +45,40 @@ async function discardBody(response: ResendResponse): Promise<void> {
   }
 }
 
+/** Reads at most the error-document limit, cancelling the stream past it. */
+async function readBoundedText(
+  response: ResendResponse,
+): Promise<string | undefined> {
+  const reader = response.body?.getReader?.();
+  if (reader === undefined) {
+    if (response.text === undefined) {
+      await discardBody(response);
+      return undefined;
+    }
+    const text = await response.text();
+    return text.length > MAX_ERROR_BODY_BYTES ? undefined : text;
+  }
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > MAX_ERROR_BODY_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
 async function readIdempotencyConflict(
   response: ResendResponse,
 ): Promise<EmailIdempotencyConflict | undefined> {
-  if (response.text === undefined) {
-    await discardBody(response);
-    return undefined;
-  }
   try {
-    const text = await response.text();
-    if (text.length > MAX_ERROR_BODY_CHARS) return undefined;
+    const text = await readBoundedText(response);
+    if (text === undefined) return undefined;
     const parsed: unknown = JSON.parse(text);
     const name =
       typeof parsed === 'object' && parsed !== null && 'name' in parsed

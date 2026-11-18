@@ -489,7 +489,10 @@ First steps:
 ## What an operator can read
 
 The durable row keeps delivery state and attempt evidence after the payload is
-erased, so a failed request can be investigated without any customer data:
+erased, so a failed request can be investigated without reading an address, a
+raw credential, or a message body. `credential_id` is an opaque id, but an
+operator who can read the matching invitation or token row can link the request
+to its recipient:
 
 ```sql
 SELECT id, kind, status, attempts, last_attempt_at, last_error_code,

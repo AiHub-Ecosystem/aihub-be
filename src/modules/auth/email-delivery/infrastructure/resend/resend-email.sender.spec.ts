@@ -247,6 +247,51 @@ describe('ResendEmailSender', () => {
     });
   });
 
+  it('stops reading a 409 body at the limit and cancels the stream', async () => {
+    let cancelled = false;
+    const chunk = new TextEncoder().encode('x'.repeat(1_024));
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 1;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => new Response(body, { status: 409 }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+    });
+    expect(cancelled).toBe(true);
+    // The stream is infinite; the reader stopped within a few chunks of the limit.
+    expect(sent).toBeLessThan(10);
+  });
+
+  it('classifies a small streamed 409 body', async () => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () =>
+        new Response(JSON.stringify({ name: 'invalid_idempotent_request' }), {
+          status: 409,
+        }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+      idempotencyConflict: 'payload_changed',
+    });
+  });
+
   it('requires a non-empty sender address', () => {
     expect(
       () =>

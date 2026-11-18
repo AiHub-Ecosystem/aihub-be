@@ -187,6 +187,9 @@ export class EmailDeliveryPoller {
       // Shutdown hands the rest of the batch back, as an outage does: no
       // provider call starts after it begins (#833).
       if (this.options.shouldStop?.() === true) pauseBatch = true;
+      // A pause opened by an earlier row of this batch (for example a failed
+      // reachability write) holds the rest of it too.
+      if (this.now().getTime() < this.pause.until) pauseBatch = true;
       if (pauseBatch) {
         const now = this.now();
         const retryAfterMs = Math.max(
