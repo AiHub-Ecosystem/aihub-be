@@ -123,4 +123,28 @@ describe('EmailDeliveryPoller conflict whose terminal write is rejected (#441)',
     ]);
     expect(sender.sends).toHaveLength(1);
   });
+
+  it('records the outcome before the stale sweep can cancel the row', async () => {
+    const { poller, store } = conflicting();
+    store.failMarkFailed = 1;
+    const order: string[] = [];
+    const markFailed = store.markFailed.bind(store);
+    store.markFailed = async (input) => {
+      await markFailed(input);
+      order.push('failed');
+    };
+    const cancelStale = store.cancelStale.bind(store);
+    store.cancelStale = async (input) => {
+      order.push('stale');
+      return cancelStale(input);
+    };
+
+    await poller.runOnce();
+    order.length = 0;
+    store.claimResult = [];
+    await poller.runOnce();
+
+    expect(order[0]).toBe('failed');
+    expect(order).toContain('stale');
+  });
 });

@@ -97,13 +97,15 @@ export class EmailDeliveryPollerMaintenance {
   }
 
   async reconcile(): Promise<{ cancelled: number; failed: number }> {
+    // Settled first: a row whose conflict outcome lands is no longer queued, so
+    // the stale sweep cannot cancel it and lose the outcome (#441).
+    await this.retryPendingConflictFailures();
     const stale = await this.cancelStaleRequests();
     for (const id of stale) {
       this.pendingUnspentAttempts.delete(id);
       this.pendingConflictFailures.delete(id);
     }
     await this.retryPendingUnspentAttempts();
-    await this.retryPendingConflictFailures();
     const failed = this.hasPendingAttemptReleases
       ? 0
       : await this.failExhaustedRequests();
