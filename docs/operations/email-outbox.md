@@ -308,6 +308,14 @@ closes it. `401` and `403` close the outage circuit because the provider
 responded, while retaining the existing per-poller five-minute configuration
 hold. Message-specific failures keep the #449 classification.
 
+A success closes the circuit only if no failure was recorded after that send
+began (#441). The permit carries the circuit's failure count, and the close is
+skipped when the count has moved: a `429` cooldown written while an older send
+was in flight survives that send's success, and a probe owner hands back its own
+probe instead of clearing the state. If the shared failure write itself fails,
+the poller's local fallback pause is measured from the clock after the failure,
+not from when the provider answered, and a later `Retry-After` still wins.
+
 The unlabeled gauge `aihub_email_provider_outage_duration_seconds` reports the
 shared circuit's current duration on `/metrics`. The `EmailProviderOutage`
 rule fires after five minutes only while queued mail exists. The per-kind
@@ -332,7 +340,9 @@ is in flight: the poller spends one of the three attempts with
 attempt's, for example because a near-expiry notice re-read a renamed
 Organization: the earlier attempt reached the provider and may have been
 delivered, so the request ends at once as `failed` with `outcome_unknown` and
-alerts instead of being sent again. A `409` without either name keeps the
+alerts instead of being sent again. If the store rejects that write, the
+poller keeps retrying it at the start of each pass and claims nothing until it
+lands. A `409` without either name keeps the
 bounded `provider_rejected` retry.
 
 Retry and deferral times are read after the preflight that precedes them. A

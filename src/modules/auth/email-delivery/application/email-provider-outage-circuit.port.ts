@@ -1,5 +1,14 @@
 export type EmailProviderSendPermit =
-  | { readonly allowed: true; readonly probeToken?: string }
+  | {
+      readonly allowed: true;
+      readonly probeToken?: string;
+      /**
+       * The circuit's failure count when the permit was granted. A success
+       * clears the circuit only while it still matches, so a cooldown a newer
+       * failure wrote while this send was in flight survives it (#441).
+       */
+      readonly generation?: number;
+    }
   | { readonly allowed: false; readonly retryAfterMs: number };
 
 /** Coordinates the temporary Resend outage circuit across all poller instances. */
@@ -10,7 +19,11 @@ export interface EmailProviderOutageCircuitPort {
     retryAfterMs: number,
     probeToken?: string,
   ): Promise<number>;
-  recordProviderReachable(): Promise<void>;
+  /** Clears the circuit unless a failure was recorded after `sent` began. */
+  recordProviderReachable(sent?: {
+    readonly generation?: number;
+    readonly probeToken?: string;
+  }): Promise<void>;
   readOutageDurationMs(): Promise<number>;
 }
 

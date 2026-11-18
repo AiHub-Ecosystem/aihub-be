@@ -56,7 +56,9 @@ async function readBoundedText(
       return undefined;
     }
     const text = await response.text();
-    return text.length > MAX_ERROR_BODY_BYTES ? undefined : text;
+    return new TextEncoder().encode(text).byteLength > MAX_ERROR_BODY_BYTES
+      ? undefined
+      : text;
   }
   const decoder = new TextDecoder();
   let text = '';

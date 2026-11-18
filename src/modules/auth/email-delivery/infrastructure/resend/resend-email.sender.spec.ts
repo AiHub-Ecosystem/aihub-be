@@ -250,16 +250,22 @@ describe('ResendEmailSender', () => {
   it('stops reading a 409 body at the limit and cancels the stream', async () => {
     let cancelled = false;
     const chunk = new TextEncoder().encode('x'.repeat(1_024));
+    const total = 16;
     let sent = 0;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        sent += 1;
-        controller.enqueue(chunk);
+    // Finite, so a reader that ignored the limit would drain all sixteen chunks.
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          sent += 1;
+          controller.enqueue(chunk);
+          if (sent === total) controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
       },
-      cancel() {
-        cancelled = true;
-      },
-    });
+      { highWaterMark: 0 },
+    );
     const sender = new ResendEmailSender(
       { apiKey: 'resend-secret' },
       'no-reply@example.com',
@@ -271,8 +277,58 @@ describe('ResendEmailSender', () => {
       retryAfter: undefined,
     });
     expect(cancelled).toBe(true);
-    // The stream is infinite; the reader stopped within a few chunks of the limit.
-    expect(sent).toBeLessThan(10);
+    // 4 KiB is four chunks; the fifth crosses the limit and is the last one read.
+    expect(sent).toBe(5);
+  });
+
+  it.each([
+    [4_096, 'payload_changed'],
+    [4_097, undefined],
+  ] as const)(
+    'classifies a valid 409 document of %i bytes as %s',
+    async (bytes, conflict) => {
+      const head = JSON.stringify({
+        name: 'invalid_idempotent_request',
+        pad: '',
+      });
+      const document = JSON.stringify({
+        name: 'invalid_idempotent_request',
+        pad: 'x'.repeat(bytes - new TextEncoder().encode(head).byteLength),
+      });
+      expect(new TextEncoder().encode(document).byteLength).toBe(bytes);
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'no-reply@example.com',
+        async () => new Response(document, { status: 409 }),
+      );
+
+      await expect(sender.send(message)).resolves.toEqual({
+        status: 409,
+        retryAfter: undefined,
+        ...(conflict === undefined ? {} : { idempotencyConflict: conflict }),
+      });
+    },
+  );
+
+  it('applies the byte limit to a text-only 409 body, not its character count', async () => {
+    const document = JSON.stringify({
+      name: 'invalid_idempotent_request',
+      pad: 'é'.repeat(2_100),
+    });
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => ({
+        status: 409,
+        headers: { get: () => null },
+        text: async () => document,
+      }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+    });
   });
 
   it('classifies a small streamed 409 body', async () => {

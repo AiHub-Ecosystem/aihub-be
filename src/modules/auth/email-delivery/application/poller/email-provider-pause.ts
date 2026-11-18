@@ -31,12 +31,17 @@ export class EmailProviderPause {
     }
   }
 
-  /** Records a provider-wide failure and returns how long to hold the row. */
+  /**
+   * Records a provider-wide failure and returns the instant to hold the row
+   * until. When the shared write fails, the local fallback is measured from a
+   * clock read after that failure, because the write and the probe release can
+   * outlast the fallback delay; a later `Retry-After` deadline still wins.
+   */
   async open(
     retryAfterMs: number,
     openedAt: Date,
     probeToken?: string,
-  ): Promise<number> {
+  ): Promise<Date> {
     try {
       const circuitDelayMs = await this.circuit.recordProviderFailure(
         retryAfterMs,
@@ -46,24 +51,34 @@ export class EmailProviderPause {
         Number.isSafeInteger(circuitDelayMs) && circuitDelayMs >= 0
           ? Math.max(retryAfterMs, circuitDelayMs)
           : Math.max(retryAfterMs, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
-      this.extend(openedAt.getTime() + safeDelayMs);
-      return safeDelayMs;
+      const retryAt = new Date(openedAt.getTime() + safeDelayMs);
+      this.extend(retryAt.getTime());
+      return retryAt;
     } catch {
       // Nothing reached shared state, so the probe this attempt held would
       // strand every poller until the outage key expires (#1113).
       await this.releaseProbe(probeToken);
-      const fallbackDelayMs = Math.max(
-        retryAfterMs,
-        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+      const retryAt = new Date(
+        Math.max(
+          openedAt.getTime() + retryAfterMs,
+          this.now().getTime() + EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+        ),
       );
-      this.extend(openedAt.getTime() + fallbackDelayMs);
-      return fallbackDelayMs;
+      this.extend(retryAt.getTime());
+      return retryAt;
     }
   }
 
-  async close(probeToken?: string): Promise<void> {
+  async close(permit: {
+    readonly probeToken?: string;
+    readonly generation?: number;
+  }): Promise<void> {
+    const { probeToken, generation } = permit;
     try {
-      await this.circuit.recordProviderReachable();
+      await this.circuit.recordProviderReachable({
+        ...(generation === undefined ? {} : { generation }),
+        ...(probeToken === undefined ? {} : { probeToken }),
+      });
     } catch {
       // The state this DEL failed to clear still holds the probe, and a held
       // probe strands every poller until it is released or taken over (#1113).

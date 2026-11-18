@@ -439,15 +439,12 @@ export class EmailDeliveryPoller {
     } catch (error) {
       if (error instanceof EmailProviderTransportError) {
         const failedAt = this.now();
-        const retryAfterMs = await this.pause.open(
+        const retryAt = await this.pause.open(
           0,
           failedAt,
           sendPermit.probeToken,
         );
-        await this.maintenance.releaseUnspentAttempt(
-          request,
-          new Date(failedAt.getTime() + retryAfterMs),
-        );
+        await this.maintenance.releaseUnspentAttempt(request, retryAt);
         return 'provider_outage';
       }
       await this.pause.releaseProbe(sendPermit.probeToken);
@@ -465,34 +462,26 @@ export class EmailDeliveryPoller {
         response.retryAfter,
         responseReceivedAt,
       );
-      const circuitDelayMs = await this.pause.open(
+      const retryAt = await this.pause.open(
         retryAfterMs,
         responseReceivedAt,
         sendPermit.probeToken,
       );
-      await this.maintenance.releaseUnspentAttempt(
-        request,
-        new Date(
-          responseReceivedAt.getTime() + Math.max(retryAfterMs, circuitDelayMs),
-        ),
-      );
+      await this.maintenance.releaseUnspentAttempt(request, retryAt);
       return 'provider_outage';
     }
 
     if (response.status >= 500 && response.status < 600) {
-      const retryAfterMs = await this.pause.open(
+      const retryAt = await this.pause.open(
         0,
         responseReceivedAt,
         sendPermit.probeToken,
       );
-      await this.maintenance.releaseUnspentAttempt(
-        request,
-        new Date(responseReceivedAt.getTime() + retryAfterMs),
-      );
+      await this.maintenance.releaseUnspentAttempt(request, retryAt);
       return 'provider_outage';
     }
 
-    await this.pause.close(sendPermit.probeToken);
+    await this.pause.close(sendPermit);
 
     if (response.status === 401 || response.status === 403) {
       this.pause.until = responseReceivedAt.getTime() + DEFER_RETRY_MS;

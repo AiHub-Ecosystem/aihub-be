@@ -44,8 +44,22 @@ export class EmailDeliveryPollerMaintenance {
     private readonly leaseMs: number,
   ) {}
 
+  /**
+   * A conflict whose terminal write was rejected (#441): the provider may have
+   * accepted the first handoff, so the request must be settled as failed before
+   * it can be claimed and sent again.
+   */
+  private readonly pendingConflictFailures = new Map<
+    string,
+    Parameters<EmailDispatchStorePort['markFailed']>[0]
+  >();
+
+  /** Outcomes known to the provider but not yet durable: no claim until settled. */
   get hasPendingAttemptReleases(): boolean {
-    return this.pendingUnspentAttempts.size > 0;
+    return (
+      this.pendingUnspentAttempts.size > 0 ||
+      this.pendingConflictFailures.size > 0
+    );
   }
 
   async deferInvitationAtRecipientLimit(
@@ -84,8 +98,12 @@ export class EmailDeliveryPollerMaintenance {
 
   async reconcile(): Promise<{ cancelled: number; failed: number }> {
     const stale = await this.cancelStaleRequests();
-    for (const id of stale) this.pendingUnspentAttempts.delete(id);
+    for (const id of stale) {
+      this.pendingUnspentAttempts.delete(id);
+      this.pendingConflictFailures.delete(id);
+    }
     await this.retryPendingUnspentAttempts();
+    await this.retryPendingConflictFailures();
     const failed = this.hasPendingAttemptReleases
       ? 0
       : await this.failExhaustedRequests();
@@ -179,12 +197,17 @@ export class EmailDeliveryPollerMaintenance {
     if (conflict === 'concurrent') {
       return this.recordFailure(request, 'outcome_unknown', at);
     }
-    await this.store.markFailed({
+    const input = {
       id: request.id,
       failedAt: at,
       errorCode: 'outcome_unknown',
       owner: this.options.owner,
-    });
+    } as const;
+    // Remembered until the write lands: a rejected write leaves the row queued,
+    // and the next pass settles it before it can claim anything.
+    this.pendingConflictFailures.set(request.id, input);
+    await this.store.markFailed(input);
+    this.pendingConflictFailures.delete(request.id);
     return 'failed';
   }
 
@@ -236,6 +259,17 @@ export class EmailDeliveryPollerMaintenance {
         this.pendingUnspentAttempts.delete(id);
       } catch {
         // Keep the known non-consuming outcome ahead of the exhausted sweep.
+      }
+    }
+  }
+
+  private async retryPendingConflictFailures(): Promise<void> {
+    for (const [id, input] of this.pendingConflictFailures) {
+      try {
+        await this.store.markFailed(input);
+        this.pendingConflictFailures.delete(id);
+      } catch {
+        // Kept: no claim starts while an outcome is waiting to be recorded.
       }
     }
   }
