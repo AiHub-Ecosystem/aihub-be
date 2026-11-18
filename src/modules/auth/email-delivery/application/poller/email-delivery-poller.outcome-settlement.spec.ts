@@ -103,6 +103,13 @@ describe('EmailDeliveryPoller conflict whose terminal write is rejected (#441)',
   it('settles the request before any claim, and never sends it again', async () => {
     const { poller, store, sender } = conflicting();
     store.failMarkFailed = 2;
+    // The rejected writes did not land: the row is still queued.
+    store.dispatchState = {
+      status: 'queued',
+      attempts: 1,
+      lastAttemptAt: NOW,
+      leaseExpiresAt: null,
+    };
 
     await poller.runOnce();
     expect(store.failed).toEqual([]);
@@ -124,27 +131,71 @@ describe('EmailDeliveryPoller conflict whose terminal write is rejected (#441)',
     expect(sender.sends).toHaveLength(1);
   });
 
-  it('records the outcome before the stale sweep can cancel the row', async () => {
+  it('drops a pending outcome once the row is already terminal', async () => {
     const { poller, store } = conflicting();
-    store.failMarkFailed = 1;
-    const order: string[] = [];
-    const markFailed = store.markFailed.bind(store);
-    store.markFailed = async (input) => {
-      await markFailed(input);
-      order.push('failed');
+    // The write committed but answered with an error, then kept failing.
+    store.failMarkFailed = 2;
+    store.dispatchState = {
+      status: 'queued',
+      attempts: 1,
+      lastAttemptAt: NOW,
+      leaseExpiresAt: null,
     };
-    const cancelStale = store.cancelStale.bind(store);
-    store.cancelStale = async (input) => {
-      order.push('stale');
-      return cancelStale(input);
-    };
-
     await poller.runOnce();
-    order.length = 0;
+
+    store.dispatchState = { ...store.dispatchState, status: 'failed' };
+    store.claims = [];
     store.claimResult = [];
     await poller.runOnce();
 
-    expect(order[0]).toBe('failed');
-    expect(order).toContain('stale');
+    // Nothing is left to settle, so claiming resumes.
+    expect(store.claims).toHaveLength(1);
+  });
+
+  it('keeps the pending outcome while the row is still queued', async () => {
+    const { poller, store } = conflicting();
+    store.failMarkFailed = 2;
+    store.dispatchState = {
+      status: 'queued',
+      attempts: 1,
+      lastAttemptAt: NOW,
+      leaseExpiresAt: null,
+    };
+    await poller.runOnce();
+    store.claims = [];
+    await poller.runOnce();
+
+    expect(store.claims).toEqual([]);
+  });
+
+  it('leaves the conflict row failed, not cancelled, when it is also stale', async () => {
+    const { poller, store } = conflicting();
+    // One stateful row that both the terminal write and the stale sweep act on.
+    let status: 'queued' | 'failed' | 'cancelled' = 'queued';
+    let rejections = 1;
+    const row = claimed();
+    store.markFailed = async () => {
+      if (rejections > 0) {
+        rejections -= 1;
+        throw new Error('the outbox store is unavailable');
+      }
+      if (status === 'queued') status = 'failed';
+    };
+    const cancelStale = store.cancelStale.bind(store);
+    store.cancelStale = async (input) => {
+      const rows = await cancelStale(input);
+      if (rows.length === 0 || status !== 'queued') return [];
+      status = 'cancelled';
+      return rows;
+    };
+
+    await poller.runOnce();
+    expect(status).toBe('queued');
+    // The row has since aged past its stale cutoff.
+    store.stale = [row];
+    store.claimResult = [];
+    await poller.runOnce();
+
+    expect(status).toBe('failed');
   });
 });

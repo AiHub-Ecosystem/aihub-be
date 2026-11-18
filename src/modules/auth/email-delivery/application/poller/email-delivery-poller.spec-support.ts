@@ -3,6 +3,7 @@ import {
   type ClaimedFailureReport,
   type EmailCredentialActionabilityPort,
   type EmailCredentialState,
+  type EmailDeliveryDispatchState,
   type EmailDeliveryErrorCode,
   type EmailDeliveryKind,
   type EmailDeliveryPayload,
@@ -98,8 +99,11 @@ export class FakeStore implements EmailDispatchStorePort {
     });
   }
 
+  /** What the store reports for a row; null reads as a row that is gone. */
+  dispatchState: EmailDeliveryDispatchState | null = null;
+
   async readDispatchState() {
-    return null;
+    return this.dispatchState;
   }
 
   async queuedIds() {

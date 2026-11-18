@@ -271,8 +271,21 @@ export class EmailDeliveryPollerMaintenance {
         await this.store.markFailed(input);
         this.pendingConflictFailures.delete(id);
       } catch {
-        // Kept: no claim starts while an outcome is waiting to be recorded.
+        // A write that committed but answered with an error leaves nothing to
+        // settle, and retrying it would fail for good and block every claim.
+        if (await this.isSettled(id)) this.pendingConflictFailures.delete(id);
+        // Otherwise kept: no claim starts while an outcome waits to be recorded.
       }
+    }
+  }
+
+  /** True once the row is no longer queued (or is gone): there is nothing to write. */
+  private async isSettled(id: string): Promise<boolean> {
+    try {
+      const state = await this.store.readDispatchState(id);
+      return state === null || state.status !== 'queued';
+    } catch {
+      return false;
     }
   }
 
