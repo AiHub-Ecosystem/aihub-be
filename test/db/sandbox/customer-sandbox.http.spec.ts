@@ -138,6 +138,7 @@ let otherCustomerIdentity: Awaited<ReturnType<typeof createTenantIdentity>>;
 let downstreamCalls: number;
 let replayProxy: TcpFaultProxy;
 let replayRedisUrl: string;
+let replayStore: RedisIdentityStore;
 let controlPlaneReaderRole: string;
 let ownerUserId: string;
 let adminUserId: string;
@@ -358,6 +359,7 @@ beforeAll(async () => {
   sandboxRedisUrl.hostname = '127.0.0.1';
   sandboxRedisUrl.port = String(replayProxyPort);
   replayRedisUrl = sandboxRedisUrl.toString();
+  replayStore = new RedisIdentityStore(replayRedisUrl);
 
   downstreamCalls = 0;
   const downstreamStub = {
@@ -384,7 +386,10 @@ beforeAll(async () => {
     .overrideProvider(RUNTIME_CONNECTION_CONFIGURATION)
     .useValue(appConnectionConfiguration)
     .overrideProvider(USER_ASSERTION_REPLAY_MARKER)
-    .useValue(new RedisIdentityStore(replayRedisUrl))
+    .useValue({
+      reserve: (input: Parameters<RedisIdentityStore['reserve']>[0]) =>
+        replayStore.reserve(input),
+    })
     .overrideProvider(DownstreamHttpClient)
     .useValue(downstreamStub)
     // Graded requests are admitted by the pipeline's admission, not by the
@@ -483,6 +488,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await app?.close();
   await controlPlaneApp?.close();
+  await replayStore?.onModuleDestroy();
   await replayProxy?.close();
   await redis?.quit().catch(() => undefined);
   if (controlPlaneReaderRole !== undefined) {
@@ -1025,6 +1031,8 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
         );
       } finally {
         await replayProxy.setMode('normal');
+        await replayStore.onModuleDestroy();
+        replayStore = new RedisIdentityStore(replayRedisUrl);
       }
 
       expect(response.statusCode).toBe(503);
