@@ -150,7 +150,7 @@ export const LoginResponseSchema = Type.Object(
         dpop_bound: Type.Optional(
           Type.Literal(true, {
             description:
-              'Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.',
+              'Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.',
           }),
         ),
         expires_in: Type.Literal(900),

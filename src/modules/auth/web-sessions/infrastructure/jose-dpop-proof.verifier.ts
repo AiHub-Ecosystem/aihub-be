@@ -55,11 +55,7 @@ export class JoseDpopProofVerifier implements DpopProofVerifierPort {
     try {
       const header = decodeProtectedHeader(input.proof);
       const jwk = header.jwk;
-      if (
-        header.typ !== PROOF_TYP ||
-        header.alg !== PROOF_ALG ||
-        !isDpopPublicJwk(jwk)
-      ) {
+      if (header.alg !== PROOF_ALG || !isDpopPublicJwk(jwk)) {
         throw invalidUserAccessToken();
       }
 

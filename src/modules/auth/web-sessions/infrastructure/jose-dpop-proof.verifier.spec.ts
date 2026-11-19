@@ -60,6 +60,7 @@ async function proofFor(
     readonly ath?: string;
     readonly jti?: string;
     readonly iat?: number;
+    readonly typ?: string;
   } = {},
 ): Promise<string> {
   return new SignJWT({
@@ -67,7 +68,11 @@ async function proofFor(
     htu: overrides.htu ?? REQUEST_URL,
     ath: overrides.ath ?? accessTokenHash(ACCESS_TOKEN),
   })
-    .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk: key.jwk })
+    .setProtectedHeader({
+      alg: 'ES256',
+      typ: overrides.typ ?? 'dpop+jwt',
+      jwk: key.jwk,
+    })
     .setJti(overrides.jti ?? 'proof-1')
     .setIssuedAt(overrides.iat ?? NOW)
     .sign(key.privateKey);
@@ -110,6 +115,14 @@ describe('JoseDpopProofVerifier', () => {
         ttlSeconds: 180,
       },
     ]);
+  });
+
+  it('accepts an uppercase DPoP media type in the protected header', async () => {
+    const key = await clientKey();
+
+    await expect(
+      subject().verify(inputFor(key, await proofFor(key, { typ: 'DPOP+JWT' }))),
+    ).resolves.toBeUndefined();
   });
 
   it('accepts a request URL that carries a query when the proof names the URL without it', async () => {

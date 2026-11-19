@@ -9106,7 +9106,7 @@
                           "type": "string"
                         },
                         "dpop_bound": {
-                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
                           "const": true,
                           "type": "boolean"
                         },
@@ -9571,7 +9571,7 @@
                           "type": "string"
                         },
                         "dpop_bound": {
-                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
                           "const": true,
                           "type": "boolean"
                         },
@@ -9953,7 +9953,7 @@
                           "type": "string"
                         },
                         "dpop_bound": {
-                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
                           "const": true,
                           "type": "boolean"
                         },
@@ -10746,7 +10746,7 @@
                           "type": "string"
                         },
                         "dpop_bound": {
-                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
                           "const": true,
                           "type": "boolean"
                         },

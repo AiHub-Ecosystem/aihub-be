@@ -20,12 +20,16 @@ import { UserAccessJwtGuard } from './user-access-jwt.guard';
 const ISSUER = 'https://api.test.aihub.example.com';
 const TOKEN = 'compact.token.value';
 
+const webSession = {
+  kind: 'web',
+  id: 'wss_01J00000000000000000000000',
+} as const;
 const webToken: VerifiedUserAccessToken = {
   userId: 'usr_01J00000000000000000000000',
   issuer: ISSUER,
   jti: 'jti_01',
   validUntil: new Date(Date.now() + 960_000),
-  session: { kind: 'web', id: 'wss_01J00000000000000000000000' },
+  session: webSession,
   jkt: 'bound-thumbprint',
 };
 const unboundWebToken: VerifiedUserAccessToken = {
@@ -33,7 +37,7 @@ const unboundWebToken: VerifiedUserAccessToken = {
   issuer: ISSUER,
   jti: 'jti_02',
   validUntil: webToken.validUntil,
-  session: webToken.session!,
+  session: webSession,
 };
 const refreshToken: VerifiedUserAccessToken = {
   userId: webToken.userId,
