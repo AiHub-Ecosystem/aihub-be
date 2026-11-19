@@ -240,6 +240,31 @@ class FakeRedis implements RedisIdentityClient {
 }
 
 describe('RedisIdentityStore', () => {
+  it('reserves assertion replay markers once per Organization and environment', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    const input = {
+      organizationId: 'org_acme',
+      environment: 'production' as const,
+      jti: 'shared-jti',
+      ttlSeconds: 160,
+    };
+
+    await expect(store.reserve(input)).resolves.toBe(true);
+    await expect(store.reserve(input)).resolves.toBe(false);
+    await expect(
+      store.reserve({ ...input, environment: 'sandbox' }),
+    ).resolves.toBe(true);
+    await expect(
+      store.reserve({ ...input, organizationId: 'org_other' }),
+    ).resolves.toBe(true);
+    expect(
+      redis.expirations.get(
+        'aihub:v1:user-assertion-replay:org_acme:production:shared-jti',
+      ),
+    ).toBe(160);
+  });
+
   it('stores and reads a positive API-key cache entry with a 60-second TTL', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);
