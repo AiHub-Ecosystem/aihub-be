@@ -1,5 +1,6 @@
 import { Response } from 'undici';
 
+import { numberReply } from '@/common/redis/number-reply';
 import { RedisAuthRateLimiter } from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import { apiKeyLookupBudgetKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
@@ -8,6 +9,7 @@ import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastruc
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { RedisAuthFailureCounter } from '@/modules/identity/shared/infrastructure/redis-auth-failure-counter';
+import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity-client';
 import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/redis-identity.store';
 import { UserAssertionVerifier } from '@/modules/identity/user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from '@/modules/identity/user-assertions/application/user-identity-resolver';
@@ -51,6 +53,25 @@ function nowSeconds(): number {
 
 function credential(value: string) {
   return { value, environment: 'production', clientIp: '198.51.100.7' };
+}
+
+function redisIdentityClient(
+  client: ReturnType<typeof createTenantIsolationRedis>,
+): RedisIdentityClient {
+  return {
+    get: (key) => client.get(key),
+    pttl: (key) => client.pttl(key),
+    set: (key, value, mode, seconds, condition) =>
+      condition === undefined
+        ? client.set(key, value, mode, seconds)
+        : client.set(key, value, mode, seconds, condition),
+    del: (...keys) => client.del(...keys),
+    incr: (key) => client.incr(key),
+    eval: (script, numberOfKeys, ...args) =>
+      client.eval(script, numberOfKeys, ...args).then(numberReply),
+    expire: (key, seconds) => client.expire(key, seconds),
+    quit: () => client.quit(),
+  };
 }
 
 beforeAll(async () => {
@@ -285,35 +306,43 @@ it('uses organization B only for B while Redis is refused', async () => {
 
 it('shares an exhausted uncached API-key budget across Redis clients', async () => {
   const budgetKey = apiKeyLookupBudgetKey();
-  const redisUrl =
-    process.env['TENANT_ISOLATION_REDIS_URL']?.trim() ||
-    'redis://127.0.0.1:6379/15';
+  const firstRedis = createTenantIsolationRedis();
+  const secondRedis = createTenantIsolationRedis();
   const warnings: Record<string, unknown>[] = [];
   const logger = {
     warn: (fields: Record<string, unknown>) => warnings.push(fields),
     log: () => undefined,
   };
-  const first = new RedisAuthFailureCounter(redisUrl, undefined, logger);
-  const second = new RedisAuthFailureCounter(redisUrl, undefined, logger);
-  await raw.del(budgetKey);
+  const first = new RedisAuthFailureCounter(
+    '',
+    redisIdentityClient(firstRedis),
+    logger,
+  );
+  const second = new RedisAuthFailureCounter(
+    '',
+    redisIdentityClient(secondRedis),
+    logger,
+  );
 
   try {
+    await Promise.all([firstRedis.ping(), secondRedis.ping()]);
+    await raw.del(budgetKey);
     await expect(first.consumeUncachedLookup()).resolves.toEqual({
       allowed: true,
     });
-    await raw.hset(
-      budgetKey,
-      'tokens',
-      '0',
-      'updated_at',
-      String(Date.now() + 60 * 60 * 1_000),
-    );
+    const updatedAt = String(Date.now() + 60 * 60 * 1_000);
+    await raw.hset(budgetKey, 'tokens', '0', 'updated_at', updatedAt);
+    await expect(raw.hgetall(budgetKey)).resolves.toEqual({
+      tokens: '0',
+      updated_at: updatedAt,
+    });
 
-    await expect(second.consumeUncachedLookup()).resolves.toEqual({
+    const decision = await second.consumeUncachedLookup();
+    expect(warnings).toEqual([]);
+    expect(decision).toEqual({
       allowed: false,
       retryAfterMs: 10,
     });
-    expect(warnings).toEqual([]);
   } finally {
     await raw.del(budgetKey);
     await first.onModuleDestroy();
