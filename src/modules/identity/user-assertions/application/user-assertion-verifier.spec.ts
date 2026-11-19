@@ -335,7 +335,7 @@ describe('UserAssertionVerifier', () => {
     expect(provider.calls).toEqual([false, true]);
   });
 
-  it('refreshes at most once for a same-kid assertion that still fails', async () => {
+  it('refreshes once for a same-kid assertion that still fails, not again inside the cooldown', async () => {
     const oldFixture = await rsaFixture('shared');
     const newFixture = await rsaFixture('shared');
     const assertion = await token(oldFixture.privateKey, {
@@ -348,14 +348,17 @@ describe('UserAssertionVerifier', () => {
       signature[0] === 'a' ? 'b' : 'a'
     }${signature.slice(1)}`;
     const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+    const subject = verifier(provider);
 
-    await expect(
-      verifier(provider).verify({
-        signedAssertion: tampered,
-        organizationId: 'org_acme',
-      }),
-    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
-    expect(provider.calls).toEqual([false, true]);
+    for (const _attempt of [1, 2]) {
+      await expect(
+        subject.verify({
+          signedAssertion: tampered,
+          organizationId: 'org_acme',
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    }
+    expect(provider.calls).toEqual([false, true, false]);
   });
 
   it('rejects multiple matching keys when kid is absent', async () => {

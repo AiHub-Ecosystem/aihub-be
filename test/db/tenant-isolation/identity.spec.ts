@@ -307,6 +307,9 @@ describe('tenant isolation for identity boundaries', () => {
 
     expect(fetched).toEqual([
       'https://tenant-a.example.test/jwks',
+      // The forged cached key set carries tenant B's material under tenant A's
+      // `kid`, so verification fails and #1977 reloads once for a real rotation.
+      'https://tenant-a.example.test/jwks',
       'https://tenant-b.example.test/jwks',
     ]);
     const organizationAKeys = await redisClients.raw.keys(

@@ -27,6 +27,8 @@ export interface SignedUserAssertionInput {
 const ASSERTION_CLOCK_SKEW_SECONDS = 60;
 const MAX_ASSERTION_BYTES = 32 * 1024;
 const MAX_CLAIM_STRING_LENGTH = 256;
+const KID_ROTATION_RELOAD_COOLDOWN_SECONDS = 5 * 60;
+const MAX_TRACKED_ROTATION_RELOADS = 256;
 
 function isAllowedAlgorithm(
   value: unknown,
@@ -151,6 +153,8 @@ function validateClaims(
 }
 
 export class UserAssertionVerifier {
+  private readonly rotationReloadCooldowns = new Map<string, number>();
+
   constructor(
     private readonly keyProvider: JwksKeyProviderPort,
     private readonly crypto: UserAssertionCryptoPort,
@@ -199,6 +203,9 @@ export class UserAssertionVerifier {
       });
     } catch (error) {
       if (header.kid === undefined) {
+        throw invalidSignedUserAssertion(error);
+      }
+      if (this.rotationReloadBlocked(input.organizationId, nowSeconds)) {
         throw invalidSignedUserAssertion(error);
       }
       const refreshed = await this.loadKeys(input.organizationId, config, true);
@@ -252,5 +259,31 @@ export class UserAssertionVerifier {
 
       throw identityProviderUnavailable(error);
     }
+  }
+
+  /**
+   * A forged assertion can carry a real `kid`, so an unbounded reload would let
+   * any unauthenticated caller drive one IdP fetch per request. One reload per
+   * Organization per cooldown is enough for a real rotation.
+   *
+   * shortcut: the cooldown is process-local, so each instance reloads once;
+   * upgrade to a shared bound if failed-assertion fetch volume is material.
+   */
+  private rotationReloadBlocked(
+    organizationId: string,
+    nowSeconds: number,
+  ): boolean {
+    const retryAt = this.rotationReloadCooldowns.get(organizationId);
+    if (retryAt !== undefined && retryAt > nowSeconds) {
+      return true;
+    }
+    if (this.rotationReloadCooldowns.size >= MAX_TRACKED_ROTATION_RELOADS) {
+      this.rotationReloadCooldowns.clear();
+    }
+    this.rotationReloadCooldowns.set(
+      organizationId,
+      nowSeconds + KID_ROTATION_RELOAD_COOLDOWN_SECONDS,
+    );
+    return false;
   }
 }
