@@ -31,6 +31,7 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
   /** Fails the next durable read, as an unreachable database would. */
   failFindWebSession = false;
   failRenewWebSession = false;
+  failBindWebSessionProofKey = false;
   failRevokeWebSession = false;
 
   constructor(private readonly state: InMemoryAuthState) {}
@@ -68,7 +69,32 @@ export class InMemoryWebSessionAdapter implements WebSessionRepositoryPort {
     ) {
       return undefined;
     }
-    return { sessionId: row.sessionId, userId: row.userId };
+    return {
+      sessionId: row.sessionId,
+      userId: row.userId,
+      ...(row.proofKeyJkt === undefined
+        ? {}
+        : { proofKeyJkt: row.proofKeyJkt }),
+    };
+  }
+
+  async bindWebSessionProofKey(
+    input: Parameters<WebSessionRepositoryPort['bindWebSessionProofKey']>[0],
+  ): Promise<boolean> {
+    if (this.failBindWebSessionProofKey) {
+      throw new Error('durable store unavailable');
+    }
+    const row = this.state.webSessions.get(input.tokenHash);
+    if (
+      row === undefined ||
+      row.revokedAt !== undefined ||
+      row.expiresAt.getTime() <= input.now.getTime() ||
+      row.proofKeyJkt !== undefined
+    ) {
+      return false;
+    }
+    row.proofKeyJkt = input.proofKeyJkt;
+    return true;
   }
 
   async renewWebSession(input: RenewWebSessionInput): Promise<boolean> {

@@ -14,6 +14,7 @@ import {
   verifiedUserAccessToken,
 } from '@/modules/auth/testing/user-access-token-verifier.stub';
 import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
+import { USER_ACCESS_DPOP_POLICY } from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 import { USER_ACCESS_TOKEN_VERIFIER } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { UserAccessJwtGuard } from '@/modules/auth/web-sessions/presentation/user-access-jwt.guard';
 import { registerRequestHooks } from '@/register-request-hooks';
@@ -46,6 +47,13 @@ describe('OpenApiController', () => {
         {
           provide: USER_ACCOUNT_REPOSITORY,
           useValue: { findUserAccountStatus: async () => 'active' },
+        },
+        {
+          provide: USER_ACCESS_DPOP_POLICY,
+          useValue: {
+            mode: 'off',
+            verifier: { verify: async () => undefined },
+          },
         },
       ],
     }).compile();
@@ -87,7 +95,7 @@ describe('OpenApiController', () => {
       headers,
     });
     expect(v1.statusCode).toBe(200);
-    expect(v1.json()).toMatchObject({ info: { version: '1.17.0' } });
+    expect(v1.json()).toMatchObject({ info: { version: '1.18.0' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['content-security-policy']).toBe(

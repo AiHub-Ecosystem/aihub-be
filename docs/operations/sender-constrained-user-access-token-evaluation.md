@@ -1,6 +1,6 @@
 # Sender-constrained User Access JWT evaluation
 
-Status: evaluation for [#1701](https://github.com/AiHub-Ecosystem/aihub-be/issues/1701). This is a decision record, not an ADR and not an authorization to change the Bearer boundary.
+Status: evaluation for [#1701](https://github.com/AiHub-Ecosystem/aihub-be/issues/1701). The decision of record is now [ADR-0176](../adr/0176-dpop-binds-web-session-jwts.md); this document keeps the analysis behind it.
 
 ## Scope
 
@@ -35,25 +35,16 @@ The residual risk is narrow: within 15 minutes of a copied token leaving the BFF
 
 ## Decision
 
-**Park under named triggers. Do not adopt DPoP or mTLS binding now.**
+**Superseded on 2026-11-19: adopt for Web Session tokens.** The first version of this evaluation parked DPoP under three triggers. The owner then chose to build it for the Customer Web path, so [ADR-0176](../adr/0176-dpop-binds-web-session-jwts.md) is the decision of record. It covers key placement (browser, non-extractable), the proof-verification port, the Redis replay cache (ephemeral protection state, separate from ADR-0150's Postgres revocation), the `off`/`verify`/`enforce` rollout and the exclusion of the grading boundaries.
 
-Revocation plus audience scoping is sufficient at the current risk level. Adding a proof key would move the security boundary into a frontend repository and add hot-path verification and replay state for a threat that has not been observed. This is a deferral with conditions, not a rejection: DPoP is the right mechanism if the trigger arrives.
+The analysis above still stands. What changed is the weighing: the work is accepted although none of the three original triggers has occurred. Those triggers described when to start; they are not conditions the build now waits for.
 
-Named triggers, any one of which reopens this issue:
+Open points the ADR leaves for the rollout, not for this evaluation:
 
-1. **A real token-theft incident class** with evidence that copied User Access JWTs were replayed from another client within the 15-minute window and that revocation was too slow to contain it.
-2. **An enterprise security requirement** in a signed customer contract that explicitly requires sender-constrained tokens or equivalent proof-of-possession.
-3. **Direct user-facing API access ships**, so a client holds the token in a non-BFF environment where the current HttpOnly-cookie protection no longer applies.
-
-If adopted later, the implementation issue must name:
-
-- a proof-verification port behind the Bearer boundary, separate from `UserAccessTokenVerifierPort.verify` but composed before authorization;
-- Redis (bounded TTL, keyed by proof `jti` and scope) as ephemeral anti-replay protection state, with Postgres revocation under ADR-0150 unchanged;
-- the client key contract per client type, including rotation, and a cross-repository rollout with the Customer Web; and
-- an explicit decision that the grading boundaries remain excluded.
-
-Those are requirements for the follow-up, not decisions taken unilaterally here.
+- move the server to `verify` before the Customer Web starts sending DPoP; after `verify` is active, it should use DPoP when the exchange response has `dpop_bound: true` and Bearer otherwise (`token_type` remains `Bearer`; separate repository);
+- the owner chooses the `enforce` window and date after `sum(increase(aihub_user_access_token_use_total{scheme="bearer",session="web"}[1h]))` remains zero across app instances for that window; replace `1h` with the selected duration;
+- `htu` behind nginx still needs a check with a real proxied request.
 
 ## Revisit
 
-Review this evaluation when a trigger above occurs, or when the owner records a formal acceptance of the residual 15-minute replay window as part of a launch or enterprise review. No code, dependency, or runtime configuration changes ship under this issue.
+Revisit if a nonce (RFC 9449 §8) becomes necessary, if direct user-facing API clients ship, or if the same binding is wanted for login and refresh tokens. Extending it to the grading boundaries needs its own ADR.

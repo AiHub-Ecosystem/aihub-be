@@ -162,6 +162,21 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.18.0] - 2026-11-19
+
+### Added
+
+- `POST /v1/auth/web-sessions/exchange` accepts an optional `client_proof_key`:
+  the public JWK (`kty: EC`, `crv: P-256`, `x`, `y`) of a key the Customer Web
+  holds. Its first thumbprint is stored with the Web Session, which rejects a
+  replacement key until the user signs in again. Bound access tokens carry
+  `cnf.jkt` and responses add `dpop_bound: true`; `token_type` remains `Bearer`
+  for v1 compatibility. Clients send DPoP after the server enters `verify`.
+  Callers that omit the key get an unbound Bearer token. Private keys, invalid P-256 coordinates, another
+  curve, or any other member are refused with `INVALID_REQUEST` (`400`). Enable
+  `AIHUB_DPOP_MODE=verify` before clients start using the DPoP scheme; `off`
+  accepts Bearer only. `enforce` later requires DPoP for Web Session tokens.
+
 ## [1.17.0] - 2026-11-19
 
 ### Added
