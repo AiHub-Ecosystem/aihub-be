@@ -228,7 +228,9 @@ whose User Access JWT verified, in every `AIHUB_DPOP_MODE`, including a Bearer
 use that `enforce` then refuses. `scheme` is `bearer` or `dpop`; `session` is
 `web`, `refresh` or `none`. The series `scheme="bearer",session="web"` is the
 Bearer traffic left before DPoP enforcement ([ADR-0176](../../../adr/0176-dpop-binds-web-session-jwts.md)).
-It carries no user, token or key label.
+Since it is a counter, measure `increase` over the owner-selected window and
+aggregate across app instances before enabling `enforce`. It carries no user,
+token or key label.
 
 `aihub_redis_unavailable_total` increments once when a request-path or
 Operator CLI protection/cache seam reports a failed Redis operation, and does

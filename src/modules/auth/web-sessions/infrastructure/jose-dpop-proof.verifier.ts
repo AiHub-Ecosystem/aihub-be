@@ -89,7 +89,7 @@ export class JoseDpopProofVerifier implements DpopProofVerifierPort {
         jti.length === 0 ||
         jti.length > MAX_JTI_LENGTH ||
         typeof iat !== 'number' ||
-        !Number.isSafeInteger(iat) ||
+        !Number.isFinite(iat) ||
         Math.abs(this.now() - iat) > this.config.clockSkewSeconds
       ) {
         throw invalidUserAccessToken();

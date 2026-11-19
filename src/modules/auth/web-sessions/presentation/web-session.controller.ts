@@ -166,6 +166,7 @@ export class WebSessionController {
       exchanged.token,
       exchanged.expiresIn,
       String(request.id),
+      input.client_proof_key !== undefined,
     );
   }
 

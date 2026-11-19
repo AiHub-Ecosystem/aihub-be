@@ -278,9 +278,8 @@ export class WebSessionService implements WebSessionServicePort {
   }
 
   /**
-   * The stateless exchange: read the session, mint a JWT, and slide the
-   * session's expiry forward. Nothing is locked and nothing is stored for the
-   * JWT, so the BFF may run as many instances as it likes and repeat a call.
+   * Exchange a Web Session for a JWT, claiming its first proof-key thumbprint
+   * once and sliding the session expiry forward. The JWT itself is not stored.
    */
   async exchangeWebSession(
     input: {
@@ -298,6 +297,7 @@ export class WebSessionService implements WebSessionServicePort {
 
     let userId: string;
     let sessionId: string;
+    let sessionProofKeyJkt: string | undefined;
     try {
       const session = await this.webSessions.findExchangeableWebSession({
         tokenHash,
@@ -319,6 +319,7 @@ export class WebSessionService implements WebSessionServicePort {
       }
       userId = session.userId;
       sessionId = session.sessionId;
+      sessionProofKeyJkt = session.proofKeyJkt;
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -330,14 +331,32 @@ export class WebSessionService implements WebSessionServicePort {
     }
 
     // Sign before the final durable check, but publish nothing until it passes.
-    // If revocation commits during signing or renewal, the fresh read refuses
-    // this exchange. If it commits after the read, the JWT was already signed
-    // before revocation, which is the documented 15-minute allowance.
+    // If the session already has a key, its thumbprint must stay the same; an
+    // unset key can be claimed once with a compare-and-set in the repository.
     const issued = await this.accessTokenIssuer.issue(
       userId,
       { kind: 'web', id: sessionId },
       input.proofKey,
     );
+    if (
+      sessionProofKeyJkt !== undefined &&
+      issued.proofKeyJkt !== sessionProofKeyJkt
+    ) {
+      await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
+      throw invalidWebSession();
+    }
+    if (issued.proofKeyJkt !== undefined) {
+      try {
+        await this.webSessions.bindWebSessionProofKey({
+          tokenHash,
+          proofKeyJkt: issued.proofKeyJkt,
+          now: this.clock.now(),
+        });
+      } catch (error) {
+        throw webSessionUnavailable(error);
+      }
+    }
+
     const checkedAt = this.clock.now();
     await this.renewSession(tokenHash, checkedAt);
     let stillExchangeable;
@@ -349,7 +368,10 @@ export class WebSessionService implements WebSessionServicePort {
     } catch (error) {
       throw webSessionUnavailable(error);
     }
-    if (stillExchangeable === undefined) {
+    if (
+      stillExchangeable === undefined ||
+      stillExchangeable.proofKeyJkt !== issued.proofKeyJkt
+    ) {
       await this.enforceExchangeFailureLimits(tokenHash, endUserIp);
       throw invalidWebSession();
     }

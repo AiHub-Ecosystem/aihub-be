@@ -124,7 +124,7 @@ export const ClientProofKeySchema = Type.Object(
   {
     additionalProperties: false,
     description:
-      'Public JWK (ES256, P-256) the client signs DPoP proofs with. When sent, the access token is bound to it through `cnf.jkt`, and the caller then presents it as `Authorization: DPoP` with a `DPoP` proof header.',
+      'Valid public JWK (ES256, P-256) the client signs DPoP proofs with. When first bound to a Web Session, it is stored by thumbprint; later exchanges must use the same key. The access token is bound through `cnf.jkt` and the response adds `dpop_bound: true`. Send DPoP proofs after the server is in `verify` or `enforce`; while it is `off`, use Bearer.',
   },
 );
 

@@ -41,8 +41,8 @@ The analysis above still stands. What changed is the weighing: the work is accep
 
 Open points the ADR leaves for the rollout, not for this evaluation:
 
-- the Customer Web must send `client_proof_key` and `DPoP` proofs before `enforce` (separate repository);
-- the cutoff date for `enforce` is the owner's, set when `aihub_user_access_token_use_total{scheme="bearer",session="web"}` has stayed at zero;
+- move the server to `verify` before the Customer Web starts sending DPoP; it should use the exchange response `token_type` and keep using Bearer until `verify` is active (separate repository);
+- the owner chooses the `enforce` window and date after `sum(increase(aihub_user_access_token_use_total{scheme="bearer",session="web"}[1h]))` remains zero across app instances for that window; replace `1h` with the selected duration;
 - `htu` behind nginx still needs a check with a real proxied request.
 
 ## Revisit

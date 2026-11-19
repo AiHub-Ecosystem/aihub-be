@@ -9105,6 +9105,11 @@
                           "const": "Bearer",
                           "type": "string"
                         },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "const": true,
+                          "type": "boolean"
+                        },
                         "expires_in": {
                           "const": 900,
                           "type": "number"
@@ -9565,6 +9570,11 @@
                           "const": "Bearer",
                           "type": "string"
                         },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "const": true,
+                          "type": "boolean"
+                        },
                         "expires_in": {
                           "const": 900,
                           "type": "number"
@@ -9941,6 +9951,11 @@
                         "token_type": {
                           "const": "Bearer",
                           "type": "string"
+                        },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "const": true,
+                          "type": "boolean"
                         },
                         "expires_in": {
                           "const": 900,
@@ -10672,7 +10687,7 @@
                   },
                   "client_proof_key": {
                     "additionalProperties": false,
-                    "description": "Public JWK (ES256, P-256) the client signs DPoP proofs with. When sent, the access token is bound to it through `cnf.jkt`, and the caller then presents it as `Authorization: DPoP` with a `DPoP` proof header.",
+                    "description": "Valid public JWK (ES256, P-256) the client signs DPoP proofs with. When first bound to a Web Session, it is stored by thumbprint; later exchanges must use the same key. The access token is bound through `cnf.jkt` and the response adds `dpop_bound: true`. Send DPoP proofs after the server is in `verify` or `enforce`; while it is `off`, use Bearer.",
                     "type": "object",
                     "required": ["kty", "crv", "x", "y"],
                     "properties": {
@@ -10729,6 +10744,11 @@
                         "token_type": {
                           "const": "Bearer",
                           "type": "string"
+                        },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.",
+                          "const": true,
+                          "type": "boolean"
                         },
                         "expires_in": {
                           "const": 900,

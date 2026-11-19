@@ -2,6 +2,20 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('web session migration', () => {
+  it('keeps web session proof-key binding nullable and constrained to JKT shape', () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../../../../../prisma/migrations/0069_web_session_proof_key/migration.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toContain('ADD COLUMN proof_key_jkt text');
+    expect(sql).toContain('web_sessions_proof_key_jkt_format');
+    expect(sql).toContain("proof_key_jkt ~ '^[A-Za-z0-9_-]{43}$'");
+  });
+
   it('keeps opaque web session credentials hash-only with an account index', () => {
     const sql = readFileSync(
       join(

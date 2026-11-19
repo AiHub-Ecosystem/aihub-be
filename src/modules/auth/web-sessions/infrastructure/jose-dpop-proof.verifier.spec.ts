@@ -133,6 +133,14 @@ describe('JoseDpopProofVerifier', () => {
     ).rejects.toMatchObject(INVALID);
   });
 
+  it('accepts a fractional iat NumericDate within the proof window', async () => {
+    const key = await clientKey();
+
+    await expect(
+      subject().verify(inputFor(key, await proofFor(key, { iat: NOW - 0.5 }))),
+    ).resolves.toBeUndefined();
+  });
+
   it('rejects a proof made for a different access token', async () => {
     const key = await clientKey();
     const proof = await proofFor(key, { ath: accessTokenHash('x.y.z') });

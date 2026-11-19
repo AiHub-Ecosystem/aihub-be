@@ -4,7 +4,6 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
-  Optional,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -52,16 +51,6 @@ function requiredToken(): AppError {
   });
 }
 
-/** Bearer-only behavior: the policy a guard built without DPoP wiring gets. */
-const DPOP_OFF: DpopGuardPolicy = {
-  mode: 'off',
-  verifier: {
-    verify: async () => {
-      throw invalidUserAccessToken();
-    },
-  },
-};
-
 const BEARER_CHALLENGE = 'Bearer';
 const DPOP_CHALLENGE = 'DPoP algs="ES256"';
 
@@ -88,7 +77,7 @@ function replayStateUnavailable(cause: unknown): AppError {
 /** The request URL the proof must name: trusted-proxy scheme and host, path only. */
 function proofTargetUrl(request: FastifyRequest): string {
   const path = (request.url ?? '').split(/[?#]/u, 1)[0] ?? '';
-  return `${request.protocol}://${request.hostname}${path}`;
+  return `${request.protocol}://${request.host}${path}`;
 }
 
 function hasAlternateTokenSource(request: FastifyRequest): boolean {
@@ -118,11 +107,8 @@ export class UserAccessJwtGuard implements CanActivate {
     >,
     @Inject(USER_ACCESS_TOKEN_REVOCATION_RECORD)
     private readonly revocations: UserAccessTokenRevocationRecordPort,
-    // Optional so a composition without DPoP wiring stays Bearer-only; the
-    // runtime module always provides the configured policy.
-    @Optional()
     @Inject(USER_ACCESS_DPOP_POLICY)
-    private readonly dpop: DpopGuardPolicy = DPOP_OFF,
+    private readonly dpop: DpopGuardPolicy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

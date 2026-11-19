@@ -61,6 +61,7 @@ function requestWith(
   return {
     method: 'GET',
     protocol: 'https',
+    host: 'api.test.aihub.example.com',
     hostname: 'api.test.aihub.example.com',
     url: '/v1/me?limit=5',
     headers,
@@ -204,6 +205,21 @@ describe('UserAccessJwtGuard DPoP modes', () => {
       expect(request['aihubUser']).toMatchObject({ userId: webToken.userId });
     },
   );
+
+  it('preserves a non-default port in the DPoP proof target URL', async () => {
+    const { guard, seen, response } = setup('verify', webToken);
+    const request = requestWith({
+      authorization: `DPoP ${TOKEN}`,
+      dpop: 'the-proof',
+    });
+    request['host'] = 'api.test.aihub.example.com:3443';
+
+    await expect(guard.canActivate(context(request, response))).resolves.toBe(
+      true,
+    );
+
+    expect(seen[0]?.url).toBe('https://api.test.aihub.example.com:3443/v1/me');
+  });
 
   it('verify: still accepts Bearer for a web-session token', async () => {
     const { guard, response } = setup('verify', unboundWebToken);

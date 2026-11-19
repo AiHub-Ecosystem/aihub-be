@@ -490,6 +490,7 @@ function createUserAccessTokenCrypto(
     REFRESH_SESSION_REPOSITORY,
     USER_ACCESS_TOKEN_VERIFIER,
     USER_ACCESS_TOKEN_REVOCATION_RECORD,
+    USER_ACCESS_DPOP_POLICY,
     WEB_SESSION_CLIENT_SECRET,
     UserAccessJwtGuard,
     WebSessionClientGuard,

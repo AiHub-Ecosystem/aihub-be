@@ -188,6 +188,10 @@ describe('User Account status and session revocation against PostgreSQL (Issue #
       verifier,
       userAccountRepository,
       tokenRevocations,
+      {
+        mode: 'off',
+        verifier: { verify: async () => undefined },
+      },
     );
 
     const bearerRequest = {

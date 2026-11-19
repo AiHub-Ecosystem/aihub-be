@@ -7,10 +7,12 @@ import {
   SignJWT,
   calculateJwkThumbprint,
   decodeProtectedHeader,
+  importJWK,
   jwtVerify,
 } from 'jose';
 
 import { AppError, internalError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import { isRecord } from '@/common/is-record';
 import {
   type DpopProofKeyInput,
@@ -104,13 +106,19 @@ export class JoseUserAccessTokenService
       });
     }
 
-    if (proofKey !== undefined && !isDpopPublicJwk(proofKey)) {
-      throw internalError('User access token proof key is invalid');
+    if (proofKey !== undefined) {
+      if (!isDpopPublicJwk(proofKey)) throw invalidRequest();
+      try {
+        await importJWK(proofKey, 'ES256');
+      } catch {
+        throw invalidRequest();
+      }
     }
-    const cnf =
+    const proofKeyJkt =
       proofKey === undefined
         ? undefined
-        : { jkt: await calculateJwkThumbprint(proofKey) };
+        : await calculateJwkThumbprint(proofKey);
+    const cnf = proofKeyJkt === undefined ? undefined : { jkt: proofKeyJkt };
 
     const issuedAt = this.now();
     const token = await new SignJWT({
@@ -126,7 +134,11 @@ export class JoseUserAccessTokenService
       .setExpirationTime(issuedAt + this.config.expiresInSeconds)
       .sign(this.privateKey);
 
-    return { token, expiresIn: this.config.expiresInSeconds };
+    return {
+      token,
+      expiresIn: this.config.expiresInSeconds,
+      ...(proofKeyJkt === undefined ? {} : { proofKeyJkt }),
+    };
   }
 
   async verify(token: string): Promise<VerifiedUserAccessToken> {

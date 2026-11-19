@@ -147,6 +147,12 @@ export const LoginResponseSchema = Type.Object(
       {
         access_token: Type.String({ minLength: 1 }),
         token_type: Type.Literal('Bearer'),
+        dpop_bound: Type.Optional(
+          Type.Literal(true, {
+            description:
+              'Present and true when the access token requires a DPoP proof after AIHUB_DPOP_MODE enters verify or enforce.',
+          }),
+        ),
         expires_in: Type.Literal(900),
         csrf_token: Type.Optional(
           Type.String({

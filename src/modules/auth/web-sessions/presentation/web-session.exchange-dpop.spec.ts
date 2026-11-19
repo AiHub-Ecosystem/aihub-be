@@ -63,7 +63,15 @@ describe('web session exchange with a Client proof key', () => {
     const token = await helpers.webSessionToken();
     const key = await publicKey();
 
-    const verified = await accessTokenOf(await exchangeWith(token, key.jwk));
+    const response = await exchangeWith(token, key.jwk);
+    const body = response.json<{
+      data: { token_type: string; dpop_bound: boolean };
+    }>();
+    expect(body.data).toMatchObject({
+      token_type: 'Bearer',
+      dpop_bound: true,
+    });
+    const verified = await accessTokenOf(response);
 
     expect(verified.jkt).toBe(key.jkt);
     expect(verified.session?.kind).toBe('web');
@@ -72,9 +80,49 @@ describe('web session exchange with a Client proof key', () => {
   it('still issues an unbound access token when no key is submitted', async () => {
     const token = await helpers.webSessionToken();
 
-    const verified = await accessTokenOf(await exchangeWith(token));
+    const response = await exchangeWith(token);
+    const body = response.json<{ data: { token_type: string } }>();
+    expect(body.data.token_type).toBe('Bearer');
+    const verified = await accessTokenOf(response);
 
     expect(verified.jkt).toBeUndefined();
+  });
+
+  it('keeps one proof key per Web Session and requires sign-in to replace it', async () => {
+    const token = await helpers.webSessionToken();
+    const boundKey = await publicKey();
+    const replacementKey = await publicKey();
+
+    expect((await exchangeWith(token, boundKey.jwk)).statusCode).toBe(200);
+    expect((await exchangeWith(token, boundKey.jwk)).statusCode).toBe(200);
+
+    const replacement = await exchangeWith(token, replacementKey.jwk);
+    expect(replacement.statusCode).toBe(401);
+    expect(replacement.json()).toMatchObject({
+      error: { code: 'AUTH_WEB_SESSION_INVALID' },
+    });
+
+    const omitted = await exchangeWith(token);
+    expect(omitted.statusCode).toBe(401);
+    expect(omitted.json()).toMatchObject({
+      error: { code: 'AUTH_WEB_SESSION_INVALID' },
+    });
+  });
+
+  it('refuses coordinates that do not identify a P-256 point', async () => {
+    const token = await helpers.webSessionToken();
+
+    const response = await exchangeWith(token, {
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'A'.repeat(43),
+      y: 'A'.repeat(43),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
   });
 
   it('refuses a key that carries private material, and echoes none of it', async () => {

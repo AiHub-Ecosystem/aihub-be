@@ -3,6 +3,8 @@ import type { DpopProofKeyInput } from './dpop-proof-key';
 export interface IssuedUserAccessToken {
   readonly token: string;
   readonly expiresIn: number;
+  /** Present only when this token was bound to a proof key. */
+  readonly proofKeyJkt?: string;
 }
 
 export interface UserAccessTokenIssuerPort {

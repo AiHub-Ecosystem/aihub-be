@@ -6,6 +6,7 @@ import {
 } from '@/modules/auth/testing/in-memory-auth.state';
 import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing/in-memory-user-access-token-revocation.adapter';
 import { InMemoryUserAccountAdapter } from '@/modules/auth/testing/in-memory-user-account.adapter';
+import type { DpopGuardPolicy } from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 import type {
   UserAccessTokenVerifierPort,
   VerifiedUserAccessToken,
@@ -23,6 +24,11 @@ function context(
     }),
   } as unknown as ExecutionContext;
 }
+
+const DPOP_OFF_POLICY: DpopGuardPolicy = {
+  mode: 'off',
+  verifier: { verify: async () => undefined },
+};
 
 describe('UserAccessJwtGuard', () => {
   const verified: VerifiedUserAccessToken = {
@@ -49,6 +55,7 @@ describe('UserAccessJwtGuard', () => {
       verifier,
       new InMemoryUserAccountAdapter(state),
       revocations,
+      DPOP_OFF_POLICY,
     );
   }
 
@@ -151,6 +158,7 @@ describe('UserAccessJwtGuard', () => {
       { verify: async () => verified },
       new InMemoryUserAccountAdapter(state),
       new InMemoryUserAccessTokenRevocationAdapter(),
+      DPOP_OFF_POLICY,
     );
 
     await expect(

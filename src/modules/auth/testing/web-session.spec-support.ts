@@ -208,6 +208,7 @@ export async function createWebSessionTestContext(
     webSessions.failCreateWebSession = false;
     webSessions.failFindWebSession = false;
     webSessions.failRenewWebSession = false;
+    webSessions.failBindWebSessionProofKey = false;
     webSessions.failRevokeWebSession = false;
     verificationTokens.failSessionWrite = false;
     hasher.result = true;

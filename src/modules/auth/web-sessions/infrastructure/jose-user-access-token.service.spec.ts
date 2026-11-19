@@ -185,10 +185,26 @@ describe('JoseUserAccessTokenService', () => {
           SESSION,
           bound.privateJwk,
         ),
-      ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST', httpStatus: 400 });
       await expect(
         service.issue('usr_01J00000000000000000000000', SESSION, rsa),
-      ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST', httpStatus: 400 });
+    });
+
+    it('rejects coordinates that do not identify a P-256 public key as invalid input', async () => {
+      const keys = await keyPair();
+      const service = new JoseUserAccessTokenService(
+        config(keys.privateKeyPem),
+      );
+
+      await expect(
+        service.issue('usr_01J00000000000000000000000', SESSION, {
+          kty: 'EC',
+          crv: 'P-256',
+          x: 'A'.repeat(43),
+          y: 'A'.repeat(43),
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_REQUEST', httpStatus: 400 });
     });
 
     it('rejects a token whose cnf claim is malformed', async () => {
