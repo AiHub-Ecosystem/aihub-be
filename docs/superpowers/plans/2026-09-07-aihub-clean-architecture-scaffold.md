@@ -159,10 +159,8 @@ Run the repository placeholder scan over `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`,
 - `src/common/errors/http-exception.filter.ts`
 - `src/common/request-context/request-context.ts`
 - `src/common/request-context/request-context.factory.ts`
-- `src/common/security/redact.ts`
 - `src/common/errors/app-error.spec.ts`
 - `src/common/request-context/request-context.factory.spec.ts`
-- `src/common/security/redact.spec.ts`
 
 **Steps**
 
@@ -185,12 +183,12 @@ Run the repository placeholder scan over `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`,
   ```
 
 - `request-context.factory.ts` accepts already-validated boundary values and creates the context with a bounded deadline. It must not read headers or environment variables itself; presentation/auth code supplies those values.
-- Implement `redact.ts` as a small pure helper that masks sensitive string fields (`api_key`, `authorization`, `user_assertion`, `internal_token`, `essay`, and `body`) before structured logging. Add tests proving the original object is not mutated and sensitive values are not returned.
+- Implement a small pure helper that masks sensitive string fields (`api_key`, `authorization`, `user_assertion`, `internal_token`, `essay`, and `body`) before structured logging. Add tests proving the original object is not mutated and sensitive values are not returned.
 - Keep all files free of Nest/TypeBox/database imports except the HTTP exception filter, which is explicitly presentation-facing infrastructure under the common boundary.
 
 **Verification**
 
-Run `pnpm test -- app-error.spec.ts request-context.factory.spec.ts redact.spec.ts` and `pnpm type-check`.
+Run `pnpm test -- app-error.spec.ts request-context.factory.spec.ts` and `pnpm type-check`.
 
 **Commit**
 
