@@ -49,6 +49,7 @@ const noFailures: AuthFailureCounterPort = {
   get: async () => 0,
   recordFailure: async () => 0,
   consumeSandboxKeyLookup: async () => true,
+  consumeUncachedLookup: async () => ({ allowed: true }),
 };
 
 const DATABASE_UNAVAILABLE_ANSWER = {

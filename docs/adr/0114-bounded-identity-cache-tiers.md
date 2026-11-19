@@ -3,6 +3,7 @@
 - Status: Implemented and deployed under [#402](https://github.com/AiHub-Ecosystem/aihub-be/issues/402): bounded API-key L1 and JWKS last-good cache tiers; probabilistic early refresh remains deferred.
 - Date: 2026-10-19
 - Related: [#402](https://github.com/AiHub-Ecosystem/aihub-be/issues/402), [#75](https://github.com/AiHub-Ecosystem/aihub-be/issues/75), [ADR-0091](0091-bounded-cancellable-jwks-resolution.md)
+- Amended by: [ADR-0174](0174-bounded-uncached-api-key-lookups.md); negative misses stay in bounded L1 and are no longer written to Redis
 
 ## Context
 

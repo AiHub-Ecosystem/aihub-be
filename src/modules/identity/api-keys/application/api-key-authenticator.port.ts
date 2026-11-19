@@ -81,10 +81,32 @@ export function apiKeyCacheMissKey(hashHex: string): string {
   return `aihub:v1:key:miss:${hashHex}`;
 }
 
+/** Deployment-wide uncached lookup rate and burst (#1511). */
+export const API_KEY_LOOKUP_BUDGET_PER_SECOND = 100;
+export const API_KEY_LOOKUP_BUDGET_BURST = 50;
+
+/** Keep each process's outage ceiling low while Redis cannot coordinate workers. */
+export const API_KEY_LOOKUP_FALLBACK_PER_SECOND = 5;
+export const API_KEY_LOOKUP_FALLBACK_BURST = 5;
+
+export function apiKeyLookupBudgetKey(): string {
+  return 'aihub:v1:key:lookup-budget';
+}
+
+/**
+ * Whether one uncached lookup is admitted. A refusal carries the window's
+ * remaining time so the caller's `Retry-After` names when it clears.
+ */
+export interface ApiKeyLookupBudgetDecision {
+  readonly allowed: boolean;
+  readonly retryAfterMs?: number;
+}
+
 export interface AuthFailureCounterPort {
   get(ip: string): Promise<number>;
   recordFailure(ip: string): Promise<number>;
   consumeSandboxKeyLookup(hashHex: string): Promise<boolean>;
+  consumeUncachedLookup(): Promise<ApiKeyLookupBudgetDecision>;
 }
 
 export const AUTH_FAILURE_COUNTER = Symbol('AUTH_FAILURE_COUNTER');

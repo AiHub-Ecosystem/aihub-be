@@ -2,6 +2,7 @@ import { Response } from 'undici';
 
 import { RedisAuthRateLimiter } from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
+import { apiKeyLookupBudgetKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
@@ -114,8 +115,8 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         });
         expect(valid.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
 
-        // Repeated failures cannot be counted, so brute-force protection
-        // allows each attempt through to Postgres, which still refuses it.
+        // The process-local failure count and lookup budget keep the cold
+        // Redis path bounded; Postgres still refuses the unknown key.
         const unknownKey = generateOrganizationApiKey(TEST_NOW).raw;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const refused = await timed(() =>
@@ -138,7 +139,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           expect.objectContaining({
             event: 'redis_degraded',
             seam: 'auth_failure_counter',
-            policy: 'API-key protection is failing open until it recovers',
+            policy: 'using bounded process-local lookup and failure budgets',
           }),
         ]);
       } finally {
@@ -279,5 +280,40 @@ it('uses organization B only for B while Redis is refused', async () => {
     await proxy.setMode('normal');
     await store.onModuleDestroy();
     await failures.onModuleDestroy();
+  }
+});
+
+it('shares an exhausted uncached API-key budget across Redis clients', async () => {
+  const budgetKey = apiKeyLookupBudgetKey();
+  const first = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
+    warn: () => undefined,
+    log: () => undefined,
+  });
+  const second = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
+    warn: () => undefined,
+    log: () => undefined,
+  });
+  await raw.del(budgetKey);
+
+  try {
+    await expect(first.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+    await raw.hset(
+      budgetKey,
+      'tokens',
+      '0',
+      'updated_at',
+      String(Date.now() + 60_000),
+    );
+
+    await expect(second.consumeUncachedLookup()).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: 10,
+    });
+  } finally {
+    await raw.del(budgetKey);
+    await first.onModuleDestroy();
+    await second.onModuleDestroy();
   }
 });

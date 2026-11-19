@@ -76,6 +76,15 @@ function apiKeyLookupCapacityExceeded(): AppError {
   );
 }
 
+function lookupBudgetExhausted(retryAfterMs: number): AppError {
+  return new AppError({
+    code: 'RATE_LIMITED',
+    message: 'Too many API-key lookups',
+    retryable: true,
+    retryAfterMs,
+  });
+}
+
 export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
   private readonly lookupFlights = new Map<
     string,
@@ -141,9 +150,12 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
         }
       }
 
-      record = forceFresh
-        ? await this.repository.findByHash(hashHex)
-        : await this.findAndCache(hashHex);
+      if (forceFresh) {
+        await this.requireLookupBudget();
+        record = await this.repository.findByHash(hashHex);
+      } else {
+        record = await this.findAndCache(hashHex);
+      }
     }
 
     if (record === null || record.status !== 'active') {
@@ -209,24 +221,32 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     }
 
     let flight: Promise<ApiKeyRecord | null>;
-    flight = this.repository
-      .findByHash(hashHex)
-      .then(async (record) => {
-        if (record === null) {
-          await this.cache.setMiss(hashHex).catch(() => undefined);
-        } else {
-          await this.cache.set(hashHex, record).catch(() => undefined);
-        }
-        return record;
-      })
-      .finally(() => {
-        if (this.lookupFlights.get(hashHex) === flight) {
-          this.lookupFlights.delete(hashHex);
-        }
-      });
+    flight = (async () => {
+      await this.requireLookupBudget();
+      const record = await this.repository.findByHash(hashHex);
+      if (record === null) {
+        await this.cache.setMiss(hashHex).catch(() => undefined);
+      } else {
+        await this.cache.set(hashHex, record).catch(() => undefined);
+      }
+      return record;
+    })().finally(() => {
+      if (this.lookupFlights.get(hashHex) === flight) {
+        this.lookupFlights.delete(hashHex);
+      }
+    });
 
     this.lookupFlights.set(hashHex, flight);
     return flight;
+  }
+
+  private async requireLookupBudget() {
+    const decision = await this.failureCounter.consumeUncachedLookup();
+    if (!decision.allowed) {
+      recordRejected('rate_limit');
+      throw lookupBudgetExhausted(decision.retryAfterMs ?? 60_000);
+    }
+    return decision;
   }
 
   private async getFailureCount(ip: string): Promise<number> {
