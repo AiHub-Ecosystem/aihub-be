@@ -37,7 +37,12 @@ function clean(value: unknown, depth: number): unknown {
         'response body has keys that are the same once control characters are removed',
       );
     }
-    copy[cleaned] = clean(item, depth + 1);
+    Object.defineProperty(copy, cleaned, {
+      value: clean(item, depth + 1),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
   return copy;
 }

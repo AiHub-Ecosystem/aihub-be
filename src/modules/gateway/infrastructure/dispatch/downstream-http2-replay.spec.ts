@@ -15,8 +15,8 @@ import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { DownstreamRetryBudgetPort } from '@/modules/gateway/application/dispatch/downstream-retry-budget.port';
 import { DownstreamCircuitBreakers } from '@/modules/gateway/infrastructure/dispatch/downstream-circuit-breakers';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
-import { tlsStubCredentials } from '@/modules/gateway/infrastructure/dispatch/downstream-tls-stub.testing';
 import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
+import { tlsStubCredentials } from '@/modules/gateway/infrastructure/dispatch/testing/downstream-tls-stub.testing';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 
 type AttemptAction =

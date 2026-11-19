@@ -7,6 +7,7 @@ import {
   MODEL_QUOTE_MAX_LENGTH,
   MODEL_TEXT_MAX_LENGTH,
 } from '@/contracts/model-text';
+import { withWritingErrorPriorityCapture } from '../../test/support/writing-error-priority-fixture';
 import { parseSpeakingGradeResponse } from './speaking/speaking-grading-response.adapter';
 import { parseSpeakingV2QuestionResult } from './speaking/speaking-v2-question-response.adapter';
 import { parseGradeResponse } from './writing/grade-response.adapter';
@@ -83,7 +84,9 @@ function bodyWith(fixture: string, path: Path, value: string): unknown {
   } else {
     throw new Error('the fixture has no field to replace');
   }
-  return body;
+  return fixture === 'ai-writing/grade-v3-task1.response.json' && isRecord(body)
+    ? withWritingErrorPriorityCapture(body, 1)
+    : body;
 }
 
 function refusal(action: () => unknown): AppError {

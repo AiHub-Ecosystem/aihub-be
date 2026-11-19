@@ -91,6 +91,10 @@ describe('assertTextWithinLimit', () => {
         : '';
     expect(logged).not.toContain('secret');
   });
+
+  it('accepts exactly the configured limit', () => {
+    expect(() => assertTextWithinLimit('x'.repeat(4_000), 4_000)).not.toThrow();
+  });
 });
 
 describe('stripControlCharacters key collisions', () => {
@@ -111,5 +115,30 @@ describe('stripControlCharacters key collisions', () => {
       AB: 1,
       AC: 2,
     });
+  });
+});
+
+describe('stripControlCharacters __proto__ keys', () => {
+  it('keeps a __proto__ key as an own property instead of invoking the setter', () => {
+    const cleaned = stripControlCharacters(
+      JSON.parse('{"__proto__":{"polluted":true},"a":1}'),
+    );
+
+    expect(Object.hasOwn(cleaned as object, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(cleaned)).toBe(Object.prototype);
+    expect(Object.hasOwn(cleaned as object, 'a')).toBe(true);
+  });
+
+  it('refuses a __proto__ key that collides with one that cleans to it', () => {
+    let thrown: unknown;
+    try {
+      stripControlCharacters(
+        JSON.parse(String.raw`{"__proto__":1,"__pro\u0007to__":2}`),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject({ code: 'AI_SERVICE_CONTRACT_VIOLATION' });
   });
 });

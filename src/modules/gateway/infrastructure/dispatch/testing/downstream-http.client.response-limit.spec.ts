@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { Pool } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
-import { DownstreamHttpClient } from './downstream-http.client';
+import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { tlsStubCredentials } from './downstream-tls-stub.testing';
 
 const LIMIT = 64 * 1024;

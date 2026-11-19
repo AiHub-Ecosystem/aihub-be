@@ -228,7 +228,10 @@ describe('parseWritingV3Response data_micro keys (#377)', () => {
     readonly trait?: string;
     readonly code?: string;
   }): Record<string, unknown> {
-    const body = fixture('grade-v3-task1.response.json');
+    const body = withWritingErrorPriorityCapture(
+      fixture('grade-v3-task1.response.json'),
+      1,
+    );
     const micro = body['data_micro'];
     const trait = isRecord(micro) ? Object.entries(micro)[0] : undefined;
     const traitErrors = trait?.[1];
