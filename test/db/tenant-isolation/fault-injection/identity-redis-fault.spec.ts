@@ -301,19 +301,19 @@ it('shares an exhausted uncached API-key budget across Redis clients', async () 
     await expect(first.consumeUncachedLookup()).resolves.toEqual({
       allowed: true,
     });
-    await raw.hset(
-      budgetKey,
-      'tokens',
-      '0',
-      'updated_at',
-      String(Date.now() + 60 * 60 * 1_000),
-    );
+    const updatedAt = String(Date.now() + 60 * 60 * 1_000);
+    await raw.hset(budgetKey, 'tokens', '0', 'updated_at', updatedAt);
+    await expect(raw.hgetall(budgetKey)).resolves.toEqual({
+      tokens: '0',
+      updated_at: updatedAt,
+    });
 
-    await expect(second.consumeUncachedLookup()).resolves.toEqual({
+    const decision = await second.consumeUncachedLookup();
+    expect(warnings).toEqual([]);
+    expect(decision).toEqual({
       allowed: false,
       retryAfterMs: 10,
     });
-    expect(warnings).toEqual([]);
   } finally {
     await raw.del(budgetKey);
     await first.onModuleDestroy();
