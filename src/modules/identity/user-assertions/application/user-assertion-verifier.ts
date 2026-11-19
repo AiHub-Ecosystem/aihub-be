@@ -180,9 +180,11 @@ export class UserAssertionVerifier {
     let jwks = await this.loadKeys(input.organizationId, config);
     let key = selectKey(jwks.keys, header.algorithm, header.kid);
 
+    let forcedRefresh = false;
     if (key === undefined && header.kid !== undefined) {
       jwks = await this.loadKeys(input.organizationId, config, true);
       key = selectKey(jwks.keys, header.algorithm, header.kid);
+      forcedRefresh = true;
     }
 
     if (key === undefined) {
@@ -191,8 +193,7 @@ export class UserAssertionVerifier {
 
     // A provider may rotate the key material under an unchanged `kid`; the
     // matched-but-stale key fails verification for the whole cache TTL. One
-    // forced reload per failed verification covers that, bounded by the
-    // provider's own refresh cooldown.
+    // forced reload per Organization per cooldown covers that.
     let verified: Readonly<Record<string, unknown>>;
     const nowSeconds = this.now();
     try {
@@ -202,13 +203,20 @@ export class UserAssertionVerifier {
         algorithm: header.algorithm,
       });
     } catch (error) {
-      if (header.kid === undefined) {
+      if (header.kid === undefined || forcedRefresh) {
         throw invalidSignedUserAssertion(error);
       }
-      if (this.rotationReloadBlocked(input.organizationId, nowSeconds)) {
-        throw invalidSignedUserAssertion(error);
-      }
-      const refreshed = await this.loadKeys(input.organizationId, config, true);
+      // Re-read the cache even while the cooldown blocks a forced reload: a
+      // concurrent request may already have refreshed it.
+      const canReload = !this.rotationReloadBlocked(
+        input.organizationId,
+        nowSeconds,
+      );
+      const refreshed = await this.loadKeys(
+        input.organizationId,
+        config,
+        canReload,
+      );
       const rotated = selectKey(refreshed.keys, header.algorithm, header.kid);
       if (rotated === undefined) {
         throw invalidSignedUserAssertion(error);
@@ -227,7 +235,7 @@ export class UserAssertionVerifier {
     const claims = validateClaims(
       verified,
       config,
-      nowSeconds,
+      this.now(),
       this.runtimeScope === 'sandbox' ? SANDBOX_ASSERTION_AUDIENCE : 'aihub',
     );
     return {

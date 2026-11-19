@@ -317,6 +317,24 @@ describe('UserAssertionVerifier', () => {
     expect(provider.calls).toEqual([false, true]);
   });
 
+  it('does not force a second reload when the unknown-kid refresh key still fails', async () => {
+    const oldFixture = await rsaFixture('old');
+    const newFixture = await rsaFixture('new');
+    const assertion = await token(oldFixture.privateKey, {
+      kid: 'new',
+      jti: 'jti-rotation-forged',
+    });
+    const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+
+    await expect(
+      verifier(provider).verify({
+        signedAssertion: assertion,
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(provider.calls).toEqual([false, true]);
+  });
+
   it('refreshes once when the key material rotated under the same kid', async () => {
     const oldFixture = await rsaFixture('shared');
     const newFixture = await rsaFixture('shared');
@@ -358,7 +376,47 @@ describe('UserAssertionVerifier', () => {
         }),
       ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     }
-    expect(provider.calls).toEqual([false, true, false]);
+    // The second attempt re-reads the cache but does not force a fetch.
+    expect(provider.calls).toEqual([false, true, false, false]);
+  });
+
+  it('reads the cache a peer refreshed while its own cooldown blocks a reload', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    const stale = oldFixture.jwks;
+    const snapshots = [stale, newFixture.jwks, stale, newFixture.jwks];
+    const calls: boolean[] = [];
+    const provider: JwksKeyProviderPort = {
+      resolve: (input) => {
+        calls.push(input.forceRefresh === true);
+        return Promise.resolve(snapshots.shift() ?? newFixture.jwks);
+      },
+      validateRemote: () => Promise.resolve({ keys: [] }),
+    };
+    const subject = verifier(provider);
+    const warmup = await token(oldFixture.privateKey, {
+      kid: 'shared',
+      jti: 'jti-warmup',
+    });
+    const [header, payload, signature = ''] = warmup.split('.');
+    const tampered = `${header}.${payload}.${
+      signature[0] === 'a' ? 'b' : 'a'
+    }${signature.slice(1)}`;
+
+    await expect(
+      subject.verify({ signedAssertion: tampered, organizationId: 'org_acme' }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-after-peer-refresh',
+        }),
+        organizationId: 'org_acme',
+      }),
+    ).resolves.toMatchObject({ userId: 'user_123' });
+    expect(calls).toEqual([false, true, false, false]);
   });
 
   it('rejects multiple matching keys when kid is absent', async () => {
