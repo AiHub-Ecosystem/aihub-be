@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 
 import {
   type CryptoKey,
@@ -6,6 +6,7 @@ import {
   SignJWT,
   decodeJwt,
   decodeProtectedHeader,
+  exportJWK,
   exportPKCS8,
   generateKeyPair,
 } from 'jose';
@@ -111,6 +112,98 @@ describe('JoseUserAccessTokenService', () => {
         kind: 'web',
         id: 'wss_01J00000000000000000000000',
       },
+    });
+  });
+
+  describe('proof key binding', () => {
+    const SESSION = {
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    } as const;
+
+    async function proofKey() {
+      const { publicKey, privateKey } = await generateKeyPair('ES256', {
+        extractable: true,
+      });
+      const jwk = await exportJWK(publicKey);
+      // RFC 7638: SHA-256 over the required members in lexicographic order.
+      const jkt = createHash('sha256')
+        .update(
+          JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y }),
+        )
+        .digest('base64url');
+      return { jwk, privateJwk: await exportJWK(privateKey), jkt };
+    }
+
+    it('binds the token to the proof key thumbprint through cnf.jkt and verifies it back', async () => {
+      const keys = await keyPair();
+      const service = new JoseUserAccessTokenService(
+        config(keys.privateKeyPem),
+        () => 1_800_000_000,
+      );
+      const bound = await proofKey();
+
+      const issued = await service.issue(
+        'usr_01J00000000000000000000000',
+        SESSION,
+        bound.jwk,
+      );
+
+      expect(decodeJwt(issued.token)['cnf']).toEqual({ jkt: bound.jkt });
+      await expect(service.verify(issued.token)).resolves.toMatchObject({
+        jkt: bound.jkt,
+      });
+    });
+
+    it('leaves a token without a proof key unbound', async () => {
+      const keys = await keyPair();
+      const service = new JoseUserAccessTokenService(
+        config(keys.privateKeyPem),
+        () => 1_800_000_000,
+      );
+
+      const issued = await service.issue(
+        'usr_01J00000000000000000000000',
+        SESSION,
+      );
+
+      expect(decodeJwt(issued.token)['cnf']).toBeUndefined();
+      expect((await service.verify(issued.token)).jkt).toBeUndefined();
+    });
+
+    it('refuses to bind a private key or a key that is not an ES256 P-256 public key', async () => {
+      const keys = await keyPair();
+      const service = new JoseUserAccessTokenService(
+        config(keys.privateKeyPem),
+      );
+      const bound = await proofKey();
+      const rsa = await exportJWK(keys.publicKey);
+
+      await expect(
+        service.issue(
+          'usr_01J00000000000000000000000',
+          SESSION,
+          bound.privateJwk,
+        ),
+      ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+      await expect(
+        service.issue('usr_01J00000000000000000000000', SESSION, rsa),
+      ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    });
+
+    it('rejects a token whose cnf claim is malformed', async () => {
+      const keys = await keyPair();
+      const service = new JoseUserAccessTokenService(
+        config(keys.privateKeyPem),
+        () => 1_800_000_000,
+      );
+      const token = await signedToken(keys.privateKey, {
+        extra: { cnf: 'not-an-object' },
+      });
+
+      await expect(service.verify(token)).rejects.toMatchObject({
+        code: 'AUTH_USER_ACCESS_TOKEN_INVALID',
+      });
     });
   });
 

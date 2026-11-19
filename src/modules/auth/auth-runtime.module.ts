@@ -4,7 +4,10 @@ import type { ConfigType } from '@nestjs/config';
 import Redis from 'ioredis';
 
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
-import { createRedisClient } from '@/common/redis/create-redis-client';
+import {
+  REDIS_NO_REPLAY_OPTIONS,
+  createRedisClient,
+} from '@/common/redis/create-redis-client';
 import {
   OPAQUE_TOKEN_BINDINGS,
   opaqueTokenIssuer,
@@ -83,6 +86,12 @@ import { REFRESH_SESSION_REPOSITORY } from './web-sessions/application/refresh-s
 import { REFRESH_TOKEN_ISSUER } from './web-sessions/application/refresh-token.port';
 import { userAccessTokenAudience } from './web-sessions/application/user-access-token-audience';
 import {
+  DPOP_REPLAY_CACHE,
+  type DpopGuardPolicy,
+  type DpopReplayCachePort,
+  USER_ACCESS_DPOP_POLICY,
+} from './web-sessions/application/user-access-token-dpop.port';
+import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
 } from './web-sessions/application/user-access-token.port';
@@ -100,18 +109,26 @@ import {
 } from './web-sessions/application/web-session-token.port';
 import { WebSessionService } from './web-sessions/application/web-session.service';
 import { CryptoRefreshToken } from './web-sessions/infrastructure/crypto-refresh-token';
+import { JoseDpopProofVerifier } from './web-sessions/infrastructure/jose-dpop-proof.verifier';
 import {
   JoseUserAccessTokenService,
   USER_ACCESS_TOKEN_CRYPTO,
 } from './web-sessions/infrastructure/jose-user-access-token.service';
 import { PostgresRefreshSessionRepository } from './web-sessions/infrastructure/postgres-refresh-session.repository';
 import { PostgresWebSessionRepository } from './web-sessions/infrastructure/postgres-web-session.repository';
+import {
+  RedisDpopReplayCache,
+  UNAVAILABLE_DPOP_REPLAY_CACHE,
+} from './web-sessions/infrastructure/redis-dpop-replay-cache';
 import { UserAccessJwtGuard } from './web-sessions/presentation/user-access-jwt.guard';
 import {
   OptionalWebSessionClientGuard,
   WebSessionClientGuard,
 } from './web-sessions/presentation/web-session-client.guard';
 import { WebSessionController } from './web-sessions/presentation/web-session.controller';
+
+/** Shared by User Access JWT verification and DPoP proof `iat` checks. */
+const USER_ACCESS_CLOCK_SKEW_SECONDS = 60;
 
 /** Binds access-token verification to the configured database scope. */
 function createUserAccessTokenCrypto(
@@ -131,7 +148,7 @@ function createUserAccessTokenCrypto(
       configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
     ),
     expiresInSeconds: 900,
-    clockSkewSeconds: 60,
+    clockSkewSeconds: USER_ACCESS_CLOCK_SKEW_SECONDS,
   });
 }
 
@@ -301,6 +318,43 @@ function createUserAccessTokenCrypto(
     {
       provide: USER_ACCESS_TOKEN_REVOCATION_RECORD,
       useExisting: BloomFilterUserAccessTokenRevocationAdapter,
+    },
+    {
+      // A Redis client exists only when DPoP is on; with `off` nothing connects.
+      provide: DPOP_REPLAY_CACHE,
+      inject: [appConfig.KEY, RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: ConfigType<typeof appConfig>,
+        connectionConfig: RuntimeConnectionConfigurationPort,
+      ): DpopReplayCachePort => {
+        const redisUrl = connectionConfig.redisUrl?.trim();
+        if (
+          configuration.AIHUB_DPOP_MODE === 'off' ||
+          redisUrl === undefined ||
+          redisUrl.length === 0
+        ) {
+          return UNAVAILABLE_DPOP_REPLAY_CACHE;
+        }
+        return new RedisDpopReplayCache(
+          createRedisClient(redisUrl, {
+            commandTimeoutMs: 500,
+            ...REDIS_NO_REPLAY_OPTIONS,
+          }),
+        );
+      },
+    },
+    {
+      provide: USER_ACCESS_DPOP_POLICY,
+      inject: [appConfig.KEY, DPOP_REPLAY_CACHE],
+      useFactory: (
+        configuration: ConfigType<typeof appConfig>,
+        replayCache: DpopReplayCachePort,
+      ): DpopGuardPolicy => ({
+        mode: configuration.AIHUB_DPOP_MODE,
+        verifier: new JoseDpopProofVerifier(replayCache, {
+          clockSkewSeconds: USER_ACCESS_CLOCK_SKEW_SECONDS,
+        }),
+      }),
     },
     {
       // Web Sessions live in their own table beside the four refresh tables, so

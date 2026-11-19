@@ -5,12 +5,17 @@ import {
   type CryptoKey,
   type KeyObject,
   SignJWT,
+  calculateJwkThumbprint,
   decodeProtectedHeader,
   jwtVerify,
 } from 'jose';
 
 import { AppError, internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
+import {
+  type DpopProofKeyInput,
+  isDpopPublicJwk,
+} from '@/modules/auth/web-sessions/application/dpop-proof-key';
 import {
   USER_ACCESS_TOKEN_MINIMUM_RSA_MODULUS_BITS,
   userAccessTokenRsaModulusIsAcceptable,
@@ -89,6 +94,7 @@ export class JoseUserAccessTokenService
   async issue(
     userId: string,
     session?: UserAccessSession,
+    proofKey?: DpopProofKeyInput,
   ): Promise<IssuedUserAccessToken> {
     if (!/^usr_[0-9A-HJKMNP-TV-Z]{26}$/u.test(userId)) {
       throw new AppError({
@@ -98,8 +104,19 @@ export class JoseUserAccessTokenService
       });
     }
 
+    if (proofKey !== undefined && !isDpopPublicJwk(proofKey)) {
+      throw internalError('User access token proof key is invalid');
+    }
+    const cnf =
+      proofKey === undefined
+        ? undefined
+        : { jkt: await calculateJwkThumbprint(proofKey) };
+
     const issuedAt = this.now();
-    const token = await new SignJWT(session === undefined ? {} : { session })
+    const token = await new SignJWT({
+      ...(session === undefined ? {} : { session }),
+      ...(cnf === undefined ? {} : { cnf }),
+    })
       .setProtectedHeader({ alg: 'RS256', kid: this.config.keyId })
       .setIssuer(this.config.issuer)
       .setAudience(this.config.audience)
@@ -126,6 +143,8 @@ export class JoseUserAccessTokenService
       });
       const payload = verified.payload;
       const session = payload['session'];
+      const cnf = payload['cnf'];
+      const jkt = isRecord(cnf) ? cnf['jkt'] : undefined;
       // Unknown claims are ignored so a token from the next release verifies
       // here during a cutover or rollback; every required claim is still checked.
       if (
@@ -139,7 +158,9 @@ export class JoseUserAccessTokenService
         payload.jti.length > 256 ||
         !isSafeInteger(payload.iat) ||
         !isSafeInteger(payload.exp) ||
-        (session !== undefined && !isUserAccessSession(session))
+        (session !== undefined && !isUserAccessSession(session)) ||
+        (cnf !== undefined &&
+          (typeof jkt !== 'string' || jkt.length === 0 || jkt.length > 64))
       ) {
         throw invalidUserAccessToken();
       }
@@ -162,6 +183,7 @@ export class JoseUserAccessTokenService
           (payload.exp + this.config.clockSkewSeconds) * 1000,
         ),
         ...(session === undefined ? {} : { session }),
+        ...(typeof jkt === 'string' ? { jkt } : {}),
       };
     } catch {
       throw invalidUserAccessToken();
