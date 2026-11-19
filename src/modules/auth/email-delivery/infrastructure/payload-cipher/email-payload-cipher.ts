@@ -3,7 +3,7 @@ import {
   type EmailPayloadContext,
   EmailPayloadUnknownKeyVersionError,
   EnvelopeCipherError,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 import { EnvelopeCipher } from '@/modules/auth/shared/infrastructure/envelope-cipher';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
 

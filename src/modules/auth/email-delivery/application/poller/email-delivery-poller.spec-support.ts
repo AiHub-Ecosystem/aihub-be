@@ -1,18 +1,21 @@
+import type {
+  EmailCredentialActionabilityPort,
+  EmailCredentialState,
+} from '@/modules/auth/email-delivery/application/email-credential-actionability.port';
 import {
   type ClaimEmailDeliveryRequestsInput,
   type ClaimedFailureReport,
-  type EmailCredentialActionabilityPort,
-  type EmailCredentialState,
   type EmailDeliveryErrorCode,
   type EmailDeliveryKind,
-  type EmailDeliveryPayload,
   type EmailDeliveryRequestRecord,
-  type EmailDispatchStorePort,
-  type EmailNoticeResolvers,
+  type ReleaseUnspentEmailAttemptInput,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type { EmailDispatchPollerPort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
+import type { EmailDeliveryPayload } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import {
   type EmailPayloadCipherPort,
   EmailPayloadUnknownKeyVersionError,
-  type ReleaseUnspentEmailAttemptInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
@@ -28,6 +31,7 @@ import type {
   EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import type { EmailNoticeResolvers } from '@/modules/auth/email-delivery/application/payload/email-delivery-payload';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { EmailDeliveryPoller } from './email-delivery-poller';
 
@@ -63,7 +67,7 @@ export class FakeInvitationEmailRateLimiter implements AuthRateLimiterPort {
   }
 }
 
-export class FakeStore implements EmailDispatchStorePort {
+export class FakeStore implements EmailDispatchPollerPort {
   claims: ClaimEmailDeliveryRequestsInput[] = [];
   claimResult: EmailDeliveryRequestRecord[] = [];
   accepted: string[] = [];
@@ -96,18 +100,6 @@ export class FakeStore implements EmailDispatchStorePort {
         deferredAt < 0 ? undefined : this.deferredUntil[deferredAt];
       return retryAt === undefined || retryAt.getTime() <= input.now.getTime();
     });
-  }
-
-  async readDispatchState() {
-    return null;
-  }
-
-  async queuedIds() {
-    return [];
-  }
-
-  async readWalSlotHealth() {
-    return null;
   }
 
   async markProviderAccepted(input: { id: string }): Promise<void> {

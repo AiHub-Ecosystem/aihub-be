@@ -4,9 +4,9 @@ import type {
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
-  EmailDispatchStorePort,
   ReleaseUnspentEmailAttemptInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type { EmailDispatchMaintenancePort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_KIND_POLICIES,
@@ -36,7 +36,7 @@ export class EmailDeliveryPollerMaintenance {
   >();
 
   constructor(
-    private readonly store: EmailDispatchStorePort,
+    private readonly store: EmailDispatchMaintenancePort,
     private readonly now: () => Date,
     private readonly options: EmailDeliveryPollerMaintenanceOptions,
     private readonly batchSize: number,

@@ -34,7 +34,6 @@ import {
   EMAIL_PAYLOAD_CIPHER,
   type EmailDeliveryRequestWriterPort,
   type EmailNoticeResolvers,
-  type EmailPayloadCipherPort,
 } from './application/email-delivery-request.port';
 import {
   EMAIL_BACKPRESSURE_KINDS,
@@ -46,6 +45,7 @@ import {
   EMAIL_OUTBOX,
   type EmailOutboxPort,
 } from './application/email-outbox.port';
+import type { EmailPayloadCipherPort } from './application/email-payload-cipher.port';
 import {
   EMAIL_PROVIDER_OUTAGE_CIRCUIT,
   type EmailProviderOutageCircuitPort,

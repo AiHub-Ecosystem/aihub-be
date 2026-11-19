@@ -1,12 +1,12 @@
-import {
-  type EmailDeliveryRequestRecord,
-  type EmailPayloadCipherPort,
-  EnvelopeCipherError,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDeliveryRequestRecord } from '@/modules/auth/email-delivery/application/email-delivery-request.types';
 import {
   EMAIL_KIND_POLICIES,
   type ValidatedEmailDelivery,
 } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import {
+  type EmailPayloadCipherPort,
+  EnvelopeCipherError,
+} from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 
 /**
  * What a claimed request's payload turned out to be.

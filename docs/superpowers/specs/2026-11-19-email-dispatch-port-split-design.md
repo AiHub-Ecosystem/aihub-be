@@ -13,6 +13,7 @@ Issue #1338 was blocked by #1311; #1311 is closed on the current `main`.
 - Narrow the poller, maintenance collaborator, and WAL consumer to the role ports they use. Keep test doubles limited to their consumer's required methods.
 - Give store roles named port files. Keep shared record/status types separate from the request writer, payload cipher, credential-actionability, and store contracts so consumers can import only the role they need.
 - Refactor `dispatch` into named steps for payload reading, credential actionability, rendering, attempt reservation/provider send, and outcome translation; keep each step to a screen or less.
+- Keep `EmailDeliveryPoller.dispatch` as the orchestration owner, with step implementations in a poller-local collaborator because the existing poller is already at ADR-0110's 500-code-line ceiling.
 
 ## Alternatives
 

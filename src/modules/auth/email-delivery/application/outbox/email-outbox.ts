@@ -4,7 +4,6 @@ import type {
   EmailDeliveryKind,
   EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
-  EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EMAIL_KIND_POLICIES } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
@@ -13,6 +12,7 @@ import type {
   EmailOutboxPort,
   QueueEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 
 export class EmailOutbox implements EmailOutboxPort {
   constructor(

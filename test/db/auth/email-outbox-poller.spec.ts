@@ -9,9 +9,9 @@ import {
   EMAIL_DELIVERY_KINDS,
   type EmailDeliveryKind,
   type EmailDeliveryRequestRecord,
-  type EmailDispatchStorePort,
   type EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDispatchPollerPort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 import type {
   EmailDispatchOptions,
   EmailMessage,
@@ -1311,11 +1311,8 @@ describe('email outbox dispatch poller', () => {
       // Every outcome transition fails, which is the case the attempt cap has to
       // survive: the row keeps its lease, its payload, and its attempts, so only
       // the reservation taken before the call can bound the provider.
-      const unreachable: EmailDispatchStorePort = {
+      const unreachable: EmailDispatchPollerPort = {
         claim: (input) => store.claim(input),
-        readDispatchState: (id) => store.readDispatchState(id),
-        queuedIds: (input) => store.queuedIds(input),
-        readWalSlotHealth: () => store.readWalSlotHealth(),
         reserveAttempt: (input) => store.reserveAttempt(input),
         releaseUnspentAttempt: (input) => store.releaseUnspentAttempt(input),
         markProviderAccepted: async () => {
