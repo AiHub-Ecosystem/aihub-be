@@ -1,5 +1,7 @@
-import { type Static, Type } from '@sinclair/typebox';
+import { type Static, type TSchema, Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
+import { isRecord } from '@/common/is-record';
 import { ModelQuote, ModelText } from '@/contracts/model-text';
 
 import {
@@ -54,10 +56,10 @@ export const WritingErrorPrioritySchema = Type.Object(
   {
     rank: Type.Integer({ minimum: 1, maximum: 3 }),
     group: WritingErrorPriorityGroupSchema,
-    code: Type.String(),
-    name_en: Type.String(),
-    name_vi: Type.String(),
-    reason_vi: Type.String(),
+    code: ModelText(),
+    name_en: ModelText(),
+    name_vi: ModelText(),
+    reason_vi: ModelText(),
   },
   { additionalProperties: false },
 );
@@ -154,12 +156,32 @@ export const WritingV2GradeResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+function withoutMaxLength<T extends TSchema>(schema: T): T {
+  const clone = Value.Clone(schema);
+  const pending: unknown[] = [clone];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (Array.isArray(node)) {
+      for (const item of node as unknown[]) pending.push(item);
+      continue;
+    }
+    if (!isRecord(node)) continue;
+    delete node['maxLength'];
+    for (const value of Object.values(node)) pending.push(value);
+  }
+  return clone;
+}
+
 /** Read-only idempotency shape for completed grades written before `error_priority`. */
+const StoredWritingV2GradeResponseSchema = withoutMaxLength(
+  WritingV2GradeResponseSchema,
+);
+
 export const WritingV2StoredGradeResponseSchema = Type.Object(
   {
-    ...WritingV2GradeResponseSchema.properties,
+    ...StoredWritingV2GradeResponseSchema.properties,
     error_priority: Type.Optional(
-      WritingV2GradeResponseSchema.properties.error_priority,
+      StoredWritingV2GradeResponseSchema.properties.error_priority,
     ),
   },
   { additionalProperties: false },

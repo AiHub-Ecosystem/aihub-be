@@ -19,6 +19,7 @@ type Protocol = 'HTTP/1.1' | 'HTTP/2';
 interface Sink {
   start(status: number, headers: Record<string, string>): void;
   write(chunk: string | Buffer): boolean;
+  writeUnframed(chunk: string | Buffer): boolean;
   end(chunk?: string | Buffer): void;
   onDrain(callback: () => void): void;
   onClose(callback: () => void): void;
@@ -57,6 +58,10 @@ function serve(route: string, sink: Sink): void {
       sink.start(200, { ...JSON_TYPE, 'content-length': String(LIMIT + 1) });
       sink.end(jsonOfSize(LIMIT + 1));
       return;
+    case '/underreported':
+      sink.start(200, { ...JSON_TYPE, 'content-length': String(LIMIT + 1) });
+      sink.writeUnframed(jsonOfSize(LIMIT + 10));
+      return;
     case '/gzip':
       sink.start(200, { ...JSON_TYPE, 'content-encoding': 'gzip' });
       sink.end(gzipSync('{"ok":true}'));
@@ -83,6 +88,7 @@ function http2Sink(stream: ServerHttp2Stream): Sink {
     start: (status, headers) =>
       stream.respond({ ':status': status, ...headers }),
     write: (chunk) => stream.write(chunk),
+    writeUnframed: (chunk) => stream.write(chunk),
     end: (chunk) => void stream.end(chunk),
     onDrain: (callback) => void stream.once('drain', callback),
     onClose: (callback) => void stream.on('close', callback),
@@ -99,6 +105,10 @@ function http1Sink(response: ServerResponse): Sink {
   return {
     start: (status, headers) => void response.writeHead(status, headers),
     write: (chunk) => response.write(chunk),
+    writeUnframed: (chunk) => {
+      response.flushHeaders();
+      return response.socket?.write(chunk) ?? false;
+    },
     end: (chunk) => void response.end(chunk),
     onDrain: (callback) => void response.once('drain', callback),
     onClose: (callback) => void response.on('close', callback),
@@ -241,6 +251,18 @@ describe.each(['HTTP/1.1', 'HTTP/2'] as const)(
       });
     });
 
+    it('cancels an oversized body whose declared length understates the bytes sent', async () => {
+      const error = await rejection(get(stub.client, '/underreported'));
+
+      expect(error).toMatchObject({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+        retryable: false,
+      });
+      await stub.cancelled('/underreported');
+      // HTTP/2 closes the session for this protocol error; regular oversize
+      // responses above verify pool reuse on both protocols.
+    });
+
     it('accepts a body of exactly the limit', async () => {
       const response = await get(stub.client, '/exact');
 
@@ -255,3 +277,25 @@ describe.each(['HTTP/1.1', 'HTTP/2'] as const)(
     });
   },
 );
+
+describe('DownstreamHttpClient response byte limit over HTTP/1.1', () => {
+  let stub: Awaited<ReturnType<typeof startStub>>;
+
+  beforeEach(async () => {
+    stub = await startStub('HTTP/1.1');
+  });
+
+  afterEach(async () => {
+    await stub.close();
+  });
+
+  it('serves the next request after cancelling an underreported body', async () => {
+    await rejection(get(stub.client, '/underreported'));
+    await stub.cancelled('/underreported');
+
+    await expect(get(stub.client, '/ok')).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true },
+    });
+  });
+});

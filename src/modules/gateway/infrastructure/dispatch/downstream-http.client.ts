@@ -314,6 +314,11 @@ export class DownstreamHttpClient {
       } catch (error) {
         // An oversized body is a contract violation on any status.
         if (error instanceof AppError) throw error;
+        if (errorCode(error) === 'UND_ERR_RES_CONTENT_LENGTH_MISMATCH') {
+          throw contractViolation(
+            'response body length does not match content-length',
+          );
+        }
         if (options.signal.aborted || isTransportFailure(error)) {
           throw transportError(error, options.signal.aborted);
         }

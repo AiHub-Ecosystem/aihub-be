@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Value } from '@sinclair/typebox/value';
 
 import { isRecord } from '@/common/is-record';
+import { MODEL_TEXT_MAX_LENGTH } from '@/contracts/model-text';
 import { WritingV2GradeResponseSchema } from '@/contracts/writing/v2/grading';
 import { withWritingErrorPriorityCapture } from '../../../test/support/writing-error-priority-fixture';
 import { parseWritingV3Response } from './writing-v3-response.adapter';
@@ -85,6 +86,25 @@ describe('parseWritingV3Response', () => {
       code: 'AI_SERVICE_CONTRACT_VIOLATION',
     });
   });
+
+  it.each(['code', 'name_en', 'name_vi', 'reason_vi'] as const)(
+    'bounds error_priority.%s to the model-text limit',
+    (field) => {
+      const body = withWritingErrorPriorityCapture(
+        fixture('grade-v3-task1.response.json'),
+        1,
+      );
+      const data = body['data'] as Record<string, unknown>;
+      const [first] = data['error_priority'] as Record<string, unknown>[];
+      data['error_priority'] = [
+        { ...first, [field]: 'x'.repeat(MODEL_TEXT_MAX_LENGTH + 1) },
+      ];
+
+      expect(thrownBy(() => parseWritingV3Response(body))).toMatchObject({
+        code: 'AI_SERVICE_CONTRACT_VIOLATION',
+      });
+    },
+  );
 
   it('ignores additive provider fields inside error_priority entries', () => {
     const body = withWritingErrorPriorityCapture(

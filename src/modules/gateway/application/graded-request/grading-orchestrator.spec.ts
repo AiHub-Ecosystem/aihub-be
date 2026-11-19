@@ -360,7 +360,7 @@ describe('GradingOrchestratorPort', () => {
       ].map((id) => ({
         id,
         band: 7,
-        band_reason: '',
+        band_reason: 'x'.repeat(4_001),
         strengths: [],
         areas_for_improvement: [],
         errors: [],
