@@ -376,6 +376,7 @@ function loadOptionalWebSession(
  * The BFF secret is guessable at the public edge, so a boot refuses a value
  * that cannot have 32 random bytes behind it: shorter than 43 characters, or
  * built from anything but the base64/base64url alphabet it is generated in.
+ * Checked here rather than in the env schema so both sources get one rule.
  */
 function webSessionClientSecret(value: string): string {
   if (value.length < WEB_SESSION_CLIENT_SECRET_MIN_LENGTH) {

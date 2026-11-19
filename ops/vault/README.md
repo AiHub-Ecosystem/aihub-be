@@ -67,7 +67,8 @@ bun run vault:provision
 `web-session.json` is required by the helper for the selected environment. It
 contains only `client_secret`, shared with the Customer Web BFF. It must be at
 least 32 random bytes — 43 or more characters of base64, base64url, or hex —
-and the app refuses to boot a shorter or non-alphanumeric value:
+and the app refuses to boot a shorter value, or one with characters outside the
+base64 alphabet:
 
 ```json
 {

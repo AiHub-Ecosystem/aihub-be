@@ -13,6 +13,7 @@ import { registerRequestCompletionLog } from '@/modules/metering/presentation/re
 
 const VERIFICATION_URL = '/v1/auth/web-sessions/verification';
 const VERIFICATION_TOKEN = 'verified-token-the-reset-must-close';
+const OPEN_VERIFICATION_TOKEN = 'open-token-the-reset-must-spend';
 const BINDING = 'b'.repeat(43);
 
 const URL = '/v1/auth/web-sessions';
@@ -162,6 +163,36 @@ describe('web session HTTP boundary', () => {
 
       expect(signIn.statusCode).toBe(204);
       expect(suite.context.state.webSessions.size).toBe(0);
+    });
+
+    it('spends an open verification token the reset found (#437 TM-05)', async () => {
+      suite.context.state.verificationTokens.set(
+        `hash:${OPEN_VERIFICATION_TOKEN}`,
+        {
+          tokenId: 'open-verification-token-the-reset-must-spend',
+          userId: USER_ID,
+          expiresAt: new Date(suite.context.clock.now().getTime() + 86_400_000),
+          browserBindingHash: `hash:${BINDING}`,
+          consumedAt: undefined,
+          consumedReason: undefined,
+          signedInAt: undefined,
+        },
+      );
+
+      const reset = await passwordResetHelpers.resetPassword(
+        await passwordResetHelpers.openResetToken(EMAIL, USER_ID),
+      );
+
+      expect(reset.statusCode).toBe(204);
+      expect(
+        suite.context.state.verificationTokens.get(
+          `hash:${OPEN_VERIFICATION_TOKEN}`,
+        ),
+      ).toMatchObject({
+        consumedAt: suite.context.clock.now(),
+        consumedReason: 'superseded',
+        signedInAt: undefined,
+      });
     });
   });
 });
