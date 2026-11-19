@@ -1,4 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import {
   Body,
   Controller,
@@ -37,6 +38,13 @@ import {
   type WebSessionServicePort,
 } from '@/modules/auth/web-sessions/application/web-session-service.port';
 import { WebSessionClientGuard } from './web-session-client.guard';
+
+function logoutToken(request: FastifyRequest, token: string): string {
+  if (hasAlternateWebSessionSource(request)) {
+    throw invalidRequest(undefined, undefined, 'alternate web session source');
+  }
+  return token;
+}
 
 /** The one envelope both creation routes answer, so a BFF reads them alike. */
 function createdWebSession(
@@ -191,15 +199,11 @@ export class WebSessionController {
     );
 
     await this.service.revokeWebSession(
-      // The credential belongs in this body and nowhere else, exactly as on the
-      // exchange: a token offered in a cookie, an authorization header, or a
-      // query parameter is read from nowhere, which revokes nothing and answers
-      // the same `204` as a token AIHUB has never seen.
-      {
-        token: hasAlternateWebSessionSource(request)
-          ? undefined
-          : input.web_session_token,
-      },
+      // The credential belongs in this body and nowhere else. Unlike the
+      // exchange, logout refuses an alternate source instead of reading the
+      // body from nowhere: a `204` that revoked nothing would tell a user they
+      // were signed out while the session stayed usable.
+      { token: logoutToken(request, input.web_session_token) },
     );
   }
 }

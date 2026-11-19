@@ -65,14 +65,18 @@ bun run vault:provision
 ```
 
 `web-session.json` is required by the helper for the selected environment. It
-contains only `client_secret`, a non-empty string shared with the Customer Web
-BFF:
+contains only `client_secret`, shared with the Customer Web BFF. It must be at
+least 32 random bytes — 43 or more characters of base64, base64url, or hex —
+and the app refuses to boot a shorter or non-alphanumeric value:
 
 ```json
 {
-  "client_secret": "<BFF client secret>"
+  "client_secret": "<base64 of 32 random bytes>"
 }
 ```
+
+Generate it with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
 
 Every value in a bundle file is a string. In `email-outbox.json` that includes
 `keys`, which is a JSON object **encoded as a string**, mapping each key id to 32

@@ -107,6 +107,8 @@ describe('PostgresPasswordResetTokenRepository', () => {
       'passwordResetToken.updateMany',
       'refreshToken.updateMany',
       'webSession.updateMany',
+      'emailVerificationToken.updateMany',
+      'emailVerificationToken.updateMany',
     ]);
     // Both revocations ride the ONE transaction that changed the password, so
     // a failure anywhere rolls them back together.
@@ -114,7 +116,9 @@ describe('PostgresPasswordResetTokenRepository', () => {
     expect(
       script.statements.every(({ transaction }) => transaction === 1),
     ).toBe(true);
-    expect(script.statements.slice(-2).map(({ args }) => args[0])).toEqual([
+    // The reset also closes every open Verification Token and burns the
+    // unclaimed sign-in of a verified one (#437 TM-05).
+    expect(script.statements.slice(-4).map(({ args }) => args[0])).toEqual([
       {
         where: { userAccountId: USER_ID, revokedAt: null },
         data: { revokedAt: input.now },
@@ -122,6 +126,19 @@ describe('PostgresPasswordResetTokenRepository', () => {
       {
         where: { userAccountId: USER_ID, revokedAt: null },
         data: { revokedAt: input.now },
+      },
+      {
+        where: { userAccountId: USER_ID, consumedAt: null },
+        data: { consumedAt: input.now, consumedReason: 'superseded' },
+      },
+      {
+        where: {
+          userAccountId: USER_ID,
+          consumedReason: 'verified',
+          signedInAt: null,
+          browserBindingHash: { not: null },
+        },
+        data: { signedInAt: input.now },
       },
     ]);
     expect(allArgs(script)).not.toContain('reset-token');
