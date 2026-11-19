@@ -1,5 +1,7 @@
 import { Response } from 'undici';
 
+import { once } from 'node:events';
+
 import { numberReply } from '@/common/redis/number-reply';
 import { RedisAuthRateLimiter } from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
@@ -325,7 +327,12 @@ it('shares an exhausted uncached API-key budget across Redis clients', async () 
   );
 
   try {
-    await Promise.all([firstRedis.ping(), secondRedis.ping()]);
+    await Promise.all(
+      [firstRedis, secondRedis].map(async (client) => {
+        if (client.status !== 'ready') await once(client, 'ready');
+        await client.ping();
+      }),
+    );
     await raw.del(budgetKey);
     await expect(first.consumeUncachedLookup()).resolves.toEqual({
       allowed: true,
