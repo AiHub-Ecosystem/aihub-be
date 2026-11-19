@@ -228,6 +228,11 @@ Contract Version nor starts a new major. Customers are told through the grading
 changes log ([ADR-0131](docs/adr/0131-customers-are-told-when-grading-behavior-changes.md)).
 _Avoid_: model upgrade, contract change
 
+**Writing priority error**:
+A writing issue selected and ranked for the learner to address, with its error
+code and a short explanation of why it matters.
+_Avoid_: progress insight (the broader analysis of a learner's writing history)
+
 **Downstream fault**:
 An AI Service answer that counts against the service's health: every 5xx, and a
 401 or 403 because AIHUB's own credential was rejected rather than the

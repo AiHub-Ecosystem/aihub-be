@@ -95,7 +95,8 @@ describe('createSharedPrismaClients', () => {
     });
 
     const pool = clients.runtime.pool;
-    expect(pool.options.connectionTimeoutMillis).toBe(250);
+    // The handshake budget is separate from the 250 ms slot queue (ADR-0088).
+    expect(pool.options.connectionTimeoutMillis).toBe(3_000);
     expect(pool.options.idleTimeoutMillis).toBe(30_000);
 
     await clients.close();
@@ -142,7 +143,7 @@ describe('createSharedPrismaClients', () => {
       expect(
         clients.runtime.pool.options.idle_in_transaction_session_timeout,
       ).toBeUndefined();
-      expect(clients.runtime.pool.options.connectionTimeoutMillis).toBe(250);
+      expect(clients.runtime.pool.options.connectionTimeoutMillis).toBe(3_000);
     } finally {
       await clients.close();
     }

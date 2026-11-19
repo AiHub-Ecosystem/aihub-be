@@ -1,8 +1,8 @@
 import type {
   EmailCredentialActionabilityPort,
   EmailCredentialState,
-  EmailDeliveryKind,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-credential-actionability.port';
+import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.types';
 
 import type { AuthSqlClient } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { authStoreError } from '@/modules/auth/shared/infrastructure/auth-row';

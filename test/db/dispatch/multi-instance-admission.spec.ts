@@ -18,7 +18,7 @@ import {
   listen,
   seedGradingOrganization,
   sendRequest,
-  startWorker,
+  startTwoWorkers,
 } from './app-worker';
 
 const GRADE_RESPONSE = readFileSync(
@@ -58,29 +58,6 @@ function grade(
     },
     body: GRADE_BODY,
   });
-}
-
-async function startTwoWorkers(
-  options: Parameters<typeof startWorker>[0],
-): Promise<[TestWorker, TestWorker]> {
-  const results = await Promise.allSettled([
-    startWorker(options),
-    startWorker(options),
-  ]);
-  const started = results.flatMap((result) =>
-    result.status === 'fulfilled' ? [result.value] : [],
-  );
-  const failure = results.find((result) => result.status === 'rejected');
-  if (failure?.status === 'rejected') {
-    await Promise.allSettled(started.map((worker) => worker.stop()));
-    throw failure.reason;
-  }
-
-  const [first, second] = results;
-  if (first?.status !== 'fulfilled' || second?.status !== 'fulfilled') {
-    throw new Error('Both test workers must start successfully');
-  }
-  return [first.value, second.value];
 }
 
 describe('multi-instance grading admission', () => {

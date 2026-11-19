@@ -59,6 +59,25 @@ container_for_upstream() {
   printf '%s\n' "$selected"
 }
 
+# One definition of "this log line is an error", used by both log branches.
+# A line that carries a `level` field is judged by that field alone: plenty of
+# healthy lines name an exception without being one, because HttpExceptionFilter
+# logs every 4xx rejection as `warn`. Only a line with no level at all falls
+# back to the word heuristic.
+error_rule_awk='
+  function is_error_line(text,   lower, level) {
+    lower = tolower(text)
+    if (match(text, /"level"[[:space:]]*:[[:space:]]*"[^"]*"/)) {
+      level = substr(text, RSTART, RLENGTH)
+      sub(/^.*:[[:space:]]*"/, "", level)
+      sub(/".*$/, "", level)
+      return tolower(level) ~ /^(error|fatal)$/
+    }
+    return lower ~ /(^|[^[:alnum:]_])(error|fatal)([^[:alnum:]_]|$)/ ||
+      lower ~ /unhandled|exception/
+  }
+'
+
 app_error_count_since() {
   local tier="$1" started="$2" started_seconds started_nanos started_ms file
   local -a app_log_files=()
@@ -75,12 +94,9 @@ app_error_count_since() {
     [[ -f "$file" && ! -L "$file" ]] || return 1
   done
 
-  zcat -f -- "${app_log_files[@]}" 2>/dev/null | awk -v since="$started_ms" '
+  zcat -f -- "${app_log_files[@]}" 2>/dev/null | awk -v since="$started_ms" "$error_rule_awk"'
     {
-      lower = tolower($0)
-      is_error = lower ~ /(^|[^[:alnum:]_])error([^[:alnum:]_]|$)/ ||
-        lower ~ /(^|[^[:alnum:]_])fatal([^[:alnum:]_]|$)/ ||
-        lower ~ /unhandled|exception/
+      is_error = is_error_line($0)
       if (!match($0, /"time"[[:space:]]*:[[:space:]]*[0-9]+/)) {
         if (is_error) incomplete = 1
         next
@@ -134,7 +150,7 @@ for label in production sandbox; do
   if [[ "$log_driver" == json-file ]]; then
     # Lines since this container started, so an old crash does not count.
     errors=$("${docker[@]}" logs --since "$started" "$container" </dev/null 2>&1 \
-      | grep -ciE '"level":"error"|\bERROR\b|\bFATAL\b|unhandled|exception')
+      | awk "$error_rule_awk"'{ if (is_error_line($0)) count++ } END { print count + 0 }')
   elif [[ "$log_driver" == syslog ]]; then
     if errors="$(app_error_count_since "$label" "$started")"; then
       :

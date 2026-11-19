@@ -949,6 +949,42 @@ tests:
         alertname: AIHUBAIWritingAvailabilityFastBurn
         exp_alerts: []
 
+  # #1591: shedding 30% of arriving requests for ten minutes fires; 10% does
+  # not. A second production instance shedding nothing proves the grouping
+  # keeps `instance`, so one saturated process is not averaged into silence.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_tier_requests_total{job="aihub-production-app",instance="prod-a:19103",tier="best-effort"}'
+        values: "0+40x12"
+      - series: 'aihub_shed_requests_total{job="aihub-production-app",instance="prod-a:19103",tier="best-effort"}'
+        values: "0+12x12"
+      - series: 'aihub_tier_requests_total{job="aihub-production-app",instance="prod-b:19103",tier="best-effort"}'
+        values: "0+40x12"
+      - series: 'aihub_shed_requests_total{job="aihub-production-app",instance="prod-b:19103",tier="best-effort"}'
+        values: "0x12"
+      - series: 'aihub_tier_requests_total{job="aihub-sandbox-app",instance="sandbox:19103",tier="best-effort"}'
+        values: "0+100x12"
+      - series: 'aihub_shed_requests_total{job="aihub-sandbox-app",instance="sandbox:19103",tier="best-effort"}'
+        values: "0+10x12"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AIHUBSheddingSustained
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AIHUBSheddingSustained
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              instance: prod-a:19103
+              tier: best-effort
+            exp_annotations:
+              summary: "AIHUB has shed more than 20% of requests for ten minutes"
+              description: "prod-a:19103 of aihub-production-app refused 30% of its best-effort requests to protect the AI Services. Shedding this long means demand exceeds capacity in that tier: read aihub_shed_level for how far shedding has escalated, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
+
   # #900: warn per process at 80% of the 1.5 CPU limit.
   - interval: 1m
     input_series:

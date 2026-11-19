@@ -144,6 +144,30 @@ export async function killWorker(worker: TestWorker): Promise<void> {
   await exited;
 }
 
+/** Two app processes sharing one Redis, or neither when one fails to start. */
+export async function startTwoWorkers(
+  options: Parameters<typeof startWorker>[0],
+): Promise<[TestWorker, TestWorker]> {
+  const results = await Promise.allSettled([
+    startWorker(options),
+    startWorker(options),
+  ]);
+  const started = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    await Promise.allSettled(started.map((worker) => worker.stop()));
+    throw failure.reason;
+  }
+
+  const [first, second] = results;
+  if (first?.status !== 'fulfilled' || second?.status !== 'fulfilled') {
+    throw new Error('Both test workers must start successfully');
+  }
+  return [first.value, second.value];
+}
+
 export function monthKey(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
@@ -158,6 +182,7 @@ export function sendRequest(
   appUrl: string,
   request: {
     readonly path: string;
+    readonly method?: string;
     readonly headers?: Readonly<Record<string, string>>;
     readonly body?: unknown;
   },
@@ -169,7 +194,7 @@ export function sendRequest(
         hostname: app.hostname,
         port: Number(app.port),
         path: request.path,
-        method: 'POST',
+        method: request.method ?? 'POST',
         headers: {
           host: 'api.production.test',
           'content-type': 'application/json',

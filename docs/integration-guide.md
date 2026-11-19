@@ -1281,6 +1281,11 @@ The response uses the common `{ "data", "meta" }` envelope. `data` has:
 - `overall_assessment`: `summary` (`overall`, `detail`, `cta`) and `progress`
   (`status`, and the lists `error_recur`, `error_impro` and `error_new`), which
   reports on this essay against the End-User's earlier results.
+- `error_priority`: up to three provider-ranked Writing priority errors. Each
+  entry has `rank`, `group`, `code`, `name_en`, `name_vi` and `reason_vi`; the
+  provider's order is preserved. `code` is open-ended, and `group` is one of
+  `task_achievement_response_coherence_cohesion`, `lexical_resource` or
+  `grammatical_range_accuracy`.
 - `data_micro`: the errors grouped by criterion and then by code, as
   `{ "<criterion>": { "<code>": { "prompt", "question_type", "comments": [{ "quote", "explanation" }] } } }`.
   It is empty (`{}`) when no error was found. Exercise routes take one selected
@@ -1649,6 +1654,7 @@ come back at the same instant:
 | `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`)       | That wait, read from the AI service's `Retry-After`; absent for any other status                                                        |
 | `AI_SERVICE_THROTTLED` (when the AI service answered `429` with its own `Retry-After`)   | That wait, read from the AI service's `Retry-After`; absent when the AI service sent none                                               |
 | `AUDIO_UNREADABLE` (when the AI service answered `503` with its own `Retry-After`)       | The same wait. The refusal stays `retryable: false`: send a new recording, not the same file again                                      |
+| `SERVICE_OVERLOADED`                                                                     | 1000–1999 ms; the AI Services were saturated and AIHUB refused the request before reading its body                                      |
 
 Every row with a hint also sends `Retry-After`. The header and the field never
 disagree: the header is the field rounded up to whole seconds.
@@ -1693,6 +1699,7 @@ separate table below.
 |  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement                                                    | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
 |  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode                                                  | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
 |  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely enforce a rate limit, check graded admission, or acquire/release its concurrency permit                             | Retry after `retry_after_ms`; AIHUB does not admit using local rate-limit counters                                 |
+|  503 | `SERVICE_OVERLOADED`            | The AI Services were saturated, so AIHUB refused a low-priority request before reading its body                                            | Retry after `Retry-After`; a `critical` route such as sign-in still answers                                        |
 |  503 | `RETRY_BUDGET_UNAVAILABLE`      | Reserved: AIHUB no longer returns this code; a Redis failure while checking graded admission is `REDIS_UNAVAILABLE`                        | If you handle it, treat it as `REDIS_UNAVAILABLE`: retry after `retry_after_ms`                                    |
 |  504 | `AI_SERVICE_TIMEOUT`            | Grading exceeded the budget                                                                                                                | Writing: retry with the **same** `Idempotency-Key`; Speaking: retry only if another run is acceptable              |
 |  500 | `INTERNAL_ERROR`                | Fault on our side; always `retryable: false`                                                                                               | Do not retry automatically. Report it with the `request_id`                                                        |
@@ -1777,6 +1784,34 @@ route for reading quota usage is tracked in #150.
 parallelism**. Your total per minute may be well within limits while thirty
 essays grade simultaneously. The fix is a queue with a bounded worker pool,
 not a longer delay.
+
+### Prioritized load shedding
+
+When the AI Services cannot keep up, AIHUB refuses some requests immediately
+instead of queueing them all and grading none. The refusal is `503
+SERVICE_OVERLOADED`, `retryable: true`, with `Retry-After` and
+`retry_after_ms`. It is decided from the route alone, before AIHUB reads the
+request body, so it arrives in milliseconds and you can retry it safely: a
+refused request created nothing and used no quota.
+
+Routes fall into three tiers, and AIHUB sheds from the lowest one upward:
+
+| Tier          | Routes                                                                                                                                                 | When it is refused                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `critical`    | Account sign-in and sessions, MFA, password recovery, email verification, Organization and API-key management, Sandbox assertion minting, `GET /v1/me` | Never                                          |
+| `standard`    | Every remaining route: Speaking questions, practice-content reads, chart and audio uploads, avatar, and the async Speaking job routes                  | Only when the AI Services stay fully saturated |
+| `best-effort` | Every operation that dispatches to an AI Service during the request: Writing and Speaking grading, and v2 practice creation and grading                | First                                          |
+
+`critical` covers the calls you need in order to keep operating, so a
+saturation never stops you from authenticating, rotating a key, or reading your
+own profile. `best-effort` is where retries are harmless: a Writing or Speaking
+grading call you retry later costs you nothing.
+
+Tier is a gateway decision only. AIHUB does not forward it to the AI Services;
+the documented AI Service contract is unchanged (ADR-0173). Recovery is
+hysteretic: AIHUB restores a shed tier only after saturation stays below its
+threshold for a sustained window, so a single quiet second does not cause the
+next one to flood.
 
 ---
 

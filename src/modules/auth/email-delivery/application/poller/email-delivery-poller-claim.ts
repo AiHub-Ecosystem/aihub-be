@@ -1,10 +1,8 @@
-import type {
-  ClaimEmailDeliveryRequestsInput,
-  EmailDispatchStorePort,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { ClaimEmailDeliveryRequestsInput } from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type { EmailDispatchClaimPort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 
 export function claimEmailDeliveryBatch(
-  store: EmailDispatchStorePort,
+  store: EmailDispatchClaimPort,
   input: ClaimEmailDeliveryRequestsInput & { readonly batchSize: number },
   claimSuppressed: boolean,
 ) {

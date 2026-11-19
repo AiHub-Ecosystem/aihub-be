@@ -1,0 +1,16 @@
+{
+  "endpoint": "/v3/grading-feedback-task1",
+  "captured_at": "2026-11-17",
+  "data": {
+    "error_priority": [
+      {
+        "rank": 1,
+        "group": "task_achievement_response_coherence_cohesion",
+        "code": "CC01",
+        "name_en": "Faulty Paragraphing",
+        "name_vi": "Phân đoạn chưa hợp lý",
+        "reason_vi": "Lỗi Faulty Paragraphing xuất hiện lần đầu trong bài viết này, nhưng với tần suất cao, cho thấy học viên chưa nắm vững cách tổ chức đoạn văn hợp lý, điều này ảnh hưởng trực tiếp đến tiêu chí Coherence and Cohesion khi người đọc khó xác định cấu trúc báo cáo."
+      }
+    ]
+  }
+}

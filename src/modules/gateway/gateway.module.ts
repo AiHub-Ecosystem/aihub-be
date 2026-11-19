@@ -100,6 +100,7 @@ import {
   SANDBOX_DISPATCH_BUDGET,
   type SandboxDispatchBudgetPort,
 } from './application/sandbox-dispatch-budget.port';
+import { SHEDDING_LEVEL } from './application/shedding/shedding-level.port';
 import { ConfiguredTokenIssuer } from './infrastructure/dispatch/configured-token-issuer';
 import { DownstreamCircuitBreakers } from './infrastructure/dispatch/downstream-circuit-breakers';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
@@ -118,6 +119,8 @@ import {
 } from './infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
 import { RedisRateLimiter } from './infrastructure/redis-rate-limiter';
+import { SheddingGovernorScheduler } from './infrastructure/shedding-governor.scheduler';
+import { SheddingLevelStore } from './infrastructure/shedding-level.store';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
 
@@ -187,6 +190,25 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       useFactory: (client: RedisGatewayClient | undefined): RedisRateLimiter =>
         new RedisRateLimiter('', client),
       inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
+      provide: SHEDDING_LEVEL,
+      useFactory: (
+        client: RedisGatewayClient | undefined,
+      ): SheddingLevelStore => new SheddingLevelStore(client),
+      inject: [REDIS_GATEWAY_CLIENT],
+    },
+    {
+      provide: SheddingGovernorScheduler,
+      useFactory: (
+        httpClient: DownstreamHttpClient,
+        level: SheddingLevelStore,
+      ): SheddingGovernorScheduler =>
+        new SheddingGovernorScheduler(
+          () => httpClient.concurrencySnapshot(),
+          level,
+        ),
+      inject: [DownstreamHttpClient, SHEDDING_LEVEL],
     },
     {
       provide: GRADED_ADMISSION,
@@ -335,6 +357,8 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
     RateLimitGuard,
     SuccessEnvelopeInterceptor,
     CONCURRENCY_LIMITER,
+    SHEDDING_LEVEL,
+    SheddingGovernorScheduler,
   ],
 })
 export class GatewayModule {}

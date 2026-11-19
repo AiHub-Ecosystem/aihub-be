@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.8.0"
+    "version": "2.10.0"
   },
   "servers": [
     {
@@ -615,7 +615,7 @@
         }
       },
       "Error503": {
-        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | DATABASE_UNAVAILABLE | AUTH_ARGON2_CAPACITY | EMAIL_DELIVERY_BACKLOGGED | AUTH_WEB_SESSION_UNAVAILABLE | REDIS_UNAVAILABLE | RETRY_BUDGET_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | WRITING_CHART_STORAGE_UNAVAILABLE | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
+        "description": "IDENTITY_PROVIDER_UNAVAILABLE | IDENTITY_JWKS_SOURCE_UNAVAILABLE | IDENTITY_CONFIG_CACHE_UNAVAILABLE | DATABASE_UNAVAILABLE | AUTH_ARGON2_CAPACITY | EMAIL_DELIVERY_BACKLOGGED | AUTH_WEB_SESSION_UNAVAILABLE | REDIS_UNAVAILABLE | RETRY_BUDGET_UNAVAILABLE | AVATAR_STORAGE_UNAVAILABLE | SPEAKING_AUDIO_STORAGE_UNAVAILABLE | WRITING_CHART_STORAGE_UNAVAILABLE | SERVICE_OVERLOADED | AI_SERVICE_THROTTLED | AI_SERVICE_UNAVAILABLE",
         "headers": {
           "Retry-After": {
             "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
@@ -651,6 +651,7 @@
                         "AVATAR_STORAGE_UNAVAILABLE",
                         "SPEAKING_AUDIO_STORAGE_UNAVAILABLE",
                         "WRITING_CHART_STORAGE_UNAVAILABLE",
+                        "SERVICE_OVERLOADED",
                         "AI_SERVICE_THROTTLED",
                         "AI_SERVICE_UNAVAILABLE"
                       ],
@@ -905,6 +906,7 @@
                         "overall_band",
                         "criteria",
                         "overall_assessment",
+                        "error_priority",
                         "data_micro"
                       ],
                       "properties": {
@@ -1095,6 +1097,57 @@
                                     "type": "string"
                                   }
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "error_priority": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "rank",
+                              "group",
+                              "code",
+                              "name_en",
+                              "name_vi",
+                              "reason_vi"
+                            ],
+                            "properties": {
+                              "rank": {
+                                "minimum": 1,
+                                "maximum": 3,
+                                "type": "integer"
+                              },
+                              "group": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement_response_coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "name_en": {
+                                "type": "string"
+                              },
+                              "name_vi": {
+                                "type": "string"
+                              },
+                              "reason_vi": {
+                                "type": "string"
                               }
                             }
                           }
@@ -1327,6 +1380,7 @@
                         "overall_band",
                         "criteria",
                         "overall_assessment",
+                        "error_priority",
                         "data_micro"
                       ],
                       "properties": {
@@ -1517,6 +1571,57 @@
                                     "type": "string"
                                   }
                                 }
+                              }
+                            }
+                          }
+                        },
+                        "error_priority": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object",
+                            "required": [
+                              "rank",
+                              "group",
+                              "code",
+                              "name_en",
+                              "name_vi",
+                              "reason_vi"
+                            ],
+                            "properties": {
+                              "rank": {
+                                "minimum": 1,
+                                "maximum": 3,
+                                "type": "integer"
+                              },
+                              "group": {
+                                "anyOf": [
+                                  {
+                                    "const": "task_achievement_response_coherence_cohesion",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "lexical_resource",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "grammatical_range_accuracy",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "name_en": {
+                                "type": "string"
+                              },
+                              "name_vi": {
+                                "type": "string"
+                              },
+                              "reason_vi": {
+                                "type": "string"
                               }
                             }
                           }

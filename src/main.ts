@@ -21,6 +21,11 @@ import {
 } from './config/bootstrap-configuration';
 import { getRuntimeConfiguration } from './config/runtime-configuration';
 import {
+  SHEDDING_LEVEL,
+  type SheddingLevelPort,
+} from './modules/gateway/application/shedding/shedding-level.port';
+import { recordTierOutcome } from './modules/gateway/public/http-hooks';
+import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
   type PublicApiMajorUsageBuffer,
 } from './modules/metering/public/public-api-major-usage';
@@ -86,8 +91,14 @@ export async function bootstrap(): Promise<void> {
     PUBLIC_API_MAJOR_USAGE_BUFFER,
     { strict: false },
   );
-  registerRequestHooks(fastify, requestTracer, (sample) =>
-    publicApiMajorUsage.record(sample),
+  registerRequestHooks(
+    fastify,
+    requestTracer,
+    (sample) => publicApiMajorUsage.record(sample),
+    {
+      level: app.get<SheddingLevelPort>(SHEDDING_LEVEL, { strict: false }),
+      record: recordTierOutcome,
+    },
   );
 
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);

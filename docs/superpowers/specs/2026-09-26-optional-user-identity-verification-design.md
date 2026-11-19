@@ -54,7 +54,7 @@ UserIdentityResolver (application; the guard's port)
 ## Security notes
 
 - A Declared User ID is trusted as far as the API key: tenant isolation is unaffected; intra-Organization impersonation by a key holder is possible and documented.
-- The header value is still redacted from logs in both forms (`src/common/security/redact.ts`).
+- The header value is still redacted from logs in both forms.
 - Emails are PII; stored in `usage_records.actor_id` and forwarded as-is. The integration guide recommends opaque IDs.
 
 ## Documentation to update
