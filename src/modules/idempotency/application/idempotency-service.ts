@@ -134,7 +134,9 @@ export class IdempotencyService implements IdempotencyServicePort {
     private readonly random: () => number = Math.random,
   ) {}
 
-  async findCompletedReplay(input: CompletedReplayLookupInput) {
+  async findCompletedReplay(
+    input: CompletedReplayLookupInput,
+  ): ReturnType<NonNullable<IdempotencyServicePort['findCompletedReplay']>> {
     if (
       this.repository.findCompletedMatch === undefined ||
       idempotencyMode(input.operation) === 'none'

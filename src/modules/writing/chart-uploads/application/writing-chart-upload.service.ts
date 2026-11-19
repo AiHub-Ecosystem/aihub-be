@@ -134,7 +134,7 @@ export class WritingChartUploadService
     readonly context: RequestContext;
     readonly contentType: string;
     readonly byteSize: number;
-  }) {
+  }): ReturnType<WritingChartUploadServicePort['create']> {
     if (!isWritingChartContentType(input.contentType)) throw invalidRequest();
     if (!Number.isInteger(input.byteSize) || input.byteSize < 1) {
       throw invalidRequest();
@@ -183,7 +183,7 @@ export class WritingChartUploadService
   async refresh(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }) {
+  }): ReturnType<WritingChartUploadServicePort['refresh']> {
     if (!isWritingChartAssetId(input.assetId)) throw invalidRequest();
     const owner = ownerFromContext(input.context, input.assetId);
     const found = await this.repository.findUpload(owner);
@@ -226,7 +226,7 @@ export class WritingChartUploadService
   async complete(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }) {
+  }): ReturnType<WritingChartUploadServicePort['complete']> {
     if (!isWritingChartAssetId(input.assetId)) throw invalidRequest();
     const owner = ownerFromContext(input.context, input.assetId);
     return serializeWritingChartUploadCompletion(owner.assetId, async () => {

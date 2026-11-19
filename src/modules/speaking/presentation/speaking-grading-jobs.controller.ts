@@ -44,7 +44,7 @@ export class SpeakingGradingJobsController {
 
   @Post(PUBLIC_ROUTES['speaking.gradingJobs.create'].path)
   @RequireApiKeyScope(
-    PUBLIC_ROUTES['speaking.gradingJobs.create'].requiredScope!,
+    PUBLIC_ROUTES['speaking.gradingJobs.create'].requiredScope,
   )
   @HttpCode(PUBLIC_ROUTES['speaking.gradingJobs.create'].successStatus)
   async submit(
@@ -87,7 +87,7 @@ export class SpeakingGradingJobsController {
   }
 
   @Get(PUBLIC_ROUTES['speaking.gradingJobs.get'].path)
-  @RequireApiKeyScope(PUBLIC_ROUTES['speaking.gradingJobs.get'].requiredScope!)
+  @RequireApiKeyScope(PUBLIC_ROUTES['speaking.gradingJobs.get'].requiredScope)
   @UseGuards(RateLimitGuard)
   @HttpCode(PUBLIC_ROUTES['speaking.gradingJobs.get'].successStatus)
   async poll(

@@ -157,7 +157,7 @@ export class S3WritingChartUploadStorage
       readonly byteSize: number;
     },
     signal = objectStorageSignal(),
-  ) {
+  ): ReturnType<WritingChartUploadStoragePort['inspectObject']> {
     const { client, bucket } = this.require(
       input.environment,
       input.stagingKey,

@@ -6,7 +6,10 @@ export function redisOperationName(commandName: string): string {
   return commandName.toUpperCase();
 }
 
-export function downstreamUrlAttributes(origin: string, path: string) {
+export function downstreamUrlAttributes(
+  origin: string,
+  path: string,
+): { 'url.full': string; 'url.query': string } {
   const url = new URL(path, origin);
   return {
     'url.full': `${url.origin}${url.pathname}`,

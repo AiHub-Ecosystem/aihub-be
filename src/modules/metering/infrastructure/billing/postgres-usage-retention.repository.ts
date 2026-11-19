@@ -120,7 +120,10 @@ export class PostgresUsageRetentionRepository implements UsageRetentionPort {
     return rows.length;
   }
 
-  async previewPrune(cutoff: Date) {
+  async previewPrune(cutoff: Date): Promise<{
+    readonly usageRecords: number;
+    readonly dispatchAttempts: number;
+  }> {
     const rows = await this.client.$queryRawUnsafe<
       readonly UsageRetentionPreviewRow[]
     >(USAGE_RETENTION_PREVIEW_SQL, cutoff);

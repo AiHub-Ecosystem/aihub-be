@@ -75,7 +75,22 @@
       "files": ["src/**/*.ts"],
       "rules": {
         "complexity": ["error", 64],
-        "max-depth": ["error", 4]
+        "max-depth": ["error", 4],
+        // #1346: both rules are already written in .claude/rules/typescript.md.
+        "typescript/no-non-null-assertion": "error",
+        "typescript/explicit-module-boundary-types": "error"
+      }
+    },
+    {
+      // #1346: specs and testing helpers are not production boundaries.
+      "files": [
+        "src/**/*.spec.ts",
+        "src/**/*.spec-support.ts",
+        "src/**/testing/**"
+      ],
+      "rules": {
+        "typescript/no-non-null-assertion": "off",
+        "typescript/explicit-module-boundary-types": "off"
       }
     },
     {

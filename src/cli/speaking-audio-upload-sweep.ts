@@ -41,7 +41,7 @@ async function openRepository(
 /** Prints only counts; object keys and End-User IDs never enter operator output. */
 export async function runSpeakingAudioUploadSweepCommand(
   input: SpeakingAudioUploadSweepCliInput,
-) {
+): Promise<Awaited<ReturnType<SpeakingAudioUploadSweep['run']>>> {
   const repository = await openRepository(input);
   const storage = input.storage ?? createCliSpeakingAudioAssetStorage();
   const sweep = new SpeakingAudioUploadSweep(repository, storage);

@@ -85,7 +85,9 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     this.redis = redis;
   }
 
-  async consume(input: Parameters<AuthRateLimiterPort['consume']>[0]) {
+  async consume(
+    input: Parameters<AuthRateLimiterPort['consume']>[0],
+  ): ReturnType<AuthRateLimiterPort['consume']> {
     const hashed = hashRateLimitKey(input.scope, input.key);
     if (this.redis !== undefined) {
       try {
@@ -112,7 +114,9 @@ export class RedisAuthRateLimiter implements AuthRateLimiterPort {
     return this.consumeFallback(hashed, input.limit, input.windowMs);
   }
 
-  async check(input: Parameters<AuthRateLimiterPort['check']>[0]) {
+  async check(
+    input: Parameters<AuthRateLimiterPort['check']>[0],
+  ): ReturnType<AuthRateLimiterPort['check']> {
     const hashed = hashRateLimitKey(input.scope, input.key);
     if (this.redis !== undefined) {
       try {
