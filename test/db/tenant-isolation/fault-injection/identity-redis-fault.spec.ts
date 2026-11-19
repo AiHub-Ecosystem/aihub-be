@@ -285,14 +285,16 @@ it('uses organization B only for B while Redis is refused', async () => {
 
 it('shares an exhausted uncached API-key budget across Redis clients', async () => {
   const budgetKey = apiKeyLookupBudgetKey();
-  const first = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
-    warn: () => undefined,
+  const redisUrl =
+    process.env['TENANT_ISOLATION_REDIS_URL']?.trim() ||
+    'redis://127.0.0.1:6379/15';
+  const warnings: Record<string, unknown>[] = [];
+  const logger = {
+    warn: (fields: Record<string, unknown>) => warnings.push(fields),
     log: () => undefined,
-  });
-  const second = new RedisAuthFailureCounter(proxiedRedisUrl, undefined, {
-    warn: () => undefined,
-    log: () => undefined,
-  });
+  };
+  const first = new RedisAuthFailureCounter(redisUrl, undefined, logger);
+  const second = new RedisAuthFailureCounter(redisUrl, undefined, logger);
   await raw.del(budgetKey);
 
   try {
@@ -304,13 +306,14 @@ it('shares an exhausted uncached API-key budget across Redis clients', async () 
       'tokens',
       '0',
       'updated_at',
-      String(Date.now() + 60_000),
+      String(Date.now() + 60 * 60 * 1_000),
     );
 
     await expect(second.consumeUncachedLookup()).resolves.toEqual({
       allowed: false,
       retryAfterMs: 10,
     });
+    expect(warnings).toEqual([]);
   } finally {
     await raw.del(budgetKey);
     await first.onModuleDestroy();
