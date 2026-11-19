@@ -125,6 +125,32 @@ describe('RedisEmailSendRateLimiter', () => {
     ]);
   });
 
+  it('carries the failure count a permit saw, and hands it back with a success', async () => {
+    const redis = new FakeRedis();
+    redis.results = [[1, 0, 'probe-one', 3]];
+    const limiter = new RedisEmailSendRateLimiter('', 2, 1_000, redis);
+
+    await expect(limiter.acquireSendPermit()).resolves.toEqual({
+      allowed: true,
+      probeToken: 'probe-one',
+      generation: 3,
+    });
+    await limiter.recordProviderReachable({
+      generation: 3,
+      probeToken: 'probe-one',
+    });
+    await limiter.recordProviderReachable();
+
+    expect(redis.calls[1]?.slice(1)).toEqual([
+      1,
+      EMAIL_PROVIDER_OUTAGE_STATE_KEY,
+      '3',
+      'probe-one',
+    ]);
+    // A caller that saw no count clears unconditionally, as before.
+    expect(redis.calls[2]?.slice(3)).toEqual(['', '']);
+  });
+
   it('fails closed when Redis cannot coordinate an outage probe', async () => {
     const redis = new FakeRedis();
     redis.failure = new Error('connection refused');

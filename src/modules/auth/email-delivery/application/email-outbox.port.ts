@@ -8,6 +8,12 @@ import type { BackpressureEmailKind } from './email-outbox-backpressure.port';
 
 export type { EmailDeliveryPayloadByKind } from './email-kind-handler.registry';
 
+/** The kinds that carry a single-use credential minted for this email. */
+type CredentialEmailKind =
+  | 'verification_email'
+  | 'password_reset_email'
+  | 'organization_invite_email';
+
 export type QueueEmailDeliveryRequestInput = {
   [K in EmailDeliveryKind]: {
     readonly kind: K;
@@ -15,7 +21,12 @@ export type QueueEmailDeliveryRequestInput = {
     readonly createdAt: Date;
   } & (K extends 'organization_invite_email'
     ? { readonly organizationId: string; readonly inviterId: string }
-    : object);
+    : object) &
+    // The id of the token row or invitation, never the token, so support can
+    // trace a sent email to what caused it (#441).
+    (K extends CredentialEmailKind
+      ? { readonly credentialId: string }
+      : object);
 }[EmailDeliveryKind];
 
 export interface EmailOutboxPort {
@@ -27,10 +38,11 @@ export interface EmailOutboxPort {
     transaction: EmailDeliveryTransaction,
     input: { readonly email: string; readonly now: Date },
   ): Promise<boolean>;
+  /** Returns the Email Delivery Request id, for the caller's own audit trail. */
   queue(
     transaction: EmailDeliveryTransaction,
     input: QueueEmailDeliveryRequestInput,
-  ): Promise<void>;
+  ): Promise<string>;
   withdraw<K extends EmailDeliveryKind>(
     transaction: EmailDeliveryTransaction,
     input: {

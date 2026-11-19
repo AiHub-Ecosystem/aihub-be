@@ -10,7 +10,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | OperatorRedisFailure               | identity    | 2       |
 | NotificationEvent                  | identity    | 8       |
 | AuthIdentity                       | auth        | 8       |
-| EmailDeliveryRequest               | auth        | 16      |
+| EmailDeliveryRequest               | auth        | 17      |
 | AuthEmailRecipientRateLimit        | auth        | 5       |
 | EmailDailySendBudget               | auth        | 5       |
 | EmailVerificationToken             | auth        | 12      |
@@ -136,6 +136,7 @@ Owner: `auth`
 | failureNotifyLeaseExpiresAt | DateTime? | @map("failure_notify_lease_expires_at") @db.Timestamptz(6) |
 | organizationId              | String?   | @map("organization_id")                                    |
 | inviterId                   | String?   | @map("inviter_id")                                         |
+| credentialId                | String?   | @map("credential_id")                                      |
 
 ## AuthEmailRecipientRateLimit
 

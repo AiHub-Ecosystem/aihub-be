@@ -1333,6 +1333,7 @@ describe('email outbox dispatch poller', () => {
         releaseFailureNotification: (input) =>
           store.releaseFailureNotification(input),
         failExhausted: (input) => store.failExhausted(input),
+        readDispatchState: (id) => store.readDispatchState(id),
       };
       let clock = NOW;
       const failing = new EmailDeliveryPoller(

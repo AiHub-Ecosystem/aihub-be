@@ -48,18 +48,21 @@ describe('EmailOutbox', () => {
       expiresAt: '2026-10-28T00:00:00.000Z',
     };
 
-    await outbox.queue(transaction, {
+    const id = await outbox.queue(transaction, {
       kind: 'verification_email',
       payload,
       createdAt: now,
+      credentialId: '{{SECRET_mbhgnfyp}}',
     });
 
+    expect(id).toBe('edr_generated');
     expect(inserted).toEqual([
       {
         id: 'edr_generated',
         kind: 'verification_email',
         payloadCiphertext: `sealed:${JSON.stringify(payload)}`,
         createdAt: now,
+        credentialId: '{{SECRET_mbhgnfyp}}',
       },
     ]);
     expect(contexts).toEqual([

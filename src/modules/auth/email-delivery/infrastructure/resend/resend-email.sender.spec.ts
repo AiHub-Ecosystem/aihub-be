@@ -84,7 +84,7 @@ describe('ResendEmailSender', () => {
       async () => ({
         status: 422,
         headers: { get: () => null },
-        body: 'provider-private-response',
+        text: async () => 'provider-private-response',
       }),
     );
 
@@ -101,7 +101,7 @@ describe('ResendEmailSender', () => {
       headers: {
         get: (name: string) => (name === 'retry-after' ? '30' : null),
       },
-      body: 'provider-private-response',
+      text: async () => 'provider-private-response',
     };
     const sender = new ResendEmailSender(
       { apiKey: 'resend-secret' },
@@ -149,6 +149,203 @@ describe('ResendEmailSender', () => {
       sender.send({ ...message, subject: circular as unknown as string }),
     ).rejects.not.toBeInstanceOf(EmailProviderTransportError);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('cancels the body of every non-409 response so its connection is released', async () => {
+    for (const status of [200, 422, 429, 500]) {
+      const cancel = jest.fn(async () => undefined);
+      const text = jest.fn(async () => '{}');
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'no-reply@example.com',
+        async () => ({
+          status,
+          headers: { get: () => null },
+          body: { cancel },
+          text,
+        }),
+      );
+
+      await sender.send(message, { idempotencyKey: 'edr_one' });
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(text).not.toHaveBeenCalled();
+    }
+  });
+
+  it('still answers when cancelling the body fails', async () => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => ({
+        status: 202,
+        headers: { get: () => null },
+        body: {
+          cancel: async () => {
+            throw new Error('already closed');
+          },
+        },
+      }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 202,
+      retryAfter: undefined,
+    });
+  });
+
+  it.each([
+    ['concurrent_idempotent_requests', 'concurrent'],
+    ['invalid_idempotent_request', 'payload_changed'],
+  ])(
+    'reads the 409 error name %s as the %s idempotency conflict',
+    async (name, conflict) => {
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'no-reply@example.com',
+        async () => ({
+          status: 409,
+          headers: { get: () => null },
+          text: async () =>
+            JSON.stringify({ statusCode: 409, name, message: 'private' }),
+        }),
+      );
+
+      await expect(sender.send(message)).resolves.toEqual({
+        status: 409,
+        retryAfter: undefined,
+        idempotencyConflict: conflict,
+      });
+    },
+  );
+
+  it.each([
+    ['an unknown error name', JSON.stringify({ name: 'conflict' })],
+    ['an inherited property name', JSON.stringify({ name: 'toString' })],
+    ['a body that is not JSON', 'not json'],
+    [
+      'an oversized body',
+      JSON.stringify({
+        name: 'invalid_idempotent_request',
+        message: 'x'.repeat(5_000),
+      }),
+    ],
+  ])('reports no conflict for a 409 with %s', async (_case, body) => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => ({
+        status: 409,
+        headers: { get: () => null },
+        text: async () => body,
+      }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+    });
+  });
+
+  it('stops reading a 409 body at the limit and cancels the stream', async () => {
+    let cancelled = false;
+    const chunk = new TextEncoder().encode('x'.repeat(1_024));
+    const total = 16;
+    let sent = 0;
+    // Finite, so a reader that ignored the limit would drain all sixteen chunks.
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          sent += 1;
+          controller.enqueue(chunk);
+          if (sent === total) controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => new Response(body, { status: 409 }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+    });
+    expect(cancelled).toBe(true);
+    // 4 KiB is four chunks; the fifth crosses the limit and is the last one read.
+    expect(sent).toBe(5);
+  });
+
+  it.each([
+    [4_096, 'payload_changed'],
+    [4_097, undefined],
+  ] as const)(
+    'classifies a valid 409 document of %i bytes as %s',
+    async (bytes, conflict) => {
+      const head = JSON.stringify({
+        name: 'invalid_idempotent_request',
+        pad: '',
+      });
+      const document = JSON.stringify({
+        name: 'invalid_idempotent_request',
+        pad: 'x'.repeat(bytes - new TextEncoder().encode(head).byteLength),
+      });
+      expect(new TextEncoder().encode(document).byteLength).toBe(bytes);
+      const sender = new ResendEmailSender(
+        { apiKey: 'resend-secret' },
+        'no-reply@example.com',
+        async () => new Response(document, { status: 409 }),
+      );
+
+      await expect(sender.send(message)).resolves.toEqual({
+        status: 409,
+        retryAfter: undefined,
+        ...(conflict === undefined ? {} : { idempotencyConflict: conflict }),
+      });
+    },
+  );
+
+  it('applies the byte limit to a text-only 409 body, not its character count', async () => {
+    const document = JSON.stringify({
+      name: 'invalid_idempotent_request',
+      pad: 'é'.repeat(2_100),
+    });
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () => ({
+        status: 409,
+        headers: { get: () => null },
+        text: async () => document,
+      }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+    });
+  });
+
+  it('classifies a small streamed 409 body', async () => {
+    const sender = new ResendEmailSender(
+      { apiKey: 'resend-secret' },
+      'no-reply@example.com',
+      async () =>
+        new Response(JSON.stringify({ name: 'invalid_idempotent_request' }), {
+          status: 409,
+        }),
+    );
+
+    await expect(sender.send(message)).resolves.toEqual({
+      status: 409,
+      retryAfter: undefined,
+      idempotencyConflict: 'payload_changed',
+    });
   });
 
   it('requires a non-empty sender address', () => {

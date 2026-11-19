@@ -9,17 +9,19 @@ import {
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { claimEmailDeliveryBatch } from './email-delivery-poller-claim';
-import {
-  EmailDeliveryPollerDispatchSteps,
-  EMAIL_SEND_RATE_LIMIT_RETRY_MS as dispatchRetryDelayMs,
-} from './email-delivery-poller-dispatch-steps';
+import { EmailDeliveryPollerDispatchSteps } from './email-delivery-poller-dispatch-steps';
 import { EmailDeliveryPollerMaintenance } from './email-delivery-poller-maintenance';
 import type {
   EmailDeliveryPollerOptions,
   EmailDispatchOutcome,
 } from './email-delivery-poller.types';
+import {
+  EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+  EmailProviderPause,
+} from './email-provider-pause';
+
 export { DEFER_RETRY_MS } from './email-delivery-poller-dispatch-steps';
-export const EMAIL_SEND_RATE_LIMIT_RETRY_MS = dispatchRetryDelayMs;
+export { EMAIL_SEND_RATE_LIMIT_RETRY_MS };
 export type { EmailDeliveryPollerOptions } from './email-delivery-poller.types';
 export { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller-maintenance';
 
@@ -79,6 +81,7 @@ export class EmailDeliveryPoller {
 
   private readonly batchSize: number;
   private readonly leaseMs: number;
+  private readonly pause: EmailProviderPause;
   private readonly dispatchSteps: EmailDeliveryPollerDispatchSteps;
   private readonly maintenance: EmailDeliveryPollerMaintenance;
 
@@ -96,6 +99,7 @@ export class EmailDeliveryPoller {
     this.batchSize = options.batchSize ?? EmailDeliveryPoller.BATCH_SIZE;
     this.leaseMs =
       options.leaseMs ?? EmailDeliveryPoller.leaseMsFor(this.batchSize);
+    this.pause = new EmailProviderPause(providerOutageCircuit, now);
     this.maintenance = new EmailDeliveryPollerMaintenance(
       store,
       now,
@@ -114,6 +118,7 @@ export class EmailDeliveryPoller {
       tokens,
       options,
       maintenance: this.maintenance,
+      pause: this.pause,
     });
   }
 
@@ -134,7 +139,7 @@ export class EmailDeliveryPoller {
       },
       this.maintenance.hasPendingAttemptReleases ||
         this.options.shouldStop?.() === true ||
-        claimAt.getTime() < this.dispatchSteps.providerPausedUntil,
+        claimAt.getTime() < this.pause.until,
     );
 
     const summary = {
@@ -149,11 +154,14 @@ export class EmailDeliveryPoller {
       // Shutdown hands the rest of the batch back, as an outage does: no
       // provider call starts after it begins (#833).
       if (this.options.shouldStop?.() === true) pauseBatch = true;
+      // A pause opened by an earlier row of this batch (for example a failed
+      // reachability write) holds the rest of it too.
+      if (this.now().getTime() < this.pause.until) pauseBatch = true;
       if (pauseBatch) {
         const now = this.now();
         const retryAfterMs = Math.max(
           EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-          this.dispatchSteps.providerPausedUntil - now.getTime(),
+          this.pause.until - now.getTime(),
         );
         try {
           await this.maintenance.defer(request, now, retryAfterMs);
@@ -182,8 +190,7 @@ export class EmailDeliveryPoller {
         // instance. The row keeps its lease and its payload, so the next pass
         // picks it up again; swallowing here is what keeps one bad row from
         // stranding the rest of the batch.
-        if (this.now().getTime() < this.dispatchSteps.providerPausedUntil)
-          pauseBatch = true;
+        if (this.now().getTime() < this.pause.until) pauseBatch = true;
       }
     }
     await this.maintenance.reportUnreportedFailures();
@@ -231,7 +238,6 @@ export class EmailDeliveryPoller {
     return this.dispatchSteps.translateProviderOutcome({
       request,
       ...sendResult,
-      attemptedAt: now,
     });
   }
 }
