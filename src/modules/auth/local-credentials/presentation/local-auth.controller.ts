@@ -202,19 +202,6 @@ export class LocalAuthController {
   ): Promise<void> {
     parseRequestBody(EmptyAuthRequestSchema, body, request);
     const forwarded = bffForwarded(request);
-    // A refresh credential that arrived alongside another cookie, an
-    // Authorization header or a query value is still a credential the caller
-    // presented, so a quiet `204` that revokes nothing is never the answer.
-    if (
-      refreshCredentialPresent(request) &&
-      hasAlternateRefreshSource(request)
-    ) {
-      throw invalidRequest(
-        undefined,
-        undefined,
-        'alternate refresh credential source',
-      );
-    }
     const rawToken = refreshCookieFrom(request);
     if (
       forwarded &&
@@ -228,6 +215,19 @@ export class LocalAuthController {
       // CSRF token answers the same `204` and revokes nothing, so a probe
       // learns nothing and the session survives.
       return;
+    }
+    // A refresh credential that arrived alongside another cookie, an
+    // Authorization header or a query value is still a credential the caller
+    // presented, so a quiet `204` that revokes nothing is never the answer.
+    if (
+      refreshCredentialPresent(request) &&
+      hasAlternateRefreshSource(request)
+    ) {
+      throw invalidRequest(
+        undefined,
+        undefined,
+        'alternate refresh credential source',
+      );
     }
     await this.sessions.logout(rawToken);
     clearRefreshCookie(reply);

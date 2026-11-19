@@ -162,6 +162,20 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.18.0] - 2026-11-19
+
+### Changed
+
+- `POST /v1/auth/web-sessions/logout` answers `400 INVALID_REQUEST` when the
+  request carries a cookie, an `Authorization` header, or a query value
+  alongside the body token. The route used to answer a bodyless `204` and
+  revoke nothing in that case, which reported a sign-out that never happened.
+  A request that carries the token only in the body keeps the existing quiet
+  `204` contract for valid, already-revoked, unknown, expired, and malformed
+  tokens. `POST /v1/auth/logout` applies the same rule to a presented refresh
+  cookie, except that a BFF-forwarded call without the session CSRF token still
+  answers the quiet `204` of ADR-0157.
+
 ## [1.17.0] - 2026-11-19
 
 ### Added
