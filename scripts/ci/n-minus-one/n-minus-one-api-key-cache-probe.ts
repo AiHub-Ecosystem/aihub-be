@@ -19,7 +19,7 @@ export async function verifyApiKeyCacheCompatibility(input: {
   readonly apiKey: string;
   readonly apiKeyId: string;
   readonly organizationId: string;
-  readonly assertion: string;
+  readonly signAssertion: () => string;
   readonly gradeKey: string;
   readonly gradeBody: Record<string, string>;
   readonly previousSha: string;
@@ -31,7 +31,7 @@ export async function verifyApiKeyCacheCompatibility(input: {
     apiKey,
     apiKeyId,
     organizationId,
-    assertion,
+    signAssertion,
     gradeKey,
     gradeBody,
     previousSha,
@@ -105,7 +105,7 @@ export async function verifyApiKeyCacheCompatibility(input: {
     expectStatus(
       await request(PREVIOUS_PORT, 'POST', '/v1/speaking/audio/uploads', {
         apiKey,
-        assertion,
+        assertion: signAssertion(),
         body: {},
       }),
       401,
@@ -127,14 +127,24 @@ export async function verifyApiKeyCacheCompatibility(input: {
     PREVIOUS_PORT,
     'POST',
     '/v1/ielts/writing/task1/grade',
-    { apiKey, assertion, idempotencyKey: gradeKey, body: gradeBody },
+    {
+      apiKey,
+      assertion: signAssertion(),
+      idempotencyKey: gradeKey,
+      body: gradeBody,
+    },
   );
   expect2xx(oldReplay, 'N-1 JWKS read and retry replay');
   const retryRefusal = await request(
     CANDIDATE_PORT,
     'POST',
     '/v1/ielts/writing/task1/grade',
-    { apiKey, assertion, idempotencyKey: gradeKey, body: gradeBody },
+    {
+      apiKey,
+      assertion: signAssertion(),
+      idempotencyKey: gradeKey,
+      body: gradeBody,
+    },
   );
   expectStatus(retryRefusal, 429, 'shared keyed retry-budget refusal');
   report.push(
