@@ -259,7 +259,7 @@ export function localAuth(
       return operation();
     },
     reserveAuthenticationEmailRecipient: async () => true,
-    queue: async () => undefined,
+    queue: async () => 'edr_queued',
     withdraw: async () => undefined,
   };
   const credentials = {

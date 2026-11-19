@@ -23,6 +23,13 @@ import {
 const ORGANIZATION_ID = 'org_acme';
 const OTHER_ORGANIZATION_ID = 'org_other';
 
+const NO_FAILURES = {
+  get: async () => 0,
+  recordFailure: async () => 1,
+  consumeSandboxKeyLookup: async () => true,
+  consumeUncachedLookup: async () => ({ allowed: true }),
+} as const;
+
 let pool: Pool;
 let client: IdentityFixtureClient;
 let apiKeys: IdentityFixtureClient;
@@ -606,11 +613,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     const authenticator = new ApiKeyAuthenticator(
       new PostgresApiKeyRepository(apiKeys),
       emptyCache(),
-      {
-        get: async () => 0,
-        recordFailure: async () => 1,
-        consumeSandboxKeyLookup: async () => true,
-      },
+      NO_FAILURES,
     );
     await expect(
       authenticator.authenticate({
@@ -679,11 +682,7 @@ describe('organization API key rotation against PostgreSQL', () => {
     const authenticator = new ApiKeyAuthenticator(
       new PostgresApiKeyRepository(apiKeys),
       emptyCache(),
-      {
-        get: async () => 0,
-        recordFailure: async () => 1,
-        consumeSandboxKeyLookup: async () => true,
-      },
+      NO_FAILURES,
     );
     await expect(
       authenticator.authenticate({
@@ -923,11 +922,7 @@ describe('organization API key revocation against PostgreSQL', () => {
         setMiss: async () => undefined,
         delete: async () => undefined,
       },
-      {
-        get: async () => 0,
-        recordFailure: async () => 1,
-        consumeSandboxKeyLookup: async () => true,
-      },
+      NO_FAILURES,
     );
     await expect(
       authenticator.authenticate({

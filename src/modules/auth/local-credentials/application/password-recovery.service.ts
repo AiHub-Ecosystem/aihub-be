@@ -84,6 +84,7 @@ export class PasswordRecoveryService implements PasswordRecoveryPort {
             expiresAt: issued.expiresAt.toISOString(),
           },
           now,
+          issued.id,
         ),
         now,
       });

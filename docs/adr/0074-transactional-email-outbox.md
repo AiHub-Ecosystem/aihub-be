@@ -1,6 +1,6 @@
 # ADR-0074: Transactional outbox for account and invitation email
 
-- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); daily reservation accounting amended by [ADR-0119](0119-shared-durable-email-daily-budget.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); payload envelope binding amended by [issue #439](https://github.com/AiHub-Ecosystem/aihub-be/issues/439); unavailable key-version handling and retention amended by [issue #266](https://github.com/AiHub-Ecosystem/aihub-be/issues/266); accepted addresses amended by [ADR-0124](0124-one-email-address-has-one-canonical-form.md); request-boundary backpressure amended by [issue #635](https://github.com/AiHub-Ecosystem/aihub-be/issues/635); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md); WAL-triggered dispatch amended by [ADR-0153](0153-wal-triggered-email-delivery.md); Redis-as-queue rule given one scoped exception, the Speaking grading job execution queue, by [ADR-0159](0159-async-speaking-grading-job-on-v2-with-bullmq.md)
+- Status: Accepted; transaction-handle boundary amended by [ADR-0083](0083-email-delivery-transaction-handle-lifetime.md); authentication rate limits amended by [ADR-0096](0096-authentication-rate-limits-by-caller-and-address.md); dispatch ordering and credential-expiry cancellation alerts amended by [ADR-0117](0117-prioritize-and-pace-email-outbox-dispatch.md); daily reservation accounting amended by [ADR-0119](0119-shared-durable-email-daily-budget.md); actionability and stale cancellation for a request without a credential amended by [ADR-0120](0120-notification-event-catalog.md); provider-wide failure attempts and retry behavior amended by [ADR-0122](0122-provider-wide-email-outage-backoff.md); payload envelope binding amended by [issue #439](https://github.com/AiHub-Ecosystem/aihub-be/issues/439); unavailable key-version handling and retention amended by [issue #266](https://github.com/AiHub-Ecosystem/aihub-be/issues/266); accepted addresses amended by [ADR-0124](0124-one-email-address-has-one-canonical-form.md); request-boundary backpressure amended by [issue #635](https://github.com/AiHub-Ecosystem/aihub-be/issues/635); provider response classification amended by [issue #449](https://github.com/AiHub-Ecosystem/aihub-be/issues/449); credential expiry rechecked at provider handoff amended by [issue #1034](https://github.com/AiHub-Ecosystem/aihub-be/issues/1034); Organization Invitation email copy and payload amended by [ADR-0121](0121-organization-name-in-invitation-email.md); WAL-triggered dispatch amended by [ADR-0153](0153-wal-triggered-email-delivery.md); Redis-as-queue rule given one scoped exception, the Speaking grading job execution queue, by [ADR-0159](0159-async-speaking-grading-job-on-v2-with-bullmq.md); cancel reasons, suspended-Organization invitations, request traceability, and idempotency-conflict classification amended by [issue #441](https://github.com/AiHub-Ecosystem/aihub-be/issues/441)
 - Date: 2026-10-05
 - Related issue: [#230](https://github.com/AiHub-Ecosystem/aihub-be/issues/230)
 - Amends: [ADR-0025](0025-password-recovery-boundary.md) (email delivery only), [ADR-0038](0038-bearer-management-idempotency-scope.md) (invitation email delivery only)
@@ -14,6 +14,27 @@ Registration, verification resend, password recovery, and organization invitatio
 Each affected operation writes its Email Delivery Request in the same PostgreSQL transaction as its account, token, or invitation mutation; invitation audit evidence stays in that transaction as well. A failed transaction commits neither the mutation nor the request. The HTTP request returns after this commit and never waits for Resend. Redis is not used as a queue because it is ephemeral protection/cache state, not durable control-plane storage.
 
 Registration and invitation creation keep their `201` success status and add `emailDeliveryStatus: "queued"`. That value is the acceptance-time result: it confirms AIHUB accepted the request for dispatch, not that a provider accepted it or that it reached an inbox. Authentication registration can return `suppressed` when the recipient ceiling in ADR-0096 is full; it still commits the pending account without an outbox item. Verification resend remains a generic bodyless `202`. Password recovery remains a generic `202` for known, unknown, pending, and disabled accounts; its copy says that AIHUB accepted a request to send instructions only if the account is eligible and does not confirm email delivery. These two generic routes do not expose whether an outbox item exists. Provider delivery failure is no longer a synchronous `503`; a failure to commit durable state and its outbox request remains a safe `5xx`.
+
+## Dispatch evidence and suspended Organizations (#441)
+
+A `cancelled` request carries one of two `cancel_reason` values:
+`credential_expired` or `not_actionable`. Superseded, consumed, and revoked
+credentials all read as `not_actionable`, because none of the credential tables
+records which close it was. The schema still admits `credential_superseded` and
+`credential_revoked`; no current writer produces them. An Organization
+Invitation whose Organization is not active is closed at send time, so a
+suspension stops invitation email already in the queue.
+
+A credential-bearing request records the non-secret id of the token row or
+invitation it serves in `credential_id`, which outlives the erased payload. The
+invitation audit event records the request id it queued.
+
+Resend's `409` for a reused Idempotency-Key is not a rejection. A concurrent
+request under the key spends a bounded attempt as `outcome_unknown` and retries;
+a changed payload under the key ends the request as `failed` with
+`outcome_unknown`, because the earlier attempt may have been delivered. ADR-0122's
+24-hour duplicate-suppression limit is unchanged. Attempt and deferral times are
+read after the preflight that precedes them.
 
 ## Payload binding (#439)
 

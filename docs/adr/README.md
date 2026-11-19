@@ -33,3 +33,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0171](0171-vault-runtime-login-requires-a-secret-id.md)  | Vault runtime login requires a Secret ID as well as the role ID  | Accepted; supersedes ADR-0170               |
 | [0172](0172-writing-priority-errors-in-v2-grading.md)     | Publish provider-ranked Writing priority errors in `/v2`         | Accepted; amends ADR-0143                   |
 | [0173](0173-gateway-prioritized-load-shedding.md)         | The gateway sheds load by request tier and keeps the tier local  | Accepted                                    |
+| [0174](0174-bounded-uncached-api-key-lookups.md)          | Bound uncached API-key lookups across the deployment             | Accepted; amends ADR-0006 and ADR-0114      |

@@ -43,13 +43,18 @@ export class EmailOutbox implements EmailOutboxPort {
   async queue(
     transaction: EmailDeliveryTransaction,
     input: QueueEmailDeliveryRequestInput,
-  ): Promise<void> {
+  ): Promise<string> {
     const id = this.newId(input.createdAt);
     const payloadCiphertext = this.cipher.encrypt(
       JSON.stringify(input.payload),
       { id, kind: input.kind },
     );
-    const record = { id, payloadCiphertext, createdAt: input.createdAt };
+    const record = {
+      id,
+      payloadCiphertext,
+      createdAt: input.createdAt,
+      ...('credentialId' in input ? { credentialId: input.credentialId } : {}),
+    };
     if (input.kind === 'organization_invite_email') {
       await this.requests.insert(transaction, {
         ...record,
@@ -57,9 +62,10 @@ export class EmailOutbox implements EmailOutboxPort {
         organizationId: input.organizationId,
         inviterId: input.inviterId,
       });
-      return;
+      return id;
     }
     await this.requests.insert(transaction, { ...record, kind: input.kind });
+    return id;
   }
 
   async withdraw<K extends EmailDeliveryKind>(

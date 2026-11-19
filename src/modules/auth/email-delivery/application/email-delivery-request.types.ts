@@ -105,6 +105,8 @@ interface InsertEmailDeliveryRequestBase {
   readonly id: string;
   readonly payloadCiphertext: string;
   readonly createdAt: Date;
+  /** Non-secret id of the token row or invitation the request serves (#441). */
+  readonly credentialId?: string;
 }
 
 export type InsertEmailDeliveryRequestInput =

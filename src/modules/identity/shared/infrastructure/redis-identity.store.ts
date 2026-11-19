@@ -246,26 +246,11 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
       });
   }
 
-  async setMiss(hashHex: string): Promise<void> {
+  setMiss(hashHex: string): Promise<void> {
     const ttlSeconds = shortenedTtl(API_KEY_CACHE_NEGATIVE_TTL_SECONDS);
-    const freshUntil = Date.now() + ttlSeconds * 1_000;
     this.rememberApiKey(hashHex, null, performance.now() + ttlSeconds * 1_000);
-    if (this.client === undefined || this.hmacKey === undefined) return;
-
-    const cacheKey = apiKeyCacheMissKey(hashHex);
-    await this.client
-      .set(
-        cacheKey,
-        signIdentityCacheEntry(this.hmacKey as Buffer, 'api_key', cacheKey, {
-          type: 'miss',
-          freshUntil,
-        }),
-        'EX',
-        ttlSeconds,
-      )
-      .catch(() => {
-        recordRedisUnavailable('api_key_cache');
-      });
+    // Keep misses in bounded L1; Redis eviction could reset the shared admission bucket.
+    return Promise.resolve();
   }
 
   async delete(

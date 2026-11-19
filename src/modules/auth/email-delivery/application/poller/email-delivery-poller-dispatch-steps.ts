@@ -27,17 +27,21 @@ import type {
   EmailDeliveryPollerOptions,
   EmailDispatchOutcome,
 } from './email-delivery-poller.types';
+import {
+  EMAIL_SEND_RATE_LIMIT_RETRY_MS,
+  type EmailProviderPause,
+} from './email-provider-pause';
 
 /** How long an unopened payload waits before another instance claims it. */
 export const DEFER_RETRY_MS = 5 * 60_000;
 
-/** Retry a reservation outage on the next poll pass without spending an attempt. */
-export const EMAIL_SEND_RATE_LIMIT_RETRY_MS = 5_000;
+export { EMAIL_SEND_RATE_LIMIT_RETRY_MS };
 
 type EmailProviderSendResult = {
   readonly response: EmailProviderResponse;
   readonly responseReceivedAt: Date;
   readonly probeToken: string | undefined;
+  readonly generation: number | undefined;
 };
 
 type AllowedEmailProviderSendPermit = Extract<
@@ -56,6 +60,7 @@ type EmailDeliveryPollerDispatchDependencies = {
   readonly tokens: { hash(raw: string): string };
   readonly options: EmailDeliveryPollerOptions;
   readonly maintenance: EmailDeliveryPollerMaintenance;
+  readonly pause: EmailProviderPause;
 };
 
 export class EmailDeliveryPollerDispatchSteps {
@@ -69,8 +74,13 @@ export class EmailDeliveryPollerDispatchSteps {
   private readonly tokens: { hash(raw: string): string };
   private readonly options: EmailDeliveryPollerOptions;
   private readonly maintenance: EmailDeliveryPollerMaintenance;
+  private readonly pause: EmailProviderPause;
   private providerConfigurationAlerted = false;
-  providerPausedUntil = 0;
+
+  /** No claim and no provider call before this instant. */
+  get providerPausedUntil(): number {
+    return this.pause.until;
+  }
 
   constructor(dependencies: EmailDeliveryPollerDispatchDependencies) {
     this.store = dependencies.store;
@@ -83,6 +93,7 @@ export class EmailDeliveryPollerDispatchSteps {
     this.tokens = dependencies.tokens;
     this.options = dependencies.options;
     this.maintenance = dependencies.maintenance;
+    this.pause = dependencies.pause;
   }
 
   async readPayload(input: {
@@ -184,7 +195,6 @@ export class EmailDeliveryPollerDispatchSteps {
       request: input.request,
       delivery: input.delivery,
       permit,
-      now: input.now,
     });
     if (capacityOutcome !== undefined) return capacityOutcome;
 
@@ -192,7 +202,6 @@ export class EmailDeliveryPollerDispatchSteps {
       request: input.request,
       credential: input.credential,
       message: input.message,
-      now: input.now,
       permit,
     });
   }
@@ -206,7 +215,7 @@ export class EmailDeliveryPollerDispatchSteps {
       await this.maintenance.deferInvitationAtRecipientLimit(
         input.request,
         input.message.recipient,
-        input.now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       )
     )
@@ -218,14 +227,14 @@ export class EmailDeliveryPollerDispatchSteps {
     } catch {
       return this.deferForProviderOutage(
         input.request,
-        input.now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       );
     }
     if (!permit.allowed) {
       return this.deferForProviderOutage(
         input.request,
-        input.now,
+        this.now(),
         permit.retryAfterMs,
       );
     }
@@ -236,25 +245,24 @@ export class EmailDeliveryPollerDispatchSteps {
     readonly request: EmailDeliveryRequestRecord;
     readonly delivery: ValidatedEmailDelivery;
     readonly permit: AllowedEmailProviderSendPermit;
-    readonly now: Date;
   }): Promise<EmailDispatchOutcome | undefined> {
     let reservation;
     try {
       reservation = await this.sendRateLimiter.reserve();
     } catch {
-      await this.releaseProbe(input.permit.probeToken);
+      await this.pause.releaseProbe(input.permit.probeToken);
       return this.maintenance.defer(
         input.request,
-        input.now,
+        this.now(),
         EMAIL_SEND_RATE_LIMIT_RETRY_MS,
       );
     }
     if (!reservation.reserved) {
-      await this.releaseProbe(input.permit.probeToken);
+      await this.pause.releaseProbe(input.permit.probeToken);
       const retryAfterMs = reservation.retryAfterMs;
       return this.maintenance.defer(
         input.request,
-        input.now,
+        this.now(),
         Number.isSafeInteger(retryAfterMs) && retryAfterMs > 0
           ? retryAfterMs
           : EMAIL_SEND_RATE_LIMIT_RETRY_MS,
@@ -268,23 +276,24 @@ export class EmailDeliveryPollerDispatchSteps {
           emailDailySendBudgetCategory(input.request.kind),
         );
       } catch {
-        await this.releaseProbe(input.permit.probeToken);
+        await this.pause.releaseProbe(input.permit.probeToken);
         return this.maintenance.defer(
           input.request,
-          input.now,
+          this.now(),
           EMAIL_SEND_RATE_LIMIT_RETRY_MS,
         );
       }
       if (!budgetReservation.reserved) {
-        await this.releaseProbe(input.permit.probeToken);
+        await this.pause.releaseProbe(input.permit.probeToken);
+        const deniedAt = this.now();
         const expiresAt = input.delivery.credential()?.expiresAt;
         const remainingCredentialLifetime =
           expiresAt === undefined
             ? Infinity
-            : Date.parse(expiresAt) - input.now.getTime();
+            : Date.parse(expiresAt) - deniedAt.getTime();
         return this.maintenance.defer(
           input.request,
-          input.now,
+          deniedAt,
           Number.isFinite(remainingCredentialLifetime) &&
             remainingCredentialLifetime > 0
             ? Math.min(
@@ -302,21 +311,23 @@ export class EmailDeliveryPollerDispatchSteps {
     readonly request: EmailDeliveryRequestRecord;
     readonly credential: ReturnType<ValidatedEmailDelivery['credential']>;
     readonly message: EmailMessage;
-    readonly now: Date;
     readonly permit: AllowedEmailProviderSendPermit;
   }): Promise<EmailDispatchOutcome | EmailProviderSendResult> {
-    const { request, credential, message, now, permit } = input;
+    const { request, credential, message, permit } = input;
     // The attempt is spent before the provider is called, not recorded after it
     // answers: a transition that fails must not hand the same request another
     // pass at the provider.
+    // Every time from here on is read fresh: the preflight above takes as long
+    // as its dependencies do, and a backoff measured from the start of the
+    // pass would let a row become claimable early (#441).
     try {
       await this.store.reserveAttempt({
         id: request.id,
-        attemptedAt: now,
+        attemptedAt: this.now(),
         owner: this.options.owner,
       });
     } catch (error) {
-      await this.releaseProbe(permit.probeToken);
+      await this.pause.releaseProbe(permit.probeToken);
       throw error;
     }
 
@@ -327,7 +338,7 @@ export class EmailDeliveryPollerDispatchSteps {
       credential !== undefined &&
       isCredentialExpired(credential.expiresAt, handoffAt)
     ) {
-      await this.releaseProbe(permit.probeToken);
+      await this.pause.releaseProbe(permit.probeToken);
       return this.maintenance.cancel(request, 'credential_expired', handoffAt);
     }
 
@@ -337,25 +348,23 @@ export class EmailDeliveryPollerDispatchSteps {
     } catch (error) {
       if (error instanceof EmailProviderTransportError) {
         const failedAt = this.now();
-        const retryAfterMs = await this.openProviderCircuit(
-          0,
-          failedAt,
-          permit.probeToken,
-        );
-        await this.maintenance.releaseUnspentAttempt(
-          request,
-          new Date(failedAt.getTime() + retryAfterMs),
-        );
+        const retryAt = await this.pause.open(0, failedAt, permit.probeToken);
+        await this.maintenance.releaseUnspentAttempt(request, retryAt);
         return 'provider_outage';
       }
-      await this.releaseProbe(permit.probeToken);
-      return this.maintenance.recordFailure(request, errorCodeOf(error), now);
+      await this.pause.releaseProbe(permit.probeToken);
+      return this.maintenance.recordFailure(
+        request,
+        errorCodeOf(error),
+        this.now(),
+      );
     }
 
     return {
       response,
       responseReceivedAt: this.now(),
       probeToken: permit.probeToken,
+      generation: permit.generation,
     };
   }
 
@@ -364,9 +373,9 @@ export class EmailDeliveryPollerDispatchSteps {
     readonly response: EmailProviderResponse;
     readonly responseReceivedAt: Date;
     readonly probeToken: string | undefined;
-    readonly attemptedAt: Date;
+    readonly generation: number | undefined;
   }): Promise<EmailDispatchOutcome> {
-    const { request, response, responseReceivedAt, probeToken, attemptedAt } =
+    const { request, response, responseReceivedAt, probeToken, generation } =
       input;
     if (
       response.status === 429 ||
@@ -380,22 +389,33 @@ export class EmailDeliveryPollerDispatchSteps {
       });
     }
 
-    await this.closeProviderCircuit(probeToken);
+    await this.pause.close({
+      ...(probeToken === undefined ? {} : { probeToken }),
+      ...(generation === undefined ? {} : { generation }),
+    });
 
     if (response.status === 401 || response.status === 403) {
-      this.providerPausedUntil = responseReceivedAt.getTime() + DEFER_RETRY_MS;
+      this.pause.until = responseReceivedAt.getTime() + DEFER_RETRY_MS;
       this.reportProviderConfigurationFailure(response.status);
       await this.maintenance.releaseUnspentAttempt(
         request,
-        new Date(this.providerPausedUntil),
+        new Date(this.pause.until),
       );
       return 'configuration_failure';
+    }
+
+    if (response.status === 409 && response.idempotencyConflict !== undefined) {
+      return this.maintenance.recordIdempotencyConflict(
+        request,
+        response.idempotencyConflict,
+        responseReceivedAt,
+      );
     }
 
     if (response.status === 400 || response.status === 422) {
       await this.store.markFailed({
         id: request.id,
-        failedAt: attemptedAt,
+        failedAt: responseReceivedAt,
         errorCode: 'provider_permanent_rejection',
         owner: this.options.owner,
       });
@@ -406,13 +426,13 @@ export class EmailDeliveryPollerDispatchSteps {
       return this.maintenance.recordFailure(
         request,
         'provider_rejected',
-        attemptedAt,
+        responseReceivedAt,
       );
     }
 
     await this.store.markProviderAccepted({
       id: request.id,
-      attemptedAt,
+      attemptedAt: responseReceivedAt,
       owner: this.options.owner,
     });
     this.providerConfigurationAlerted = false;
@@ -432,18 +452,12 @@ export class EmailDeliveryPollerDispatchSteps {
             input.responseReceivedAt,
           )
         : 0;
-    const circuitDelayMs = await this.openProviderCircuit(
+    const retryAt = await this.pause.open(
       retryAfterMs,
       input.responseReceivedAt,
       input.probeToken,
     );
-    await this.maintenance.releaseUnspentAttempt(
-      input.request,
-      new Date(
-        input.responseReceivedAt.getTime() +
-          Math.max(retryAfterMs, circuitDelayMs),
-      ),
-    );
+    await this.maintenance.releaseUnspentAttempt(input.request, retryAt);
     return 'provider_outage';
   }
 
@@ -456,76 +470,13 @@ export class EmailDeliveryPollerDispatchSteps {
       Number.isSafeInteger(retryAfterMs) && retryAfterMs >= 0
         ? retryAfterMs
         : EMAIL_SEND_RATE_LIMIT_RETRY_MS;
-    this.providerPausedUntil = Math.max(
-      this.providerPausedUntil,
-      now.getTime() + safeRetryAfterMs,
-    );
+    this.pause.extend(now.getTime() + safeRetryAfterMs);
     await this.maintenance.defer(
       request,
       now,
       Math.max(EMAIL_SEND_RATE_LIMIT_RETRY_MS, safeRetryAfterMs),
     );
     return 'provider_outage';
-  }
-
-  private async releaseProbe(probeToken: string | undefined): Promise<void> {
-    if (probeToken === undefined) return;
-    try {
-      await this.providerOutageCircuit.releaseProbe(probeToken);
-    } catch {
-      // Redis expires the probe lock with its bounded recovery TTL, and the
-      // acquire script takes over a probe held past its stale margin (#1113).
-    }
-  }
-
-  private async openProviderCircuit(
-    retryAfterMs: number,
-    openedAt: Date,
-    probeToken?: string,
-  ): Promise<number> {
-    try {
-      const circuitDelayMs =
-        await this.providerOutageCircuit.recordProviderFailure(
-          retryAfterMs,
-          probeToken,
-        );
-      const safeDelayMs =
-        Number.isSafeInteger(circuitDelayMs) && circuitDelayMs >= 0
-          ? Math.max(retryAfterMs, circuitDelayMs)
-          : Math.max(retryAfterMs, EMAIL_SEND_RATE_LIMIT_RETRY_MS);
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        openedAt.getTime() + safeDelayMs,
-      );
-      return safeDelayMs;
-    } catch {
-      // Nothing reached shared state, so the probe this attempt held would
-      // strand every poller until the outage key expires (#1113).
-      await this.releaseProbe(probeToken);
-      const fallbackDelayMs = Math.max(
-        retryAfterMs,
-        EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-      );
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        openedAt.getTime() + fallbackDelayMs,
-      );
-      return fallbackDelayMs;
-    }
-  }
-
-  private async closeProviderCircuit(probeToken?: string): Promise<void> {
-    try {
-      await this.providerOutageCircuit.recordProviderReachable();
-    } catch {
-      // The state this DEL failed to clear still holds the probe, and a held
-      // probe strands every poller until it is released or taken over (#1113).
-      await this.releaseProbe(probeToken);
-      this.providerPausedUntil = Math.max(
-        this.providerPausedUntil,
-        this.now().getTime() + EMAIL_SEND_RATE_LIMIT_RETRY_MS,
-      );
-    }
   }
 
   private async deliver(

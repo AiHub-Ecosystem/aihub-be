@@ -184,22 +184,10 @@ export class PostgresOrganizationInvitationCreateRepository
             },
           });
 
-          await recordOrganizationAuditEvent(
-            transaction,
-            auditStamp(input, input.invitedBy, input.now),
-            {
-              action:
-                superseded.count > 0 ? 'invitation.resent' : 'invitation.sent',
-              invitationId: input.invitationId,
-              email: input.email,
-              role: input.role,
-            },
-          );
-
           // Sealed here because the Organization name is only readable in this
           // transaction, and queued here so the invitation and the request that
           // emails its credential commit or roll back together (ADR-0074).
-          await this.emailOutbox.queue(
+          const emailDeliveryRequestId = await this.emailOutbox.queue(
             {
               [emailDeliveryTransactionBrand]: undefined,
               client: transaction,
@@ -208,6 +196,7 @@ export class PostgresOrganizationInvitationCreateRepository
               kind: 'organization_invite_email',
               organizationId: input.organizationId,
               inviterId: input.invitedBy,
+              credentialId: input.invitationId,
               payload: {
                 email: input.email,
                 token: input.emailDelivery.token,
@@ -217,6 +206,21 @@ export class PostgresOrganizationInvitationCreateRepository
                 inviterUsername,
               },
               createdAt: input.emailDelivery.createdAt,
+            },
+          );
+
+          // The audit event names the request that emails this invitation, so
+          // support can show whether it reached the provider (#441).
+          await recordOrganizationAuditEvent(
+            transaction,
+            auditStamp(input, input.invitedBy, input.now),
+            {
+              action:
+                superseded.count > 0 ? 'invitation.resent' : 'invitation.sent',
+              invitationId: input.invitationId,
+              email: input.email,
+              role: input.role,
+              emailDeliveryRequestId,
             },
           );
 

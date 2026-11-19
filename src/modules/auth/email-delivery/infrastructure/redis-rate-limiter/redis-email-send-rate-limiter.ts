@@ -49,8 +49,8 @@ export const OUTAGE_PROBE_STALE_MS = 30_000;
 export const EMAIL_PROVIDER_OUTAGE_ACQUIRE_SCRIPT = `
 local redis_time = redis.call('TIME')
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
-local state = redis.call('HMGET', KEYS[1], 'started_at_ms', 'open_until_ms', 'probe_token', 'probe_granted_at_ms')
-if not state[1] then return { 1, 0, '' } end
+local state = redis.call('HMGET', KEYS[1], 'started_at_ms', 'open_until_ms', 'probe_token', 'probe_granted_at_ms', 'failure_count')
+if not state[1] then return { 1, 0, '', 0 } end
 local open_until_ms = tonumber(state[2] or '0')
 if now_ms < open_until_ms then return { 0, open_until_ms - now_ms, '' } end
 if state[3] then
@@ -61,7 +61,7 @@ if state[3] then
 end
 redis.call('HSET', KEYS[1], 'probe_token', ARGV[1], 'probe_granted_at_ms', now_ms)
 redis.call('PEXPIRE', KEYS[1], math.max(open_until_ms - now_ms, 0) + tonumber(ARGV[2]))
-return { 1, 0, ARGV[1] }
+return { 1, 0, ARGV[1], tonumber(state[5] or '0') }
 `;
 
 export const EMAIL_PROVIDER_OUTAGE_RELEASE_PROBE_SCRIPT = `
@@ -98,8 +98,17 @@ redis.call('PEXPIRE', KEYS[1], ttl_ms)
 return effective_delay_ms
 `;
 
+// A success clears the circuit only while no failure was recorded after the send
+// began (ARGV[1] is the failure count it saw; empty means it saw none to compare).
+// Otherwise it hands back its own probe and leaves the newer cooldown alone.
 export const EMAIL_PROVIDER_OUTAGE_REACHABLE_SCRIPT = `
-return redis.call('DEL', KEYS[1])
+if ARGV[1] == '' then return redis.call('DEL', KEYS[1]) end
+local failure_count = tonumber(redis.call('HGET', KEYS[1], 'failure_count') or '0')
+if failure_count == tonumber(ARGV[1]) then return redis.call('DEL', KEYS[1]) end
+if ARGV[2] ~= '' and redis.call('HGET', KEYS[1], 'probe_token') == ARGV[2] then
+  redis.call('HDEL', KEYS[1], 'probe_token', 'probe_granted_at_ms')
+end
+return 0
 `;
 
 export const EMAIL_PROVIDER_OUTAGE_DURATION_SCRIPT = `
@@ -210,7 +219,7 @@ export class RedisEmailSendRateLimiter
         String(OUTAGE_PROBE_STALE_MS),
       );
       const resultValues: unknown[] = Array.isArray(result) ? result : [];
-      const [allowed, retryAfterMs, acquiredToken] = resultValues;
+      const [allowed, retryAfterMs, acquiredToken, generation] = resultValues;
       if (
         (allowed === 0 || allowed === 1) &&
         typeof retryAfterMs === 'number' &&
@@ -223,9 +232,15 @@ export class RedisEmailSendRateLimiter
             retryAfterMs: Math.max(1, retryAfterMs),
           };
         }
+        const observed =
+          typeof generation === 'number' &&
+          Number.isSafeInteger(generation) &&
+          generation >= 0
+            ? { generation }
+            : {};
         return typeof acquiredToken === 'string' && acquiredToken.length > 0
-          ? { allowed: true as const, probeToken: acquiredToken }
-          : { allowed: true as const };
+          ? { allowed: true as const, probeToken: acquiredToken, ...observed }
+          : { allowed: true as const, ...observed };
       }
     } catch {
       // Redis outage coordination fails closed; the existing limiter does too.
@@ -289,12 +304,16 @@ export class RedisEmailSendRateLimiter
     return this.localPause(retryAfterMs);
   }
 
-  async recordProviderReachable(): Promise<void> {
+  async recordProviderReachable(
+    sent: { generation?: number; probeToken?: string } = {},
+  ): Promise<void> {
     if (this.redis === undefined) return;
     await this.redis.eval(
       EMAIL_PROVIDER_OUTAGE_REACHABLE_SCRIPT,
       1,
       EMAIL_PROVIDER_OUTAGE_STATE_KEY,
+      sent.generation === undefined ? '' : String(sent.generation),
+      sent.probeToken ?? '',
     );
   }
 

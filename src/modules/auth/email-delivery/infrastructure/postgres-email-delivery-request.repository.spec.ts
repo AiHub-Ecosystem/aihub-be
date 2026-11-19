@@ -60,6 +60,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
       kind: 'verification_email',
       payloadCiphertext: 'sealed',
       createdAt: NOW,
+      credentialId: '{{SECRET_mbhgnfyp}}',
     };
 
     await new PostgresEmailDeliveryRequestRepository().insert(
@@ -78,6 +79,7 @@ describe('PostgresEmailDeliveryRequestRepository', () => {
               status: 'queued',
               payloadCiphertext: input.payloadCiphertext,
               createdAt: input.createdAt,
+              credentialId: '{{SECRET_mbhgnfyp}}',
             },
           },
         ],

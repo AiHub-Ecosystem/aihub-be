@@ -138,21 +138,26 @@ export interface EmailDispatchFailureReportPort {
   }): Promise<void>;
 }
 
-export interface EmailDispatchWalReadPort {
+export interface EmailDispatchStateReadPort {
+  readDispatchState(id: string): Promise<EmailDeliveryDispatchState | null>;
+}
+
+export interface EmailDispatchWalReadPort extends EmailDispatchStateReadPort {
   queuedIds(input: {
     readonly afterId?: string;
     readonly limit: number;
   }): Promise<readonly string[]>;
-  readDispatchState(id: string): Promise<EmailDeliveryDispatchState | null>;
 }
 
 export interface EmailDispatchPollerPort
   extends EmailDispatchClaimPort,
     EmailDispatchAttemptOutcomePort,
     EmailDispatchSweepPort,
-    EmailDispatchFailureReportPort {}
+    EmailDispatchFailureReportPort,
+    EmailDispatchStateReadPort {}
 
 export interface EmailDispatchMaintenancePort
   extends EmailDispatchAttemptOutcomePort,
     EmailDispatchSweepPort,
-    EmailDispatchFailureReportPort {}
+    EmailDispatchFailureReportPort,
+    EmailDispatchStateReadPort {}
