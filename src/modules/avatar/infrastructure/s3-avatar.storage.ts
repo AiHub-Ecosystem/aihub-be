@@ -8,6 +8,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Logger } from '@nestjs/common';
 
 import { AppError } from '@/common/errors/app-error';
 import type {
@@ -30,8 +31,10 @@ import {
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
 import {
+  AVATAR_BUCKETS,
   AVATAR_STAGING_BUCKETS,
   type AvatarStorageEnvironment,
+  avatarBucketFor,
 } from './avatar-storage.policy';
 const DEFAULT_ORIGIN = new URL(DEFAULT_SEAWEEDFS_ENDPOINT).origin;
 
@@ -77,14 +80,30 @@ export class S3AvatarStorage implements AvatarStoragePort {
     options: AvatarStorageOptions = {},
   ) {
     this.now = options.now ?? (() => new Date());
-    const bucket = (options.bucket ?? '').trim();
-    const defaultStagingBucket =
-      AVATAR_STAGING_BUCKETS[options.environment ?? 'production'];
+    const environment = options.environment ?? 'production';
+    const bucket = avatarBucketFor(environment, options.bucket);
+    const defaultStagingBucket = AVATAR_STAGING_BUCKETS[environment];
     const stagingBucket = options.stagingBucket?.trim() || defaultStagingBucket;
 
     if (
+      sharedClient !== undefined &&
+      bucket === undefined &&
+      (options.bucket ?? '').trim().length > 0
+    ) {
+      // A bucket this scope does not own is the misconfiguration whose sweep
+      // would delete another deployment's Avatars (#428). Name it once at
+      // startup; the bucket name is not a secret.
+      new Logger('S3AvatarStorage').warn({
+        event: 'avatar_storage_bucket_not_owned',
+        environment,
+        configuredBucket: options.bucket?.trim(),
+        expectedBucket: AVATAR_BUCKETS[environment],
+      });
+    }
+
+    if (
       sharedClient === undefined ||
-      bucket.length === 0 ||
+      bucket === undefined ||
       stagingBucket.length === 0 ||
       stagingBucket === bucket
     ) {

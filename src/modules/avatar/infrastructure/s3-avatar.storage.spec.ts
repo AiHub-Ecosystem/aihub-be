@@ -36,12 +36,16 @@ function storage(
   options: AvatarStorageOptions = {},
   secrets: RuntimeSecretProvider = provider(),
 ): S3AvatarStorage {
+  const environment = options.environment ?? 'production';
   return new S3AvatarStorage(
     createSeaweedFsS3Client({
       credentials: secrets.getSnapshot().seaweedfs,
     }),
     {
-      bucket: 'aihub-user-assets',
+      bucket:
+        environment === 'sandbox'
+          ? 'aihub-sandbox-user-assets'
+          : 'aihub-user-assets',
       now: () => NOW,
       ...options,
     },
@@ -139,6 +143,46 @@ describe('S3AvatarStorage', () => {
 
   describe('configuration', () => {
     it.each([
+      ['production', 'aihub-sandbox-user-assets'],
+      ['sandbox', 'aihub-user-assets'],
+    ] as const)(
+      'answers storage unavailable when the %s scope is mapped to %s',
+      async (environment, bucket) => {
+        const { client, send } = clientAnswering(async () => ({}));
+        const misconfigured = storage({ environment, bucket, client });
+
+        await expect(
+          misconfigured.createUploadUrl({
+            objectKey: KEY,
+            contentType: 'image/png',
+          }),
+        ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
+        await expect(
+          (async () => {
+            for await (const _ of misconfigured.listObjects('users/')) {
+              // never reached
+            }
+          })(),
+        ).rejects.toMatchObject({ code: 'AVATAR_STORAGE_UNAVAILABLE' });
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['production', 'aihub-user-assets'],
+      ['sandbox', 'aihub-sandbox-user-assets'],
+    ] as const)('uses %s scope bucket %s', async (environment, bucket) => {
+      const { client, send } = clientAnswering(async () => ({}));
+
+      await storage({ environment, bucket, client }).deleteObject(KEY);
+
+      expect(send.mock.calls[0]?.[0]?.input).toEqual({
+        Bucket: bucket,
+        Key: KEY,
+      });
+    });
+
+    it.each([
       ['no credentials', () => new S3AvatarStorage(undefined, { bucket: 'b' })],
       [
         'no bucket',
@@ -195,10 +239,20 @@ describe('S3AvatarStorage', () => {
     );
 
     it.each([
-      ['override', { bucket: 'same-bucket', stagingBucket: 'same-bucket' }],
-      ['tier default', { bucket: 'aihub-user-asset-staging' }],
+      [
+        'the Production bucket',
+        { bucket: 'aihub-user-assets', stagingBucket: 'aihub-user-assets' },
+      ],
+      [
+        'the Sandbox bucket',
+        {
+          environment: 'sandbox' as const,
+          bucket: 'aihub-sandbox-user-assets',
+          stagingBucket: 'aihub-sandbox-user-assets',
+        },
+      ],
     ])(
-      'refuses a staging bucket that is also the final bucket via %s without fallback',
+      'refuses the final bucket as the staging bucket via %s without fallback',
       async (_source, options) => {
         const { client, send } = clientAnswering(async () => ({}));
         const invalid = storage({ ...options, client });

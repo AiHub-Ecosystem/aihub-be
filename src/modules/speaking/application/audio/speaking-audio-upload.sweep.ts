@@ -11,12 +11,21 @@ import type {
 
 const BATCH_SIZE = 500;
 
+/**
+ * The most one run may delete. A real day leaves a handful of abandoned
+ * uploads behind, so a bigger figure means the record set or the bucket is not
+ * the one this deployment expects, and deleting would be the damage (#428).
+ */
+const DELETION_CEILING = 2_000;
+
 export interface SpeakingAudioUploadSweepSummary {
   readonly scanned: number;
   readonly eligible: number;
   readonly deleted: number;
   readonly failed: number;
   readonly dryRun: boolean;
+  /** The run would have deleted more than one run may; it deleted nothing. */
+  readonly ceilingExceeded: boolean;
 }
 
 /** Removes rejected and long-expired upload intents by their recorded key. */
@@ -72,6 +81,7 @@ export class SpeakingAudioUploadSweep {
     let eligible = 0;
     let deleted = 0;
     let failed = 0;
+    const candidatesToDelete: SpeakingAudioUploadIntent[] = [];
 
     let after:
       | { readonly createdAt: Date; readonly assetId: string }
@@ -84,18 +94,13 @@ export class SpeakingAudioUploadSweep {
       });
       scanned += candidates.length;
       eligible += candidates.length;
+      for (const candidate of candidates) {
+        if (candidatesToDelete.length < DELETION_CEILING) {
+          candidatesToDelete.push(candidate);
+        }
+      }
       if (candidates.length === 0) {
         break;
-      }
-
-      if (!input.dryRun) {
-        for (const intent of candidates) {
-          if (await this.deleteCandidate(intent, expiredBefore)) {
-            deleted += 1;
-          } else {
-            failed += 1;
-          }
-        }
       }
 
       const last = candidates.at(-1);
@@ -107,6 +112,26 @@ export class SpeakingAudioUploadSweep {
       }
     }
 
-    return { scanned, eligible, deleted, failed, dryRun: input.dryRun };
+    // Decided from everything the run listed, before the first delete, so a
+    // misconfigured deployment cannot delete part of what it should not touch.
+    const ceilingExceeded = eligible > DELETION_CEILING;
+    if (!input.dryRun && !ceilingExceeded) {
+      for (const intent of candidatesToDelete) {
+        if (await this.deleteCandidate(intent, expiredBefore)) {
+          deleted += 1;
+        } else {
+          failed += 1;
+        }
+      }
+    }
+
+    return {
+      scanned,
+      eligible,
+      deleted,
+      failed,
+      dryRun: input.dryRun,
+      ceilingExceeded,
+    };
   }
 }

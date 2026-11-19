@@ -293,6 +293,13 @@ the Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE` and nothing else is
 affected. Create the bucket with the same SeaweedFS credentials and set the
 variable before deploying.
 
+The value must be exactly the bucket of that runtime scope: `aihub-user-assets`
+in Production and `aihub-sandbox-user-assets` in Sandbox. Any other name leaves
+the adapter unconfigured, so the Avatar routes answer `503
+AVATAR_STORAGE_UNAVAILABLE` and the startup log carries
+`event=avatar_storage_bucket_not_owned`. That guard is what keeps a mis-mapped
+Sandbox from sweeping a Production bucket.
+
 The Sandbox deployment needs its own Avatar bucket, named by
 `SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET` (for example
 `aihub-sandbox-user-assets`). Production and Sandbox keep their Avatar records
@@ -471,6 +478,12 @@ non-zero when a public or staging delete failed, or when the bucket, the
 storage credentials, or the database is not configured, in which case it has
 deleted nothing. Alert on a non-zero exit and on a missed run for either
 container.
+
+One run also refuses to act when it would delete more than 2,000 objects, or
+more than half of the objects it listed once that listing reaches 500: it
+deletes nothing, reports `ceilingExceeded: true`, and exits non-zero, because
+that share means the bucket or the record set is not the one this deployment
+expects. The Speaking Audio upload sweep applies the same 2,000-object ceiling.
 
 ### Sweeping Writing Task 1 chart uploads
 
