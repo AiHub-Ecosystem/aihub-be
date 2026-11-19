@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+import { DispatchAttemptPolicy } from '@/modules/gateway/application/dispatch/dispatch-attempt-policy';
 import type { DownstreamRetryBudgetPort } from '@/modules/gateway/application/dispatch/downstream-retry-budget.port';
 import { GuardedOperationDispatcher } from '@/modules/gateway/application/dispatch/guarded-operation-dispatcher';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/dispatch/internal-token-issuer.port';
@@ -32,18 +33,23 @@ export function createHttpOperationDispatcher(
 ): OperationDispatcherPort {
   const logger = new Logger(DISPATCHER_LOG_CONTEXT);
   const warn = (event: string): void => logger.warn({ event });
+  const transport = new HttpOperationTransport(
+    httpClient,
+    tokenIssuer,
+    adapters,
+    circuitBreakers,
+  );
+  const policy = new DispatchAttemptPolicy(
+    retryBudget,
+    (error) => transport.isUndelivered(error),
+    random,
+  );
   return new GuardedOperationDispatcher(
-    new HttpOperationTransport(
-      httpClient,
-      tokenIssuer,
-      adapters,
-      circuitBreakers,
-      retryBudget,
-      random,
-    ),
+    transport,
     dispatchAttempts,
     new SandboxAdmission(sandboxBudget, warn),
     metricsDispatchObserver,
     warn,
+    policy,
   );
 }

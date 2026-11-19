@@ -65,6 +65,7 @@ import {
   CONCURRENCY_LIMITER,
   type ConcurrencyLimiterPort,
 } from './application/concurrency-limiter.port';
+import { DispatchAttemptPolicy } from './application/dispatch/dispatch-attempt-policy';
 import {
   DOWNSTREAM_RETRY_BUDGET,
   type DownstreamRetryBudgetPort,
@@ -259,35 +260,40 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       ): OperationDispatcherPort => {
         const logger = new Logger(DISPATCHER_LOG_CONTEXT);
         const warn = (event: string): void => logger.warn({ event });
+        const transport = new HttpOperationTransport(
+          httpClient,
+          tokenIssuer,
+          [
+            task1GradeAdapter,
+            task2GradeAdapter,
+            writingV3Task1GradeAdapter,
+            writingV3Task2GradeAdapter,
+            createMicroExerciseAdapter,
+            createLongWritingExerciseAdapter,
+            gradeMicroExerciseAdapter,
+            speakingGradingAdapter,
+            speakingGradingJsonAdapter,
+            speakingV2QuestionGradingAdapter,
+            speakingV2PartGradingAdapter,
+            speakingV2TestGradingAdapter,
+            speakingV2ResponseGetAdapter,
+            speakingV2PartGetAdapter,
+            speakingV2TestGetAdapter,
+          ],
+          circuitBreakers,
+        );
+        const policy = new DispatchAttemptPolicy(
+          retryBudget,
+          (error) => transport.isUndelivered(error),
+          Math.random,
+        );
         return new GuardedOperationDispatcher(
-          new HttpOperationTransport(
-            httpClient,
-            tokenIssuer,
-            [
-              task1GradeAdapter,
-              task2GradeAdapter,
-              writingV3Task1GradeAdapter,
-              writingV3Task2GradeAdapter,
-              createMicroExerciseAdapter,
-              createLongWritingExerciseAdapter,
-              gradeMicroExerciseAdapter,
-              speakingGradingAdapter,
-              speakingGradingJsonAdapter,
-              speakingV2QuestionGradingAdapter,
-              speakingV2PartGradingAdapter,
-              speakingV2TestGradingAdapter,
-              speakingV2ResponseGetAdapter,
-              speakingV2PartGetAdapter,
-              speakingV2TestGetAdapter,
-            ],
-            circuitBreakers,
-            retryBudget,
-            Math.random,
-          ),
+          transport,
           dispatchAttempts,
           new SandboxAdmission(sandboxBudget, warn),
           metricsDispatchObserver,
           warn,
+          policy,
         );
       },
       inject: [
