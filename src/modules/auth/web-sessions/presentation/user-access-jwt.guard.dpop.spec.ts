@@ -11,6 +11,7 @@ import type {
   DpopMode,
   DpopProofInput,
   DpopProofVerifierPort,
+  DpopTokenUse,
 } from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 import type { VerifiedUserAccessToken } from '@/modules/auth/web-sessions/application/user-access-token.port';
 
@@ -79,12 +80,14 @@ function setup(
     status: 'active',
   });
   const seen: DpopProofInput[] = [];
+  const uses: DpopTokenUse[] = [];
   const guard = new UserAccessJwtGuard(
     { verify: async () => token },
     new InMemoryUserAccountAdapter(state),
     new InMemoryUserAccessTokenRevocationAdapter(),
     {
       mode,
+      recordUse: (use) => uses.push(use),
       verifier: {
         verify: async (input) => {
           seen.push(input);
@@ -93,8 +96,72 @@ function setup(
       },
     },
   );
-  return { guard, seen, response: { header: jest.fn() } };
+  return { guard, seen, uses, response: { header: jest.fn() } };
 }
+
+describe('UserAccessJwtGuard token use accounting', () => {
+  it.each<[DpopMode, string, VerifiedUserAccessToken, DpopTokenUse]>([
+    ['off', `Bearer ${TOKEN}`, webToken, { scheme: 'bearer', session: 'web' }],
+    [
+      'verify',
+      `Bearer ${TOKEN}`,
+      refreshToken,
+      { scheme: 'bearer', session: 'refresh' },
+    ],
+    ['verify', `DPoP ${TOKEN}`, webToken, { scheme: 'dpop', session: 'web' }],
+  ])(
+    '%s: counts one %s use of a token under its scheme and session',
+    async (mode, authorization, token, expected) => {
+      const { guard, uses, response } = setup(mode, token);
+
+      await guard.canActivate(
+        context(requestWith({ authorization, dpop: 'p' }), response),
+      );
+
+      expect(uses).toEqual([expected]);
+    },
+  );
+
+  it('enforce: still counts the Bearer use it refuses, so the remaining Bearer traffic is measurable', async () => {
+    const { guard, uses, response } = setup('enforce', unboundWebToken);
+
+    await expect(
+      guard.canActivate(
+        context(requestWith({ authorization: `Bearer ${TOKEN}` }), response),
+      ),
+    ).rejects.toMatchObject({ code: 'AUTH_USER_ACCESS_TOKEN_INVALID' });
+
+    expect(uses).toEqual([{ scheme: 'bearer', session: 'web' }]);
+  });
+
+  it('counts nothing for a request whose token never verified', async () => {
+    const state = createInMemoryAuthState();
+    const uses: DpopTokenUse[] = [];
+    const guard = new UserAccessJwtGuard(
+      {
+        verify: async () => {
+          throw invalidUserAccessToken();
+        },
+      },
+      new InMemoryUserAccountAdapter(state),
+      new InMemoryUserAccessTokenRevocationAdapter(),
+      {
+        mode: 'verify',
+        recordUse: (use) => uses.push(use),
+        verifier: { verify: async () => undefined },
+      },
+    );
+
+    await expect(
+      guard.canActivate(
+        context(requestWith({ authorization: `Bearer ${TOKEN}` }), {
+          header: jest.fn(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'AUTH_USER_ACCESS_TOKEN_INVALID' });
+    expect(uses).toEqual([]);
+  });
+});
 
 describe('UserAccessJwtGuard DPoP modes', () => {
   it('off: refuses the DPoP scheme and never consults the proof verifier', async () => {

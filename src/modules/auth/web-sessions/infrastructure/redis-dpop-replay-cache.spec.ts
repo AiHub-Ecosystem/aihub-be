@@ -1,6 +1,18 @@
 import { createHash } from 'node:crypto';
 
+import { registry } from '@/common/observability/metrics';
+
 import { RedisDpopReplayCache } from './redis-dpop-replay-cache';
+
+async function seamCount(): Promise<number> {
+  const line = (await registry.metrics())
+    .split('\n')
+    .find((entry) =>
+      entry.startsWith('aihub_redis_unavailable_total{seam="dpop_replay"}'),
+    );
+  // A series that does not exist yet counts as zero, never as NaN: NaN + 1 equals NaN.
+  return line === undefined ? 0 : Number(line.split(' ').at(-1));
+}
 
 type SetCall = readonly [string, string, 'EX', number, 'NX'];
 
@@ -40,13 +52,16 @@ describe('RedisDpopReplayCache', () => {
     ]);
   });
 
-  it('lets a Redis failure reach the caller instead of answering for it', async () => {
+  it('lets a Redis failure reach the caller instead of answering for it, and counts it under its seam', async () => {
     const failure = new Error('redis down');
     const cache = new RedisDpopReplayCache({
       set: () => Promise.reject(failure),
       quit: async () => 'OK',
     });
+    const before = await seamCount();
 
     await expect(cache.claim(KEY, 180)).rejects.toBe(failure);
+
+    expect(await seamCount()).toBe(before + 1);
   });
 });

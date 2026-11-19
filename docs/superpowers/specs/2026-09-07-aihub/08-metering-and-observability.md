@@ -182,6 +182,7 @@ aihub_auth_security_events_total{event}               counter
 aihub_speaking_audio_url_rejected_total{reason}      counter
 aihub_metering_incomplete_total{operation}
 aihub_redis_unavailable_total{seam}                   counter
+aihub_user_access_token_use_total{scheme,session}      counter
 aihub_public_api_major_usage_samples_dropped_total     counter
 aihub_process_resident_memory_bytes
 aihub_process_heap_used_bytes
@@ -222,13 +223,21 @@ once in that separate metric family as specified by #240.
 separate metric family and does not add validation refusals to
 `aihub_rejected_total`.
 
+`aihub_user_access_token_use_total{scheme,session}` increments once per request
+whose User Access JWT verified, in every `AIHUB_DPOP_MODE`, including a Bearer
+use that `enforce` then refuses. `scheme` is `bearer` or `dpop`; `session` is
+`web`, `refresh` or `none`. The series `scheme="bearer",session="web"` is the
+Bearer traffic left before DPoP enforcement ([ADR-0176](../../../adr/0176-dpop-binds-web-session-jwts.md)).
+It carries no user, token or key label.
+
 `aihub_redis_unavailable_total` increments once when a request-path or
 Operator CLI protection/cache seam reports a failed Redis operation, and does
 not increment for a successful operation. Its fixed `seam` values are `graded_admission`,
 `concurrency`, `rate_limit`, `quota`, `retry_budget`, `api_key_cache`,
 `api_key_cache_invalidation_revoke`, `api_key_cache_invalidation_rotate`,
 `api_key_cache_invalidation_suspension`, `auth_failure_counter`,
-`auth_rate_limit`, `jwks_cache`, and `email_send_rate`. The three
+`auth_rate_limit`, `jwks_cache`, `email_send_rate`, and `dpop_replay` (the DPoP
+proof replay cache, which refuses requests with `503` when it fails). The three
 invalidation values distinguish best-effort API-key cache deletion after
 revocation, rotation, or suspension; other API-key cache command failures use
 `api_key_cache`. Recording a Redis failure does not change the customer-facing

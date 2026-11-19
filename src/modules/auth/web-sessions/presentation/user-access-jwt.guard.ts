@@ -165,6 +165,13 @@ export class UserAccessJwtGuard implements CanActivate {
       throw invalidUserAccessToken();
     }
 
+    // Counted before any refusal below, so Bearer use that `enforce` turns away
+    // still shows up as traffic that has not migrated.
+    this.dpop.recordUse?.({
+      scheme: dpopScheme ? 'dpop' : 'bearer',
+      session: verified.session?.kind ?? 'none',
+    });
+
     if (dpopScheme) {
       await this.verifyProof(context, request, token, verified);
     } else if (

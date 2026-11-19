@@ -31,6 +31,7 @@ import {
   browserBindingHash,
   enforceWebSessionVerificationRateLimit,
 } from '@/modules/auth/verification/public/verification-sign-in';
+import type { DpopProofKeyInput } from './dpop-proof-key';
 import {
   type IssuedUserAccessToken,
   type UserAccessTokenIssuerPort,
@@ -282,7 +283,10 @@ export class WebSessionService implements WebSessionServicePort {
    * JWT, so the BFF may run as many instances as it likes and repeat a call.
    */
   async exchangeWebSession(
-    input: { readonly token: string | undefined },
+    input: {
+      readonly token: string | undefined;
+      readonly proofKey?: DpopProofKeyInput | undefined;
+    },
     endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken> {
     if (input.token === undefined || input.token.length === 0) {
@@ -329,10 +333,11 @@ export class WebSessionService implements WebSessionServicePort {
     // If revocation commits during signing or renewal, the fresh read refuses
     // this exchange. If it commits after the read, the JWT was already signed
     // before revocation, which is the documented 15-minute allowance.
-    const issued = await this.accessTokenIssuer.issue(userId, {
-      kind: 'web',
-      id: sessionId,
-    });
+    const issued = await this.accessTokenIssuer.issue(
+      userId,
+      { kind: 'web', id: sessionId },
+      input.proofKey,
+    );
     const checkedAt = this.clock.now();
     await this.renewSession(tokenHash, checkedAt);
     let stillExchangeable;

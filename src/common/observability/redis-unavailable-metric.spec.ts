@@ -6,7 +6,7 @@ describe('aihub_redis_unavailable_total', () => {
     const samples = (await metrics.getMetrics())
       .split('\n')
       .filter((line) => line.startsWith('aihub_redis_unavailable_total{'));
-    expect(samples).toHaveLength(15);
+    expect(samples).toHaveLength(16);
     for (const seam of [
       'graded_admission',
       'concurrency',
@@ -23,6 +23,7 @@ describe('aihub_redis_unavailable_total', () => {
       'email_send_rate',
       'shedding_level',
       'token_revocation',
+      'dpop_replay',
     ]) {
       expect(samples).toContain(
         `aihub_redis_unavailable_total{seam="${seam}"} 0`,
@@ -64,6 +65,6 @@ describe('aihub_redis_unavailable_total', () => {
         `aihub_redis_unavailable_total{seam="${seam}"} 1`,
       );
     }
-    expect(samples).toHaveLength(15);
+    expect(samples).toHaveLength(16);
   });
 });

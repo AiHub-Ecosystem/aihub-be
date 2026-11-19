@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "1.17.0"
+    "version": "1.18.0"
   },
   "servers": [
     {
@@ -10669,6 +10669,30 @@
                     "maxLength": 512,
                     "description": "The opaque token AIHUB returned when the Web Session was created. Expired, revoked, unknown, and malformed tokens all fail alike.",
                     "type": "string"
+                  },
+                  "client_proof_key": {
+                    "additionalProperties": false,
+                    "description": "Public JWK (ES256, P-256) the client signs DPoP proofs with. When sent, the access token is bound to it through `cnf.jkt`, and the caller then presents it as `Authorization: DPoP` with a `DPoP` proof header.",
+                    "type": "object",
+                    "required": ["kty", "crv", "x", "y"],
+                    "properties": {
+                      "kty": {
+                        "const": "EC",
+                        "type": "string"
+                      },
+                      "crv": {
+                        "const": "P-256",
+                        "type": "string"
+                      },
+                      "x": {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      "y": {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      }
+                    }
                   }
                 }
               }

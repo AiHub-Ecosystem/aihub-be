@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { AppError } from '@/common/errors/app-error';
+import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import type {
   DpopReplayCachePort,
   DpopReplayKey,
@@ -31,14 +32,20 @@ export class RedisDpopReplayCache implements DpopReplayCachePort {
     const digest = createHash('sha256')
       .update(`${key.issuer}\n${key.jkt}\n${key.jti}`)
       .digest('hex');
-    const result = await this.redis.set(
-      `aihub:auth:dpop-replay:${digest}`,
-      '1',
-      'EX',
-      ttlSeconds,
-      'NX',
-    );
-    return result === 'OK';
+    try {
+      const result = await this.redis.set(
+        `aihub:auth:dpop-replay:${digest}`,
+        '1',
+        'EX',
+        ttlSeconds,
+        'NX',
+      );
+      return result === 'OK';
+    } catch (error) {
+      // The guard refuses the request; this makes the outage visible.
+      recordRedisUnavailable('dpop_replay');
+      throw error;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

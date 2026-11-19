@@ -150,13 +150,19 @@ function stringBoundaries(schema: TSchema, base: unknown): unknown[] {
   };
   visit(schema as Record<string, unknown>, []);
   return found.flatMap(({ path, min, max }) =>
-    [min, max, max + 1].map((length) => {
+    [min, max, max + 1].flatMap((length) => {
       const copy = structuredClone(base) as Record<string, unknown>;
-      let target = copy;
-      for (const part of path.slice(0, -1))
-        target = target[part] as Record<string, unknown>;
-      if (path.length > 0) target[path[path.length - 1]!] = 'x'.repeat(length);
-      return copy;
+      let target: unknown = copy;
+      for (const part of path.slice(0, -1)) {
+        // An optional nested object is absent from the valid base, so it has
+        // no string to push to a boundary.
+        target = (target as Record<string, unknown> | undefined)?.[part];
+      }
+      if (typeof target !== 'object' || target === null) return [];
+      if (path.length > 0)
+        (target as Record<string, unknown>)[path[path.length - 1]!] =
+          'x'.repeat(length);
+      return [copy];
     }),
   );
 }

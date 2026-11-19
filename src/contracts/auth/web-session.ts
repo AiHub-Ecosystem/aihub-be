@@ -109,6 +109,25 @@ export type CreateWebSessionResultResponse = Static<
  * Web Session is a failed exchange (`401`), not a malformed request, so a
  * caller learns nothing about which part of the value was wrong.
  */
+/**
+ * The public half of a Client proof key: an ES256 key on P-256, and nothing
+ * else. A P-256 coordinate is 32 bytes, so exactly 43 base64url characters.
+ * The schema is closed, so a private member (`d`) is refused rather than read.
+ */
+export const ClientProofKeySchema = Type.Object(
+  {
+    kty: Type.Literal('EC'),
+    crv: Type.Literal('P-256'),
+    x: Type.String({ pattern: '^[A-Za-z0-9_-]{43}$' }),
+    y: Type.String({ pattern: '^[A-Za-z0-9_-]{43}$' }),
+  },
+  {
+    additionalProperties: false,
+    description:
+      'Public JWK (ES256, P-256) the client signs DPoP proofs with. When sent, the access token is bound to it through `cnf.jkt`, and the caller then presents it as `Authorization: DPoP` with a `DPoP` proof header.',
+  },
+);
+
 export const ExchangeWebSessionRequestSchema = Type.Object(
   {
     web_session_token: Type.String({
@@ -117,6 +136,7 @@ export const ExchangeWebSessionRequestSchema = Type.Object(
       description:
         'The opaque token AIHUB returned when the Web Session was created. Expired, revoked, unknown, and malformed tokens all fail alike.',
     }),
+    client_proof_key: Type.Optional(ClientProofKeySchema),
   },
   { additionalProperties: false },
 );

@@ -35,3 +35,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0173](0173-gateway-prioritized-load-shedding.md)            | The gateway sheds load by request tier and keeps the tier local         | Accepted                                    |
 | [0174](0174-bounded-uncached-api-key-lookups.md)             | Bound uncached API-key lookups across the deployment                    | Accepted; amends ADR-0006 and ADR-0114      |
 | [0175](0175-single-use-environment-bound-user-assertions.md) | Make Signed User Assertions single-use per Organization and environment | Accepted; amends ADR-0006                   |
+| [0176](0176-dpop-binds-web-session-jwts.md)                  | DPoP binds Web Session User Access JWTs to a client key                 | Accepted; amends ADR-0022                    |

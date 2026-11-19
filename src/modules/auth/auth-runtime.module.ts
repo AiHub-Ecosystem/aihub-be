@@ -120,6 +120,7 @@ import {
   RedisDpopReplayCache,
   UNAVAILABLE_DPOP_REPLAY_CACHE,
 } from './web-sessions/infrastructure/redis-dpop-replay-cache';
+import { recordUserAccessTokenUse } from './web-sessions/infrastructure/user-access-token-use-metric';
 import { UserAccessJwtGuard } from './web-sessions/presentation/user-access-jwt.guard';
 import {
   OptionalWebSessionClientGuard,
@@ -351,6 +352,7 @@ function createUserAccessTokenCrypto(
         replayCache: DpopReplayCachePort,
       ): DpopGuardPolicy => ({
         mode: configuration.AIHUB_DPOP_MODE,
+        recordUse: recordUserAccessTokenUse,
         verifier: new JoseDpopProofVerifier(replayCache, {
           clockSkewSeconds: USER_ACCESS_CLOCK_SKEW_SECONDS,
         }),

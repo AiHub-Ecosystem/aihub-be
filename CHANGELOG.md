@@ -162,6 +162,18 @@ out.
   `strong_point_vi` or `action_plan_vi`, and `test_type` is `practice` or
   `full_test`.
 
+## [1.18.0] - 2026-11-19
+
+### Added
+
+- `POST /v1/auth/web-sessions/exchange` accepts an optional `client_proof_key`:
+  the public JWK (`kty: EC`, `crv: P-256`, `x`, `y`) of a key the Customer Web
+  holds. When sent, the access token is bound to that key through `cnf.jkt`.
+  Callers that omit it get the same unbound token as before. A key with a
+  private member, another curve, or any other member is refused with
+  `INVALID_REQUEST` (`400`). AIHUB does not require DPoP until an operator
+  sets `AIHUB_DPOP_MODE=enforce`.
+
 ## [1.17.0] - 2026-11-19
 
 ### Added

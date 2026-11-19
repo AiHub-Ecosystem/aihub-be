@@ -39,9 +39,21 @@ export interface DpopReplayCachePort {
  */
 export type DpopMode = 'off' | 'verify' | 'enforce';
 
+/**
+ * One presentation of a verified User Access JWT, by how it was presented and
+ * which kind of session minted it. Counting `bearer`/`web` is how an operator
+ * sees the Bearer traffic left before `enforce` is safe.
+ */
+export interface DpopTokenUse {
+  readonly scheme: 'bearer' | 'dpop';
+  readonly session: 'web' | 'refresh' | 'none';
+}
+
 export interface DpopGuardPolicy {
   readonly mode: DpopMode;
   readonly verifier: DpopProofVerifierPort;
+  /** Called once per request whose token verified, whatever the mode. */
+  readonly recordUse?: (use: DpopTokenUse) => void;
 }
 
 export const USER_ACCESS_DPOP_POLICY = Symbol('USER_ACCESS_DPOP_POLICY');

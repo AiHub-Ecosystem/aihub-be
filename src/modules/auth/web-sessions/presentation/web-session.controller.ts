@@ -155,6 +155,7 @@ export class WebSessionController {
         token: hasAlternateWebSessionSource(request)
           ? undefined
           : input.web_session_token,
+        proofKey: input.client_proof_key,
       },
       endUserIpFrom(request),
     );
