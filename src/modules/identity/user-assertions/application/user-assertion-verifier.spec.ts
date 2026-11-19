@@ -317,6 +317,47 @@ describe('UserAssertionVerifier', () => {
     expect(provider.calls).toEqual([false, true]);
   });
 
+  it('refreshes once when the key material rotated under the same kid', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    const assertion = await token(newFixture.privateKey, {
+      kid: 'shared',
+      jti: 'jti-same-kid-rotation',
+    });
+    const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+
+    await expect(
+      verifier(provider).verify({
+        signedAssertion: assertion,
+        organizationId: 'org_acme',
+      }),
+    ).resolves.toMatchObject({ userId: 'user_123' });
+    expect(provider.calls).toEqual([false, true]);
+  });
+
+  it('refreshes at most once for a same-kid assertion that still fails', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    const assertion = await token(oldFixture.privateKey, {
+      kid: 'shared',
+      jti: 'jti-same-kid-stale',
+    });
+    const parts = assertion.split('.');
+    const signature = parts[2] ?? '';
+    const tampered = `${parts[0]}.${parts[1]}.${
+      signature[0] === 'a' ? 'b' : 'a'
+    }${signature.slice(1)}`;
+    const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+
+    await expect(
+      verifier(provider).verify({
+        signedAssertion: tampered,
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(provider.calls).toEqual([false, true]);
+  });
+
   it('rejects multiple matching keys when kid is absent', async () => {
     const first = await rsaFixture('one');
     const second = await rsaFixture('two');

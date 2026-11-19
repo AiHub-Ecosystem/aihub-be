@@ -185,6 +185,10 @@ export class UserAssertionVerifier {
       throw invalidSignedUserAssertion();
     }
 
+    // A provider may rotate the key material under an unchanged `kid`; the
+    // matched-but-stale key fails verification for the whole cache TTL. One
+    // forced reload per failed verification covers that, bounded by the
+    // provider's own refresh cooldown.
     let verified: Readonly<Record<string, unknown>>;
     const nowSeconds = this.now();
     try {
@@ -194,7 +198,23 @@ export class UserAssertionVerifier {
         algorithm: header.algorithm,
       });
     } catch (error) {
-      throw invalidSignedUserAssertion(error);
+      if (header.kid === undefined) {
+        throw invalidSignedUserAssertion(error);
+      }
+      const refreshed = await this.loadKeys(input.organizationId, config, true);
+      const rotated = selectKey(refreshed.keys, header.algorithm, header.kid);
+      if (rotated === undefined) {
+        throw invalidSignedUserAssertion(error);
+      }
+      try {
+        verified = await this.crypto.verify({
+          signedAssertion: input.signedAssertion,
+          key: rotated,
+          algorithm: header.algorithm,
+        });
+      } catch (retryError) {
+        throw invalidSignedUserAssertion(retryError);
+      }
     }
 
     const claims = validateClaims(
