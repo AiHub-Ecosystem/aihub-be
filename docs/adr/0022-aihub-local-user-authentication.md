@@ -1,6 +1,6 @@
 # ADR-0022: AIHUB-owned local user authentication alongside the sandbox identity boundary
 
-- Status: Accepted (amended by ADR-0054: verification may also create a session, in the signup browser only; User Access JWT audience amended by [ADR-0162](0162-scope-bound-user-access-jwt-audiences.md); individual User Access JWT revocation amended by [ADR-0150](0150-revoke-individual-user-access-jwts.md); Web Session token sender-constraining amended by [ADR-0176](0176-dpop-binds-web-session-jwts.md))
+- Status: Accepted (amended by ADR-0054: verification may also create a session, in the signup browser only; User Access JWT audience amended by [ADR-0162](0162-scope-bound-user-access-jwt-audiences.md); individual User Access JWT revocation amended by [ADR-0150](0150-revoke-individual-user-access-jwts.md); Web Session token sender-constraining amended by [ADR-0176](0176-dpop-binds-web-session-jwts.md); registration's account-existence signal excepted by [ADR-0178](0178-registration-may-confirm-an-active-account.md))
 
 ## Amendment for issue #64 (2026-09-19)
 

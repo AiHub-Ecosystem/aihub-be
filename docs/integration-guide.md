@@ -182,7 +182,11 @@ its email is verified, and sends a verification link to that address.
   username and password, makes every earlier verification link unusable, and
   sends a new one. The answer is the same `201` a new email gets. Only an email
   whose account is already active, or a username another account holds,
-  answers `409 AUTH_IDENTITY_UNAVAILABLE`. One limit: an address can receive at
+  answers `409 AUTH_IDENTITY_UNAVAILABLE`. That difference is deliberate: this
+  endpoint confirms that an address already has an AIHUB account, while login,
+  password recovery, and verification resend do not. Do not build a flow that
+  depends on registration hiding it ([ADR-0178](adr/0178-registration-may-confirm-an-active-account.md)).
+  One limit: an address can receive at
   most nine authentication emails a day. When that ceiling is full, a
   registration answers `email_delivery_status: "suppressed"` and guarantees
   nothing was sent — for an email that already has a pending registration this
