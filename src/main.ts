@@ -29,6 +29,7 @@ import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
   type PublicApiMajorUsageBuffer,
 } from './modules/metering/public/public-api-major-usage';
+import { registerSpeakingJsonBodyCancellation } from './modules/speaking/public/fastify-speaking-json-body.hook';
 import { registerSpeakingMultipartParser } from './modules/speaking/public/fastify-speaking-multipart.parser';
 import { registerRequestHooks } from './register-request-hooks';
 
@@ -104,6 +105,7 @@ export async function bootstrap(): Promise<void> {
   await Reflect.apply(fastify.register, fastify, [fastifyCookie]);
 
   registerSpeakingMultipartParser(fastify);
+  registerSpeakingJsonBodyCancellation(fastify);
 
   // Registered after the hooks so the scrape itself is counted on response;
   // its increment appears in the following scrape, after this body is sent.
