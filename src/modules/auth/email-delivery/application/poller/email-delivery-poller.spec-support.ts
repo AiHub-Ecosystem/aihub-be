@@ -1,18 +1,22 @@
+import type {
+  EmailCredentialActionabilityPort,
+  EmailCredentialState,
+} from '@/modules/auth/email-delivery/application/email-credential-actionability.port';
 import {
   type ClaimEmailDeliveryRequestsInput,
   type ClaimedFailureReport,
-  type EmailCredentialActionabilityPort,
-  type EmailCredentialState,
+  type EmailDeliveryDispatchState,
   type EmailDeliveryErrorCode,
   type EmailDeliveryKind,
-  type EmailDeliveryPayload,
   type EmailDeliveryRequestRecord,
-  type EmailDispatchStorePort,
-  type EmailNoticeResolvers,
+  type ReleaseUnspentEmailAttemptInput,
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type { EmailDispatchPollerPort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
+import type { EmailDeliveryPayload } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import {
   type EmailPayloadCipherPort,
   EmailPayloadUnknownKeyVersionError,
-  type ReleaseUnspentEmailAttemptInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
@@ -28,6 +32,7 @@ import type {
   EmailProviderResponse,
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
+import type { EmailNoticeResolvers } from '@/modules/auth/email-delivery/application/payload/email-delivery-payload';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { EmailDeliveryPoller } from './email-delivery-poller';
 
@@ -63,7 +68,7 @@ export class FakeInvitationEmailRateLimiter implements AuthRateLimiterPort {
   }
 }
 
-export class FakeStore implements EmailDispatchStorePort {
+export class FakeStore implements EmailDispatchPollerPort {
   claims: ClaimEmailDeliveryRequestsInput[] = [];
   claimResult: EmailDeliveryRequestRecord[] = [];
   accepted: string[] = [];
@@ -98,16 +103,11 @@ export class FakeStore implements EmailDispatchStorePort {
     });
   }
 
+  /** What the store reports for a row; null reads as a row that is gone. */
+  dispatchState: EmailDeliveryDispatchState | null = null;
+
   async readDispatchState() {
-    return null;
-  }
-
-  async queuedIds() {
-    return [];
-  }
-
-  async readWalSlotHealth() {
-    return null;
+    return this.dispatchState;
   }
 
   async markProviderAccepted(input: { id: string }): Promise<void> {
@@ -121,11 +121,18 @@ export class FakeStore implements EmailDispatchStorePort {
     this.cancelled.push({ id: input.id, reason: input.reason });
   }
 
+  /** How many terminal writes are rejected before one lands. */
+  failMarkFailed = 0;
+
   async markFailed(input: {
     id: string;
     errorCode: EmailDeliveryErrorCode;
     failedAt: Date;
   }): Promise<void> {
+    if (this.failMarkFailed > 0) {
+      this.failMarkFailed -= 1;
+      throw new Error('the outbox store is unavailable');
+    }
     this.failed.push({ id: input.id, errorCode: input.errorCode });
     const row = this.claimResult.find((claimed) => claimed.id === input.id);
     if (row !== undefined) {
@@ -139,11 +146,16 @@ export class FakeStore implements EmailDispatchStorePort {
     }
   }
 
+  /** When each failed attempt was recorded; the claim's backoff starts there. */
+  failedAttemptTimes: Date[] = [];
+
   async recordFailedAttempt(input: {
     id: string;
     errorCode: string;
+    attemptedAt: Date;
   }): Promise<void> {
     this.attempts.push({ id: input.id, errorCode: input.errorCode });
+    this.failedAttemptTimes.push(input.attemptedAt);
   }
 
   async reserveAttempt(input: { id: string }): Promise<void> {
@@ -290,6 +302,16 @@ export class FakeEmailProviderOutageCircuit
   readonly failedProbeTokens: (string | undefined)[] = [];
   readonly releases: string[] = [];
   reachable = 0;
+  /** What each success told the circuit about the send that succeeded. */
+  readonly reachableSent: (
+    | {
+        readonly generation?: number;
+        readonly probeToken?: string;
+      }
+    | undefined
+  )[] = [];
+  /** Runs before a failure is recorded, to let the clock move during the write. */
+  beforeFailure: (() => void) | undefined;
   outageDurationMs = 0;
   cooldownMs = 5_000;
   recordFailureError: Error | undefined;
@@ -307,17 +329,22 @@ export class FakeEmailProviderOutageCircuit
     retryAfterMs: number,
     probeToken?: string,
   ): Promise<number> {
+    this.beforeFailure?.();
     if (this.recordFailureError !== undefined) throw this.recordFailureError;
     this.failures.push(retryAfterMs);
     this.failedProbeTokens.push(probeToken);
     return Math.max(this.cooldownMs, retryAfterMs);
   }
 
-  async recordProviderReachable(): Promise<void> {
+  async recordProviderReachable(sent?: {
+    readonly generation?: number;
+    readonly probeToken?: string;
+  }): Promise<void> {
     if (this.recordReachableError !== undefined) {
       throw this.recordReachableError;
     }
     this.reachable += 1;
+    this.reachableSent.push(sent);
   }
 
   async readOutageDurationMs(): Promise<number> {

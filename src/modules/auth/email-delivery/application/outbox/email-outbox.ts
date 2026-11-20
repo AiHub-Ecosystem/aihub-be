@@ -4,7 +4,6 @@ import type {
   EmailDeliveryKind,
   EmailDeliveryRequestWriterPort,
   EmailDeliveryTransaction,
-  EmailPayloadCipherPort,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
 import { EMAIL_KIND_POLICIES } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
 import type { AdmitEmailRequestPort } from '@/modules/auth/email-delivery/application/email-outbox-backpressure.port';
@@ -13,6 +12,7 @@ import type {
   EmailOutboxPort,
   QueueEmailDeliveryRequestInput,
 } from '@/modules/auth/email-delivery/application/email-outbox.port';
+import type { EmailPayloadCipherPort } from '@/modules/auth/email-delivery/application/email-payload-cipher.port';
 
 export class EmailOutbox implements EmailOutboxPort {
   constructor(
@@ -43,13 +43,18 @@ export class EmailOutbox implements EmailOutboxPort {
   async queue(
     transaction: EmailDeliveryTransaction,
     input: QueueEmailDeliveryRequestInput,
-  ): Promise<void> {
+  ): Promise<string> {
     const id = this.newId(input.createdAt);
     const payloadCiphertext = this.cipher.encrypt(
       JSON.stringify(input.payload),
       { id, kind: input.kind },
     );
-    const record = { id, payloadCiphertext, createdAt: input.createdAt };
+    const record = {
+      id,
+      payloadCiphertext,
+      createdAt: input.createdAt,
+      ...('credentialId' in input ? { credentialId: input.credentialId } : {}),
+    };
     if (input.kind === 'organization_invite_email') {
       await this.requests.insert(transaction, {
         ...record,
@@ -57,9 +62,10 @@ export class EmailOutbox implements EmailOutboxPort {
         organizationId: input.organizationId,
         inviterId: input.inviterId,
       });
-      return;
+      return id;
     }
     await this.requests.insert(transaction, { ...record, kind: input.kind });
+    return id;
   }
 
   async withdraw<K extends EmailDeliveryKind>(

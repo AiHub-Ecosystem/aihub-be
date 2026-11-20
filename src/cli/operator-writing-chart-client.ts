@@ -1,6 +1,11 @@
+import type { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository';
+import type { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
+
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorWritingChartClient(databaseUrl: string) {
+export async function createOperatorWritingChartClient(
+  databaseUrl: string,
+): Promise<PostgresWritingChartUploadRepository & { close(): Promise<void> }> {
   const [prismaModule, repositoryModule] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
     import(
@@ -20,7 +25,9 @@ export async function createOperatorWritingChartClient(databaseUrl: string) {
 
 export async function createOperatorWritingChartRevocationAuditClient(
   databaseUrl: string,
-) {
+): Promise<
+  PostgresWritingChartRevocationAuditRepository & { close(): Promise<void> }
+> {
   const [{ createOperatorPrismaClient }, repositoryModule] = await Promise.all([
     import('@/modules/persistence/infrastructure/prisma-client'),
     import(

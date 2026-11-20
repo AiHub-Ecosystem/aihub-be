@@ -21,6 +21,7 @@ export function emailDeliveryRequest(
   kind: 'verification_email' | 'password_reset_email',
   payload: AuthEmailDeliveryPayload,
   now: Date,
+  tokenId: string,
 ): QueueEmailDeliveryRequestInput {
-  return { kind, payload, createdAt: now };
+  return { kind, payload, createdAt: now, credentialId: tokenId };
 }

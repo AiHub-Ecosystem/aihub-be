@@ -3725,7 +3725,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"web_session_token\": \"<string>\"\n}",
+          "raw": "{\n  \"web_session_token\": \"<string>\",\n  \"client_proof_key\": {\n    \"kty\": \"<string>\",\n    \"crv\": \"<string>\",\n    \"x\": \"<string>\",\n    \"y\": \"<string>\"\n  }\n}",
           "options": {
             "raw": {
               "language": "json"

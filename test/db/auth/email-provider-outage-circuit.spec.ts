@@ -104,7 +104,77 @@ describe('shared email provider outage circuit in Redis', () => {
     await circuitA.recordProviderReachable();
     await expect(circuitB.acquireSendPermit()).resolves.toEqual({
       allowed: true,
+      generation: 0,
     });
+  });
+
+  it('keeps a cooldown recorded while an older send was in flight', async () => {
+    const permit = await circuitA.acquireSendPermit();
+    if (!permit.allowed || permit.generation === undefined) {
+      throw new Error('a closed circuit did not report its failure count');
+    }
+
+    // A 429 lands on another instance while this send is still in flight.
+    await circuitB.recordProviderFailure(2_000);
+    await circuitA.recordProviderReachable({ generation: permit.generation });
+
+    await expect(circuitB.acquireSendPermit()).resolves.toMatchObject({
+      allowed: false,
+    });
+  });
+
+  it('clears the circuit when no failure came after the successful send began', async () => {
+    await circuitA.recordProviderFailure(1);
+    // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const permit = await circuitA.acquireSendPermit();
+    if (
+      !permit.allowed ||
+      permit.probeToken === undefined ||
+      permit.generation === undefined
+    ) {
+      throw new Error('the shared circuit did not grant a half-open probe');
+    }
+
+    await circuitA.recordProviderReachable({
+      generation: permit.generation,
+      probeToken: permit.probeToken,
+    });
+
+    await expect(circuitB.acquireSendPermit()).resolves.toEqual({
+      allowed: true,
+      generation: 0,
+    });
+  });
+
+  it('hands back its own probe when a newer failure keeps the cooldown', async () => {
+    await circuitA.recordProviderFailure(1);
+    // real-timer-ok: the Redis-backed circuit must cross real retry and outage intervals
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const permit = await circuitA.acquireSendPermit();
+    if (
+      !permit.allowed ||
+      permit.probeToken === undefined ||
+      permit.generation === undefined
+    ) {
+      throw new Error('the shared circuit did not grant a half-open probe');
+    }
+
+    // Another instance records a failure after this probe's send began.
+    await circuitB.recordProviderFailure(0);
+    await circuitA.recordProviderReachable({
+      generation: permit.generation,
+      probeToken: permit.probeToken,
+    });
+
+    expect(
+      await redisA.hget(EMAIL_PROVIDER_OUTAGE_STATE_KEY, 'probe_token'),
+    ).toBeNull();
+    expect(
+      Number(
+        await redisA.hget(EMAIL_PROVIDER_OUTAGE_STATE_KEY, 'failure_count'),
+      ),
+    ).toBeGreaterThan(permit.generation);
   });
 
   it('releases a probe whose failure recording died on a Redis error, so the next acquire proceeds', async () => {

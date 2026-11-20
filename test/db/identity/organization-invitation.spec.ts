@@ -467,7 +467,17 @@ describe('organization invitation revocation against PostgreSQL', () => {
        ORDER BY id ASC`,
       [[...targetIds]],
     );
-    return result.rows;
+    // A sent or resent event also names the Email Delivery Request it queued
+    // (#441). Its value is minted per run, and invitation-email-outbox.spec.ts
+    // asserts it against the request row, so only those events drop it here. A
+    // revocation event keeps its whole detail.
+    return result.rows.map((row) => {
+      const names =
+        row.action === 'invitation.sent' || row.action === 'invitation.resent';
+      if (row.detail === null || !names) return row;
+      const { emailDeliveryRequestId: _requestId, ...detail } = row.detail;
+      return { ...row, detail };
+    });
   }
 
   it('closes an open invitation and records the applied audit event', async () => {

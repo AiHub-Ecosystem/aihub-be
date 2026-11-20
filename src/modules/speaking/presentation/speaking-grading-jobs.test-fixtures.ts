@@ -111,7 +111,7 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     readonly organizationId: string;
     readonly endUserId: string;
     readonly idempotencyKey: string;
-  }) {
+  }): ReturnType<SpeakingGradingJobRepositoryPort['findByIdempotencyKey']> {
     return [...this.jobs.values()].find(
       (job) =>
         job.organizationId === input.organizationId &&
@@ -120,7 +120,10 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     );
   }
 
-  async findOwned(owner: SpeakingGradingJobOwner, jobId: string) {
+  async findOwned(
+    owner: SpeakingGradingJobOwner,
+    jobId: string,
+  ): ReturnType<SpeakingGradingJobRepositoryPort['findOwned']> {
     const job = this.jobs.get(jobId);
     return job !== undefined && ownerKey(job) === ownerKey(owner)
       ? job

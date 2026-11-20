@@ -4,13 +4,17 @@ import type {
   EmailDeliveryErrorCode,
   EmailDeliveryKind,
   EmailDeliveryRequestRecord,
-  EmailDispatchStorePort,
   ReleaseUnspentEmailAttemptInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type {
+  EmailDispatchAttemptOutcomePort,
+  EmailDispatchMaintenancePort,
+} from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 import {
   EMAIL_DELIVERY_KINDS,
   EMAIL_KIND_POLICIES,
 } from '@/modules/auth/email-delivery/application/email-kind-handler.registry';
+import type { EmailIdempotencyConflict } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { invitationRecipientRetryAfterMs } from '@/modules/auth/email-delivery/application/send-policy/invitation-recipient-rate-limit';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 
@@ -36,15 +40,39 @@ export class EmailDeliveryPollerMaintenance {
   >();
 
   constructor(
-    private readonly store: EmailDispatchStorePort,
+    private readonly store: EmailDispatchMaintenancePort,
     private readonly now: () => Date,
     private readonly options: EmailDeliveryPollerMaintenanceOptions,
     private readonly batchSize: number,
     private readonly leaseMs: number,
   ) {}
 
+  /**
+   * A conflict whose terminal write was rejected (#441): the provider may have
+   * accepted the first handoff, so the request must be settled as failed before
+   * it can be claimed and sent again.
+   */
+  private readonly pendingConflictFailures = new Map<
+    string,
+    {
+      readonly input: Parameters<
+        EmailDispatchAttemptOutcomePort['markFailed']
+      >[0];
+      /**
+       * The write is fenced by this poller's lease on the row. Once that lease
+       * can have lapsed, another poller may own the row and the write can
+       * never match again, so settling it passes to whoever claims the row.
+       */
+      readonly relinquishAtMs: number;
+    }
+  >();
+
+  /** Outcomes known to the provider but not yet durable: no claim until settled. */
   get hasPendingAttemptReleases(): boolean {
-    return this.pendingUnspentAttempts.size > 0;
+    return (
+      this.pendingUnspentAttempts.size > 0 ||
+      this.pendingConflictFailures.size > 0
+    );
   }
 
   async deferInvitationAtRecipientLimit(
@@ -82,8 +110,14 @@ export class EmailDeliveryPollerMaintenance {
   }
 
   async reconcile(): Promise<{ cancelled: number; failed: number }> {
+    // Settled first: a row whose conflict outcome lands is no longer queued, so
+    // the stale sweep cannot cancel it and lose the outcome (#441).
+    await this.retryPendingConflictFailures();
     const stale = await this.cancelStaleRequests();
-    for (const id of stale) this.pendingUnspentAttempts.delete(id);
+    for (const id of stale) {
+      this.pendingUnspentAttempts.delete(id);
+      this.pendingConflictFailures.delete(id);
+    }
     await this.retryPendingUnspentAttempts();
     const failed = this.hasPendingAttemptReleases
       ? 0
@@ -162,6 +196,39 @@ export class EmailDeliveryPollerMaintenance {
     return 'retried';
   }
 
+  /**
+   * A reused provider key is never a definitive rejection (#441). `concurrent`
+   * means the provider is still processing an earlier attempt under the key, so
+   * it spends one of the bounded attempts and is retried. `payload_changed`
+   * means an earlier attempt under the key reached the provider and may have
+   * been delivered, so the request ends as `outcome_unknown`, which alerts,
+   * rather than being sent again.
+   */
+  async recordIdempotencyConflict(
+    request: EmailDeliveryRequestRecord,
+    conflict: EmailIdempotencyConflict,
+    at: Date,
+  ): Promise<'retried' | 'failed'> {
+    if (conflict === 'concurrent') {
+      return this.recordFailure(request, 'outcome_unknown', at);
+    }
+    const input = {
+      id: request.id,
+      failedAt: at,
+      errorCode: 'outcome_unknown',
+      owner: this.options.owner,
+    } as const;
+    // Remembered until the write lands: a rejected write leaves the row queued,
+    // and the next pass settles it before it can claim anything.
+    this.pendingConflictFailures.set(request.id, {
+      input,
+      relinquishAtMs: at.getTime() + this.leaseMs,
+    });
+    await this.store.markFailed(input);
+    this.pendingConflictFailures.delete(request.id);
+    return 'failed';
+  }
+
   async cancel(
     request: EmailDeliveryRequestRecord,
     reason: EmailDeliveryCancelReason,
@@ -211,6 +278,35 @@ export class EmailDeliveryPollerMaintenance {
       } catch {
         // Keep the known non-consuming outcome ahead of the exhausted sweep.
       }
+    }
+  }
+
+  private async retryPendingConflictFailures(): Promise<void> {
+    for (const [id, { input, relinquishAtMs }] of this
+      .pendingConflictFailures) {
+      if (this.now().getTime() >= relinquishAtMs) {
+        this.pendingConflictFailures.delete(id);
+        continue;
+      }
+      try {
+        await this.store.markFailed(input);
+        this.pendingConflictFailures.delete(id);
+      } catch {
+        // A write that committed but answered with an error leaves nothing to
+        // settle, and retrying it would fail for good and block every claim.
+        if (await this.isSettled(id)) this.pendingConflictFailures.delete(id);
+        // Otherwise kept: no claim starts while an outcome waits to be recorded.
+      }
+    }
+  }
+
+  /** True once the row is no longer queued (or is gone): there is nothing to write. */
+  private async isSettled(id: string): Promise<boolean> {
+    try {
+      const state = await this.store.readDispatchState(id);
+      return state === null || state.status !== 'queued';
+    } catch {
+      return false;
     }
   }
 

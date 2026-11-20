@@ -252,6 +252,7 @@ export class PostgresEmailDeliveryRequestRepository
         status: 'queued',
         payloadCiphertext: input.payloadCiphertext,
         createdAt: input.createdAt,
+        credentialId: input.credentialId ?? null,
         ...(input.kind === 'organization_invite_email'
           ? {
               organizationId: input.organizationId,

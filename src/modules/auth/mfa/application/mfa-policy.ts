@@ -40,12 +40,10 @@ function totpAt(secret: Buffer, counter: number): string {
   const movingFactor = Buffer.alloc(8);
   movingFactor.writeBigUInt64BE(BigInt(counter));
   const digest = createHmac('sha1', secret).update(movingFactor).digest();
-  const offset = digest[digest.length - 1]! & 0x0f;
-  const binary =
-    ((digest[offset]! & 0x7f) << 24) |
-    ((digest[offset + 1]! & 0xff) << 16) |
-    ((digest[offset + 2]! & 0xff) << 8) |
-    (digest[offset + 3]! & 0xff);
+  const lastByte = digest[digest.length - 1];
+  if (lastByte === undefined) throw internalError('TOTP digest is empty');
+  const offset = lastByte & 0x0f;
+  const binary = digest.readUInt32BE(offset) & 0x7fffffff;
   return String(binary % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, '0');
 }
 

@@ -14,3 +14,4 @@ paths:
 - Use the `node:` protocol for Node built-ins.
 - Keep TypeBox schemas at transport boundaries and derive types from them; application/domain code should consume inferred types.
 - Prefer small discriminated unions over stringly typed flags.
+- Enforced by `bun lint`: `typescript/no-non-null-assertion` and `typescript/explicit-module-boundary-types` in `.oxlintrc.json` (#1346).

@@ -78,6 +78,10 @@ import {
   type RefreshTokenIssuerPort,
 } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import {
+  type DpopGuardPolicy,
+  USER_ACCESS_DPOP_POLICY,
+} from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
+import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessSession,
@@ -376,6 +380,10 @@ export async function createLocalAuthTestContext(
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
   revocationRecordOverride?: UserAccessTokenRevocationRecordPort,
+  dpopPolicy: DpopGuardPolicy = {
+    mode: 'off',
+    verifier: { verify: async () => undefined },
+  },
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -440,7 +448,7 @@ export async function createLocalAuthTestContext(
         return operation();
       },
       reserveAuthenticationEmailRecipient: async () => true,
-      queue: async () => undefined,
+      queue: async () => 'edr_queued',
       withdraw: async () => undefined,
     } satisfies EmailOutboxPort)
     .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
@@ -457,6 +465,8 @@ export async function createLocalAuthTestContext(
     .useValue(securityEvents)
     .overrideProvider(WEB_SESSION_CLIENT_SECRET)
     .useValue({ resolve: () => clientSecret })
+    .overrideProvider(USER_ACCESS_DPOP_POLICY)
+    .useValue(dpopPolicy)
     .compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(

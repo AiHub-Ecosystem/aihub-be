@@ -10,7 +10,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | OperatorRedisFailure               | identity    | 2       |
 | NotificationEvent                  | identity    | 8       |
 | AuthIdentity                       | auth        | 8       |
-| EmailDeliveryRequest               | auth        | 16      |
+| EmailDeliveryRequest               | auth        | 17      |
 | AuthEmailRecipientRateLimit        | auth        | 5       |
 | EmailDailySendBudget               | auth        | 5       |
 | EmailVerificationToken             | auth        | 12      |
@@ -45,7 +45,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | UserAvatarAudit                    | avatar      | 8       |
 | UserMfaFactor                      | auth        | 8       |
 | UserMfaRecoveryCode                | auth        | 5       |
-| WebSession                         | auth        | 8       |
+| WebSession                         | auth        | 9       |
 | BillingAdjustment                  | metering    | 11      |
 | BillingMonthClosure                | metering    | 10      |
 
@@ -136,6 +136,7 @@ Owner: `auth`
 | failureNotifyLeaseExpiresAt | DateTime? | @map("failure_notify_lease_expires_at") @db.Timestamptz(6) |
 | organizationId              | String?   | @map("organization_id")                                    |
 | inviterId                   | String?   | @map("inviter_id")                                         |
+| credentialId                | String?   | @map("credential_id")                                      |
 
 ## AuthEmailRecipientRateLimit
 
@@ -719,6 +720,7 @@ Owner: `auth`
 | expiresAt     | DateTime    | @map("expires_at") @db.Timestamptz(6)                                    |
 | lastRenewedAt | DateTime    | @map("last_renewed_at") @db.Timestamptz(6)                               |
 | revokedAt     | DateTime?   | @map("revoked_at") @db.Timestamptz(6)                                    |
+| proofKeyJkt   | String?     | @map("proof_key_jkt")                                                    |
 | userAccount   | UserAccount | @relation(fields: [userAccountId], references: [id], onUpdate: NoAction) |
 
 ## BillingAdjustment

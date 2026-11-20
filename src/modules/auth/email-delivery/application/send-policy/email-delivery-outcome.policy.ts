@@ -1,9 +1,9 @@
 import { isRecord } from '@/common/is-record';
+import type { EmailCredentialState } from '@/modules/auth/email-delivery/application/email-credential-actionability.port';
 import type {
-  EmailCredentialState,
   EmailDeliveryCancelReason,
   EmailDeliveryErrorCode,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
 
 export function isCredentialExpired(expiresAt: string, at: Date): boolean {
   const expiry = Date.parse(expiresAt);

@@ -186,8 +186,11 @@ First steps:
    ran past the five-second provider timeout; `provider_rejected` means the
    provider declined the API request; `provider_permanent_rejection` means a
    `400` or `422` response ended the request after one attempt;
-   `outcome_unknown` means a process died after reserving the last attempt, so no
-   answer was recorded (see above); `payload_unreadable` means the stored payload
+   `outcome_unknown` means the outcome is not known: a process died after
+   reserving the last attempt (see above), or Resend reported an idempotency
+   conflict for the key (see
+   [Provider-wide outage backoff](#provider-wide-outage-backoff-adr-0122-410)), so
+   an earlier attempt may have been delivered; `payload_unreadable` means the stored payload
    never reached the provider because it was corrupt or invalid;
    `key_unavailable` means its envelope named a key version the instance no
    longer holds. Nothing else about the provider's answer survives to this
@@ -305,6 +308,14 @@ closes it. `401` and `403` close the outage circuit because the provider
 responded, while retaining the existing per-poller five-minute configuration
 hold. Message-specific failures keep the #449 classification.
 
+A success closes the circuit only if no failure was recorded after that send
+began (#441). The permit carries the circuit's failure count, and the close is
+skipped when the count has moved: a `429` cooldown written while an older send
+was in flight survives that send's success, and a probe owner hands back its own
+probe instead of clearing the state. If the shared failure write itself fails,
+the poller's local fallback pause is measured from the clock after the failure,
+not from when the provider answered, and a later `Retry-After` still wins.
+
 The unlabeled gauge `aihub_email_provider_outage_duration_seconds` reports the
 shared circuit's current duration on `/metrics`. The `EmailProviderOutage`
 rule fires after five minutes only while queued mail exists. The per-kind
@@ -321,12 +332,38 @@ Resend's 24-hour retention expires may send a duplicate. Preserve the 14-day
 notification window; the no-duplicate guarantee applies only within the
 provider's key-retention period.
 
+A retry inside that period can still meet a `409` for the key (#441). Resend
+answers `concurrent_idempotent_requests` while an earlier attempt under the key
+is in flight: the poller spends one of the three attempts with
+`last_error_code = 'outcome_unknown'` and retries. It answers
+`invalid_idempotent_request` when the retry's payload differs from the earlier
+attempt's, for example because a near-expiry notice re-read a renamed
+Organization: the earlier attempt reached the provider and may have been
+delivered, so the request ends at once as `failed` with `outcome_unknown` and
+alerts instead of being sent again. If the store rejects that write, the
+poller keeps retrying it at the start of each pass and claims nothing until it
+lands. A `409` without either name keeps the
+bounded `provider_rejected` retry.
+
+Retry and deferral times are read after the preflight that precedes them. A
+failed attempt's `last_attempt_at` is when the provider answered, and a
+limiter, circuit, or budget wait starts when that dependency answered, so slow
+preflight never makes a row claimable early.
+
 ## Credential expiry alerts; other cancellations do not
 
 A request is `cancelled` when its credential is superseded, expired, revoked, or
 otherwise no longer actionable before handoff — a user resends a verification
-email, or an invitation is revoked. Superseded, revoked, and other non-expiry
-cancellations remain expected lifecycle handling and do not alert.
+email, an invitation is revoked, or the invitation's Organization is suspended.
+The dispatcher writes only two `cancel_reason` values: `credential_expired`
+and `not_actionable`, which covers every other case. The schema still admits
+`credential_superseded` and `credential_revoked`, but no current writer
+produces them (#441). Superseded, revoked, and other non-expiry cancellations
+remain expected lifecycle handling and do not alert.
+
+A suspended Organization's queued invitation email is cancelled at send time,
+including one queued before the suspension: the credential check reads the
+Organization's status with the invitation (#441).
 
 Credential expiry is different: an increase in queued credentials expiring
 before dispatch is an operational failure signal. The bounded cancellation
@@ -462,12 +499,15 @@ First steps:
 ## What an operator can read
 
 The durable row keeps delivery state and attempt evidence after the payload is
-erased, so a failed request can be investigated without any customer data:
+erased, so a failed request can be investigated without reading an address, a
+raw credential, or a message body. `credential_id` is an opaque id, but an
+operator who can read the matching invitation or token row can link the request
+to its recipient:
 
 ```sql
 SELECT id, kind, status, attempts, last_attempt_at, last_error_code,
-       cancel_reason, created_at, completed_at, failure_reported_at,
-       failure_notify_lease_expires_at
+       cancel_reason, credential_id, created_at, completed_at,
+       failure_reported_at, failure_notify_lease_expires_at
 FROM email_delivery_requests
 WHERE status = 'failed'
 ORDER BY completed_at DESC;
@@ -477,6 +517,13 @@ On a terminal request `payload_ciphertext` is `NULL` and the lease columns are
 released. `attempts` is the count used, `last_error_code` the bounded cause, and
 `completed_at` when the request was given up on. For a `cancelled` row read
 `cancel_reason` instead; `last_error_code` is not set.
+
+`credential_id` names the verification token (`evt_`), password reset token
+(`prt_`), or Organization Invitation (`oiv_`) the request was sent for, and is
+`NULL` for notices and for rows queued before #441. An `invitation.sent` or
+`invitation.resent` audit event records the request it queued as
+`detail.emailDeliveryRequestId`, so support can follow an invitation to its
+email and back without matching timestamps.
 
 Three states an operator will meet need attention outside the poller:
 

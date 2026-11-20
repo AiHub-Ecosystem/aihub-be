@@ -7,10 +7,16 @@ import type {
   EmailDeliveryDispatchState,
   EmailDeliveryErrorCode,
   EmailDeliveryRequestRecord,
-  EmailDispatchStorePort,
   EmailOutboxWalSlotHealth,
   ReleaseUnspentEmailAttemptInput,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-delivery-request.types';
+import type {
+  EmailDispatchAttemptOutcomePort,
+  EmailDispatchClaimPort,
+  EmailDispatchFailureReportPort,
+  EmailDispatchSweepPort,
+  EmailDispatchWalReadPort,
+} from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 import {
   type EmailDeliveryBacklogRow,
   PostgresEmailDeliveryRequestRepository,
@@ -24,7 +30,14 @@ import { readEmailOutboxWalSlotHealth } from './postgres-email-outbox-wal-slot-h
  * Claims run in a short transaction; dispatch runs outside it, so no database
  * connection is held while a provider call is in flight.
  */
-export class PostgresEmailDispatchStore implements EmailDispatchStorePort {
+export class PostgresEmailDispatchStore
+  implements
+    EmailDispatchClaimPort,
+    EmailDispatchAttemptOutcomePort,
+    EmailDispatchSweepPort,
+    EmailDispatchFailureReportPort,
+    EmailDispatchWalReadPort
+{
   constructor(
     private readonly client: Parameters<typeof claimEmailDeliveryRequests>[0],
     private readonly requests = new PostgresEmailDeliveryRequestRepository(),

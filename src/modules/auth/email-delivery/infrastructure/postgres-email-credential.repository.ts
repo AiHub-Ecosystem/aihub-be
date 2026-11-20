@@ -1,8 +1,8 @@
 import type {
   EmailCredentialActionabilityPort,
   EmailCredentialState,
-  EmailDeliveryKind,
-} from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+} from '@/modules/auth/email-delivery/application/email-credential-actionability.port';
+import type { EmailDeliveryKind } from '@/modules/auth/email-delivery/application/email-delivery-request.types';
 
 import type { AuthSqlClient } from '@/modules/auth/shared/infrastructure/auth-prisma';
 import { authStoreError } from '@/modules/auth/shared/infrastructure/auth-row';
@@ -11,9 +11,15 @@ import { authStoreError } from '@/modules/auth/shared/infrastructure/auth-row';
 interface CredentialState {
   readonly expiresAt: Date;
   readonly consumedAt: Date | null;
+  /** Set for an invitation: whose Organization it admits a member to. */
+  readonly organization?: { readonly status: string };
 }
 
 const CREDENTIAL = { expiresAt: true, consumedAt: true } as const;
+const INVITATION_CREDENTIAL = {
+  ...CREDENTIAL,
+  organization: { select: { status: true } },
+} as const;
 
 export class PostgresEmailCredentialRepository
   implements EmailCredentialActionabilityPort
@@ -48,6 +54,15 @@ export class PostgresEmailCredentialRepository
       throw authStoreError('Email credential data is invalid');
     }
 
+    // A suspended Organization cannot accept a member, and its queued
+    // invitations stop going out too, including ones queued before the
+    // suspension (#441). Only a known-active Organization keeps them open.
+    if (
+      row.organization !== undefined &&
+      row.organization.status !== 'active'
+    ) {
+      return 'closed';
+    }
     if (expiresAt.getTime() <= input.now.getTime()) {
       return 'expired';
     }
@@ -79,7 +94,7 @@ export class PostgresEmailCredentialRepository
       case 'organization_invite_email':
         return this.client.organizationInvitation.findUnique({
           where,
-          select: CREDENTIAL,
+          select: INVITATION_CREDENTIAL,
         });
       default:
         return Promise.resolve(null);

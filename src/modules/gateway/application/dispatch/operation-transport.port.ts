@@ -12,6 +12,8 @@ export interface TransportCall {
   readonly signal: AbortSignal;
   /** Called with the status code once any response has arrived. */
   readonly onResponseReceived: (statusCode: number) => void;
+  /** Called only when the circuit breaker admits the one HTTP action. */
+  readonly onAttemptAdmitted?: () => Promise<void>;
 }
 
 export interface PreparedDispatch<O extends OperationId> {

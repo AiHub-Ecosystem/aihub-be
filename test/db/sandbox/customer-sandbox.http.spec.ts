@@ -37,6 +37,8 @@ import {
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
 import { generateApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
+import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/redis-identity.store';
+import { USER_ASSERTION_REPLAY_MARKER } from '@/modules/identity/user-assertions/application/user-assertion-replay-marker.port';
 import {
   QUOTA_COUNTER_SEED,
   type QuotaCounterSeedPort,
@@ -53,12 +55,14 @@ import {
   testDatabaseUrl,
 } from '../shared/database';
 import { openFlushedSandboxRedis } from '../shared/flushed-sandbox-redis';
+import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-proxy';
 import {
   createTenantIdentity,
   signUserAssertion,
 } from '../tenant-isolation/fixtures';
 
 const ORGANIZATION_ID = 'org_sandbox_customer';
+const OTHER_ORGANIZATION_ID = 'org_sandbox_customer_replay_scope';
 const DEMO_ORGANIZATION_ID = 'org_sandbox_demo_config_test';
 const ASSERTION_ISSUER = 'https://identity.customer.test';
 const GRADE_PATH = '/v1/ielts/writing/task1/grade';
@@ -129,8 +133,12 @@ let apiKey: {
   readonly hash: string;
 };
 let apiKeyCreation: LightMyRequestResponse;
-let signedAssertion: string;
+let customerIdentity: Awaited<ReturnType<typeof createTenantIdentity>>;
+let otherCustomerIdentity: Awaited<ReturnType<typeof createTenantIdentity>>;
 let downstreamCalls: number;
+let replayProxy: TcpFaultProxy;
+let replayRedisUrl: string;
+let replayStore: RedisIdentityStore;
 let controlPlaneReaderRole: string;
 let ownerUserId: string;
 let adminUserId: string;
@@ -212,14 +220,9 @@ beforeAll(async () => {
   const controlPlaneReaderUrl = new URL(testDatabaseUrl());
   controlPlaneReaderUrl.username = controlPlaneReaderRole;
   controlPlaneReaderUrl.password = controlPlaneReaderPassword;
-  const identity = await createTenantIdentity(
+  customerIdentity = await createTenantIdentity(
     ASSERTION_ISSUER,
     'customer-sandbox-key',
-  );
-  signedAssertion = await signUserAssertion(
-    identity,
-    new Date(),
-    'aihub:sandbox',
   );
 
   await controlPlane.query(
@@ -234,7 +237,11 @@ beforeAll(async () => {
        (organization_id, issuer, jwks_url, public_keys_jwks,
         allowed_algorithms, max_assertion_ttl_seconds, status)
      VALUES ($1, $2, NULL, $3::jsonb, ARRAY['RS256'], 300, 'active')`,
-    [ORGANIZATION_ID, identity.issuer, JSON.stringify(identity.jwks)],
+    [
+      ORGANIZATION_ID,
+      customerIdentity.issuer,
+      JSON.stringify(customerIdentity.jwks),
+    ],
   );
 
   for (const role of ['owner', 'admin', 'member'] as const) {
@@ -255,6 +262,35 @@ beforeAll(async () => {
       [ORGANIZATION_ID, id, role],
     );
   }
+
+  otherCustomerIdentity = await createTenantIdentity(
+    'https://identity.customer-replay-scope.test',
+    'customer-replay-scope-key',
+  );
+  await controlPlane.query(
+    `INSERT INTO organizations
+       (id, name, entitlements, rate_limit_rpm, max_concurrent,
+        monthly_request_quota, hard_stop_on_quota)
+      VALUES ($1, 'Replay scope customer', ARRAY['writing'], 600, 20, 0, true)`,
+    [OTHER_ORGANIZATION_ID],
+  );
+  await controlPlane.query(
+    `INSERT INTO organization_identity_configs
+       (organization_id, issuer, jwks_url, public_keys_jwks,
+        allowed_algorithms, max_assertion_ttl_seconds, status)
+     VALUES ($1, $2, NULL, $3::jsonb, ARRAY['RS256'], 300, 'active')`,
+    [
+      OTHER_ORGANIZATION_ID,
+      otherCustomerIdentity.issuer,
+      JSON.stringify(otherCustomerIdentity.jwks),
+    ],
+  );
+  await controlPlane.query(
+    `INSERT INTO organization_members
+       (organization_id, user_account_id, role, status)
+     VALUES ($1, $2, 'owner', 'active')`,
+    [OTHER_ORGANIZATION_ID, ownerUserId],
+  );
 
   controlPlaneConfiguration = createAppConfiguration('production');
   controlPlaneConnectionConfiguration = createConnectionConfiguration(
@@ -314,6 +350,16 @@ beforeAll(async () => {
     controlPlaneReaderUrl.toString(),
     'sandbox',
   );
+  const sandboxRedisUrl = new URL(sandboxTestRedisUrl());
+  replayProxy = new TcpFaultProxy({
+    host: '127.0.0.1',
+    port: Number(sandboxRedisUrl.port || 6379),
+  });
+  const replayProxyPort = await replayProxy.listen();
+  sandboxRedisUrl.hostname = '127.0.0.1';
+  sandboxRedisUrl.port = String(replayProxyPort);
+  replayRedisUrl = sandboxRedisUrl.toString();
+  replayStore = new RedisIdentityStore(replayRedisUrl);
 
   downstreamCalls = 0;
   const downstreamStub = {
@@ -339,6 +385,11 @@ beforeAll(async () => {
     .useValue(appConfiguration)
     .overrideProvider(RUNTIME_CONNECTION_CONFIGURATION)
     .useValue(appConnectionConfiguration)
+    .overrideProvider(USER_ASSERTION_REPLAY_MARKER)
+    .useValue({
+      reserve: (input: Parameters<RedisIdentityStore['reserve']>[0]) =>
+        replayStore.reserve(input),
+    })
     .overrideProvider(DownstreamHttpClient)
     .useValue(downstreamStub)
     // Graded requests are admitted by the pipeline's admission, not by the
@@ -414,6 +465,7 @@ function createConnectionConfiguration(
 }
 
 beforeEach(async () => {
+  await replayProxy.setMode('normal');
   downstreamCalls = 0;
   await flushOwnedRedisDatabase(
     redis.duplicate({ db: 0, enableOfflineQueue: true }),
@@ -436,6 +488,8 @@ beforeEach(async () => {
 afterAll(async () => {
   await app?.close();
   await controlPlaneApp?.close();
+  await replayStore?.onModuleDestroy();
+  await replayProxy?.close();
   await redis?.quit().catch(() => undefined);
   if (controlPlaneReaderRole !== undefined) {
     await controlPlane
@@ -454,8 +508,12 @@ async function requestGrade(
   payload: Record<string, string>,
   idempotencyKey: string,
   host = 'api.sandbox.test',
-  userIdentity = signedAssertion,
+  userIdentity?: string,
+  apiKeyValue = apiKey.raw,
 ): Promise<LightMyRequestResponse> {
+  const assertion =
+    userIdentity ??
+    (await signUserAssertion(customerIdentity, new Date(), 'aihub:sandbox'));
   return await app
     .getHttpAdapter()
     .getInstance()
@@ -465,8 +523,8 @@ async function requestGrade(
       headers: {
         host,
         'content-type': 'application/json',
-        'x-api-key': apiKey.raw,
-        'x-user-identity': userIdentity,
+        'x-api-key': apiKeyValue,
+        'x-user-identity': assertion,
         'idempotency-key': idempotencyKey,
       },
       payload,
@@ -477,13 +535,14 @@ function createSandboxKey(
   userId: string,
   name = 'Sandbox integration',
   scopes: readonly string[] = ['writing.grade'],
+  organizationId = ORGANIZATION_ID,
 ): Promise<LightMyRequestResponse> {
   return controlPlaneApp
     .getHttpAdapter()
     .getInstance()
     .inject({
       method: 'POST',
-      url: `/v1/organizations/${ORGANIZATION_ID}/api-keys`,
+      url: `/v1/organizations/${organizationId}/api-keys`,
       headers: { authorization: `Bearer ${userId}.test.token` },
       payload: {
         name,
@@ -496,8 +555,17 @@ function createSandboxKey(
 function grade(
   idempotencyKey: string,
   host = 'api.sandbox.test',
+  userIdentity?: string,
+  apiKeyValue = apiKey.raw,
 ): Promise<LightMyRequestResponse> {
-  return requestGrade(GRADE_PATH, GRADE_INPUT, idempotencyKey, host);
+  return requestGrade(
+    GRADE_PATH,
+    GRADE_INPUT,
+    idempotencyKey,
+    host,
+    userIdentity,
+    apiKeyValue,
+  );
 }
 
 describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
@@ -509,7 +577,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       count: number;
     }>('SELECT count(*)::int AS count FROM organizations');
     expect(sandboxOrganization.rows[0]?.count).toBe(0);
-    expect(controlPlaneOrganizations.rows[0]?.count).toBe(1);
+    expect(controlPlaneOrganizations.rows[0]?.count).toBe(2);
 
     const [identityConfig, createOrganization] = await Promise.all([
       app
@@ -544,7 +612,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     ).resolves.toMatchObject({ rows: [{ count: 0 }] });
     await expect(
       controlPlane.query('SELECT count(*)::int AS count FROM organizations'),
-    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    ).resolves.toMatchObject({ rows: [{ count: 2 }] });
   });
 
   it('keeps the migrated demo key usable for assertion minting and Speaking', async () => {
@@ -724,6 +792,259 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       error: { code: 'FORBIDDEN' },
     });
   });
+
+  it('rejects a replayed Signed User Assertion before dispatching twice', async () => {
+    const assertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+    );
+    const first = await grade(
+      'sandbox-http-assertion-first',
+      'api.sandbox.test',
+      assertion,
+    );
+    const replay = await grade(
+      'sandbox-http-assertion-replay',
+      'api.sandbox.test',
+      assertion,
+    );
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(downstreamCalls).toBe(1);
+  });
+
+  it('rejects a used assertion when it is sent to another Writing operation', async () => {
+    const assertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+    );
+    const first = await grade(
+      'sandbox-http-cross-operation-first',
+      undefined,
+      assertion,
+    );
+    const replay = await requestGrade(
+      TASK2_PATH,
+      TASK2_INPUT,
+      'sandbox-http-cross-operation-replay',
+      'api.sandbox.test',
+      assertion,
+    );
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(downstreamCalls).toBe(1);
+  });
+
+  it('rejects a used assertion when another API key of the Organization sends it', async () => {
+    const secondKeyResponse = await createSandboxKey(
+      ownerUserId,
+      'Second replay-test key',
+    );
+    const secondKey = secondKeyResponse.json<{
+      data: { api_key: string };
+    }>().data.api_key;
+    const assertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+    );
+    const first = await grade(
+      'sandbox-http-cross-key-first',
+      undefined,
+      assertion,
+    );
+    const replay = await grade(
+      'sandbox-http-cross-key-replay',
+      'api.sandbox.test',
+      assertion,
+      secondKey,
+    );
+
+    expect(secondKeyResponse.statusCode).toBe(201);
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(downstreamCalls).toBe(1);
+  });
+
+  it('scopes a shared jti to its Organization over HTTP', async () => {
+    const secondKeyResponse = await createSandboxKey(
+      ownerUserId,
+      'Other Organization replay-scope key',
+      ['writing.grade'],
+      OTHER_ORGANIZATION_ID,
+    );
+    const secondKey = secondKeyResponse.json<{
+      data: { api_key: string };
+    }>().data.api_key;
+    const jti = '00000000-0000-4000-8000-000000000281';
+    const assertionA = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+      jti,
+    );
+    const assertionB = await signUserAssertion(
+      otherCustomerIdentity,
+      new Date(),
+      'aihub:sandbox',
+      jti,
+    );
+
+    const firstOrganization = await grade(
+      'sandbox-http-org-scope-a',
+      'api.sandbox.test',
+      assertionA,
+    );
+    const secondOrganization = await grade(
+      'sandbox-http-org-scope-b',
+      'api.sandbox.test',
+      assertionB,
+      secondKey,
+    );
+    const replayFirstOrganization = await grade(
+      'sandbox-http-org-scope-a-replay',
+      'api.sandbox.test',
+      assertionA,
+    );
+
+    expect(secondKeyResponse.statusCode).toBe(201);
+    expect(firstOrganization.statusCode).toBe(200);
+    expect(secondOrganization.statusCode).toBe(200);
+    expect(replayFirstOrganization.statusCode).toBe(401);
+    expect(replayFirstOrganization.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(downstreamCalls).toBe(2);
+  });
+
+  it('accepts at most one concurrent request with the same assertion', async () => {
+    const assertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+    );
+    const responses = await Promise.all([
+      grade('sandbox-http-concurrent-first', undefined, assertion),
+      grade('sandbox-http-concurrent-second', undefined, assertion),
+    ]);
+
+    expect(
+      responses
+        .map(({ statusCode }) => statusCode)
+        .sort((left, right) => left - right),
+    ).toEqual([200, 401]);
+    expect(
+      responses.find(({ statusCode }) => statusCode === 401)?.json(),
+    ).toMatchObject({ error: { code: 'INVALID_USER_IDENTITY' } });
+    expect(downstreamCalls).toBe(1);
+  });
+
+  it('keeps an assertion consumed when body validation fails', async () => {
+    const assertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+    );
+    const invalidBody = await requestGrade(
+      GRADE_PATH,
+      {} as Record<string, string>,
+      'sandbox-http-invalid-body-first',
+      'api.sandbox.test',
+      assertion,
+    );
+    const replay = await grade(
+      'sandbox-http-invalid-body-replay',
+      'api.sandbox.test',
+      assertion,
+    );
+
+    expect(invalidBody.statusCode).toBe(400);
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(downstreamCalls).toBe(0);
+  });
+
+  it('accepts only the Sandbox audience without consuming an assertion with the wrong audience', async () => {
+    const jti = '00000000-0000-4000-8000-000000000280';
+    const productionAssertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub',
+      jti,
+    );
+    const sandboxAssertion = await signUserAssertion(
+      customerIdentity,
+      new Date(),
+      'aihub:sandbox',
+      jti,
+    );
+    const productionAudience = await grade(
+      'sandbox-http-production-audience',
+      'api.sandbox.test',
+      productionAssertion,
+    );
+    const sandboxAudience = await grade(
+      'sandbox-http-sandbox-audience',
+      'api.sandbox.test',
+      sandboxAssertion,
+    );
+
+    expect(productionAudience.statusCode).toBe(401);
+    expect(productionAudience.json()).toMatchObject({
+      error: { code: 'INVALID_USER_IDENTITY' },
+    });
+    expect(sandboxAudience.statusCode).toBe(200);
+    expect(downstreamCalls).toBe(1);
+  });
+
+  it.each(['refuse', 'hang'] as const)(
+    'returns retryable 503 before dispatch when replay Redis is %s',
+    async (mode) => {
+      const assertion = await signUserAssertion(
+        customerIdentity,
+        new Date(),
+        'aihub:sandbox',
+      );
+      await replayProxy.setMode(mode);
+
+      let response: LightMyRequestResponse;
+      try {
+        response = await grade(
+          `sandbox-http-replay-redis-${mode}`,
+          'api.sandbox.test',
+          assertion,
+        );
+      } finally {
+        await replayProxy.setMode('normal');
+        await replayStore.onModuleDestroy();
+        replayStore = new RedisIdentityStore(replayRedisUrl);
+      }
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+          retryable: true,
+        },
+      });
+      expect(downstreamCalls).toBe(0);
+    },
+  );
 
   it('reads control-plane identity while writing usage, idempotency, and dispatch budget only to Sandbox', async () => {
     const response = await grade('sandbox-http-success-1');

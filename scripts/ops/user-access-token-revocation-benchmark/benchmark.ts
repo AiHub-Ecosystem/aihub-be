@@ -252,15 +252,21 @@ async function startProbeServer(prisma: PrismaClient) {
     revoke: async () => {},
     listActiveRevocations: async () => [],
   };
+  const dpopOffPolicy = {
+    mode: 'off' as const,
+    verifier: { verify: async () => undefined },
+  };
   const baselineGuard = new UserAccessJwtGuard(
     verifier,
     userAccounts,
     noRevocationLookup,
+    dpopOffPolicy,
   );
   const exactGuard = new UserAccessJwtGuard(
     verifier,
     userAccounts,
     revocations,
+    dpopOffPolicy,
   );
   const app = fastify({ logger: false });
   registerGuardRoute(app, 'baseline', baselineGuard);

@@ -31,7 +31,7 @@ function stubEmailOutbox(): EmailOutboxPort {
   return {
     withAdmission: async (_kind, op) => op(),
     reserveAuthenticationEmailRecipient: async () => true,
-    queue: async () => undefined,
+    queue: async () => 'edr_queued',
     withdraw: async () => undefined,
   };
 }
@@ -188,6 +188,10 @@ describe('User Account status and session revocation against PostgreSQL (Issue #
       verifier,
       userAccountRepository,
       tokenRevocations,
+      {
+        mode: 'off',
+        verifier: { verify: async () => undefined },
+      },
     );
 
     const bearerRequest = {

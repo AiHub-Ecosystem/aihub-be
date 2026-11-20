@@ -16,7 +16,7 @@ import {
   backgroundWorkStarted,
 } from '@/common/background-work-tracker';
 import { AppError } from '@/common/errors/app-error';
-import type { EmailDispatchStorePort } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
+import type { EmailDispatchWalReadPort } from '@/modules/auth/email-delivery/application/email-dispatch-store.port';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { EmailOutboxPollerScheduler } from '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler';
 import {
@@ -41,7 +41,7 @@ export interface EmailOutboxWalConsumerOptions {
   readonly enabled?: boolean;
   readonly applicationScope: 'production' | 'sandbox';
   readonly replicationUrl: string;
-  readonly store: EmailDispatchStorePort;
+  readonly store: EmailDispatchWalReadPort;
   readonly scheduler: EmailOutboxPollerScheduler;
   readonly slotName: string;
   readonly readConfirmedLsn: () => Promise<string | null>;
@@ -303,7 +303,7 @@ export class EmailOutboxWalConsumer
 
   private scheduleRetry(
     id: string,
-    state?: Awaited<ReturnType<EmailDispatchStorePort['readDispatchState']>>,
+    state?: Awaited<ReturnType<EmailDispatchWalReadPort['readDispatchState']>>,
   ): void {
     const now = Date.now();
     const retryDelay =

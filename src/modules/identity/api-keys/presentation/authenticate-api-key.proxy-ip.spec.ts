@@ -27,6 +27,8 @@ const REQUEST_CONFIG: RequestEnvironmentConfig = {
 
 class IpFailureCounter implements AuthFailureCounterPort {
   private readonly failures = new Map<string, number>();
+  lookupBudgetAllowed = true;
+  lookupBudgetCalls = 0;
 
   clear(): void {
     this.failures.clear();
@@ -45,18 +47,33 @@ class IpFailureCounter implements AuthFailureCounterPort {
   async consumeSandboxKeyLookup(): Promise<boolean> {
     return true;
   }
+
+  async consumeUncachedLookup() {
+    this.lookupBudgetCalls += 1;
+    return this.lookupBudgetAllowed
+      ? { allowed: true as const }
+      : {
+          allowed: false as const,
+          retryAfterMs: 45_000,
+        };
+  }
 }
 
 describe('API-key failure budgets behind the trusted proxy', () => {
   let fastify: FastifyInstance;
   let failures: IpFailureCounter;
   let authenticator: ApiKeyAuthenticator;
+  let repositoryLookups: number;
 
   beforeAll(async () => {
     failures = new IpFailureCounter();
+    repositoryLookups = 0;
     authenticator = new ApiKeyAuthenticator(
       {
-        findByHash: async () => null,
+        findByHash: async () => {
+          repositoryLookups += 1;
+          return null;
+        },
         touchLastUsed: async () => undefined,
       } satisfies ApiKeyRepositoryPort,
       {
@@ -71,6 +88,12 @@ describe('API-key failure budgets behind the trusted proxy', () => {
     fastify = Fastify(createAppFastifyProxyOptions('172.16.7.1'));
     fastify.setErrorHandler((error, _request, reply) => {
       if (error instanceof AppError) {
+        if (error.retryAfterMs !== undefined) {
+          reply.header(
+            'Retry-After',
+            String(Math.ceil(error.retryAfterMs / 1_000)),
+          );
+        }
         return reply.status(error.httpStatus).send({ code: error.code });
       }
       return reply.status(500).send({ code: 'INTERNAL_ERROR' });
@@ -92,12 +115,16 @@ describe('API-key failure budgets behind the trusted proxy', () => {
 
   beforeEach(() => {
     failures.clear();
+    failures.lookupBudgetAllowed = true;
+    failures.lookupBudgetCalls = 0;
+    repositoryLookups = 0;
   });
 
   async function attempt(
     clientIp: string,
     forgedIp: string,
     remoteAddress = '172.16.7.1',
+    apiKey = 'invalid',
   ) {
     return fastify.inject({
       method: 'POST',
@@ -105,7 +132,7 @@ describe('API-key failure budgets behind the trusted proxy', () => {
       remoteAddress,
       headers: {
         host: 'localhost',
-        'x-api-key': 'invalid',
+        'x-api-key': apiKey,
         'x-forwarded-for': `${forgedIp}, ${clientIp}`,
       },
     });
@@ -149,5 +176,22 @@ describe('API-key failure budgets behind the trusted proxy', () => {
       authenticateApiKey(request, authenticator, REQUEST_CONFIG),
     ).rejects.toMatchObject({ httpStatus: 401 });
     await expect(failures.get('unknown')).resolves.toBe(1);
+  });
+
+  it('refuses an uncached lookup over HTTP with Retry-After before Postgres', async () => {
+    failures.lookupBudgetAllowed = false;
+
+    const response = await attempt(
+      '198.51.100.10',
+      '198.51.100.11',
+      '172.16.7.1',
+      `aihub_sk_${'A'.repeat(43)}`,
+    );
+
+    expect(response.statusCode).toBe(429);
+    expect(response.headers['retry-after']).toBe('45');
+    expect(response.json()).toEqual({ code: 'RATE_LIMITED' });
+    expect(failures.lookupBudgetCalls).toBe(1);
+    expect(repositoryLookups).toBe(0);
   });
 });

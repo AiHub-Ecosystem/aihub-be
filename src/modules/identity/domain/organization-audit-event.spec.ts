@@ -123,6 +123,21 @@ describe('organizationAuditEvent', () => {
     });
   });
 
+  it('names the Email Delivery Request a sent invitation queued', () => {
+    const event = organizationAuditEvent(STAMP, {
+      action: 'invitation.resent',
+      invitationId: 'oiv_01J00000000000000000000003',
+      email: 'invitee@example.com',
+      role: 'member',
+      emailDeliveryRequestId: 'edr_01J00000000000000000000004',
+    });
+
+    expect(event.detail).toEqual({
+      role: 'member',
+      emailDeliveryRequestId: 'edr_01J00000000000000000000004',
+    });
+  });
+
   it('records an applied invitation revocation without token material', () => {
     const event = organizationAuditEvent(STAMP, {
       action: 'invitation.revoked',

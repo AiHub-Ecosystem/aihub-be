@@ -155,6 +155,7 @@ model EmailDeliveryRequest {
   failureNotifyLeaseExpiresAt     DateTime? @map("failure_notify_lease_expires_at") @db.Timestamptz(6)
   organizationId                  String?  @map("organization_id")
   inviterId                       String?  @map("inviter_id")
+  credentialId                    String?  @map("credential_id")
 
   @@index([status, createdAt], map: "email_delivery_requests_status_created_idx")
   @@map("email_delivery_requests")
@@ -900,7 +901,7 @@ model UserMfaRecoveryCode {
 
 /// A browser session cookie's server-side record.
 ///
-/// `CHECK` constraints are owned by migration 0033.
+/// `CHECK` constraints are owned by migrations 0033 and 0069.
 /// @owner auth
 model WebSession {
   id            String      @id
@@ -910,6 +911,7 @@ model WebSession {
   expiresAt     DateTime    @map("expires_at") @db.Timestamptz(6)
   lastRenewedAt DateTime    @map("last_renewed_at") @db.Timestamptz(6)
   revokedAt     DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  proofKeyJkt   String?     @map("proof_key_jkt")
   userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)
 
   @@index([userAccountId], map: "web_sessions_user_account_id")

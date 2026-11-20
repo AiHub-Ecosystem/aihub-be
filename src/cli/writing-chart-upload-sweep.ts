@@ -38,7 +38,7 @@ async function openRepository(
 
 export async function runWritingChartUploadSweepCommand(
   input: WritingChartUploadSweepCliInput,
-) {
+): Promise<Awaited<ReturnType<WritingChartUploadSweep['run']>>> {
   const repository = await openRepository(input);
   let storage = input.storage;
   if (storage === undefined) {

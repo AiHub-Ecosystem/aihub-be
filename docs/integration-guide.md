@@ -1646,31 +1646,31 @@ missing. A hint that AIHUB spreads with random jitter arrives with a different
 value for each client, so clients refused at the same moment are not all told to
 come back at the same instant:
 
-| Refusal                                                                                  | `retry_after_ms`                                                                                                                        |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `RATE_LIMITED` (per-key rate)                                                            | Until your key's window resets, plus 0–999 ms                                                                                           |
-| `RATE_LIMITED` (same-key retry budget)                                                   | 60 s, plus 0–999 ms                                                                                                                     |
-| `RATE_LIMITED` (API key authentication failures)                                         | 5 minutes: the window of 20 failures                                                                                                    |
-| `RATE_LIMITED` (when account sign-in, verification, or password recovery knows the wait) | Until the longest exhausted window resets; without a known wait, neither the field nor `Retry-After` is sent                            |
-| `RATE_LIMITED` (when an Organization invitation knows the wait)                          | Until the exhausted window resets (15 minutes or 24 hours); without a known wait the field is absent                                    |
-| `RATE_LIMITED` (Writing chart uploads)                                                   | 1 hour, the whole rolling window                                                                                                        |
-| `CONCURRENCY_LIMIT`                                                                      | 500–999 ms                                                                                                                              |
-| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                            | 1000–1999 ms                                                                                                                            |
-| `IDEMPOTENCY_CONFLICT` (request in flight)                                               | 2000–2999 ms                                                                                                                            |
-| `QUOTA_EXCEEDED`                                                                         | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset                                                         |
-| `REDIS_UNAVAILABLE`                                                                      | 1000–1999 ms                                                                                                                            |
-| `DATABASE_UNAVAILABLE`                                                                   | 1000–1999 ms                                                                                                                            |
-| `AVATAR_STORAGE_UNAVAILABLE`                                                             | 1000–1999 ms                                                                                                                            |
-| `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`                                                     | 1000–1999 ms                                                                                                                            |
-| `WRITING_CHART_STORAGE_UNAVAILABLE`                                                      | 1000–1999 ms                                                                                                                            |
-| `AUTH_ARGON2_CAPACITY`                                                                   | 1000–1999 ms                                                                                                                            |
-| `EMAIL_DELIVERY_BACKLOGGED`                                                              | The time the oldest waiting email has left before its link expires, between 30 seconds and 15 minutes, plus 0–999 ms                    |
-| `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source failed or is in a cooldown)        | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent for any other cause, such as the identity configuration store |
-| `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)              | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached  |
-| `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`)       | That wait, read from the AI service's `Retry-After`; absent for any other status                                                        |
-| `AI_SERVICE_THROTTLED` (when the AI service answered `429` with its own `Retry-After`)   | That wait, read from the AI service's `Retry-After`; absent when the AI service sent none                                               |
-| `AUDIO_UNREADABLE` (when the AI service answered `503` with its own `Retry-After`)       | The same wait. The refusal stays `retryable: false`: send a new recording, not the same file again                                      |
-| `SERVICE_OVERLOADED`                                                                     | 1000–1999 ms; the AI Services were saturated and AIHUB refused the request before reading its body                                      |
+| Refusal                                                                                  | `retry_after_ms`                                                                                                                                               |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RATE_LIMITED` (per-key rate)                                                            | Until your key's window resets, plus 0–999 ms                                                                                                                  |
+| `RATE_LIMITED` (same-key retry budget)                                                   | 60 s, plus 0–999 ms                                                                                                                                            |
+| `RATE_LIMITED` (API key authentication failures)                                         | 5 minutes: the window of 20 failures                                                                                                                           |
+| `RATE_LIMITED` (when account sign-in, verification, or password recovery knows the wait) | Until the longest exhausted window resets; without a known wait, neither the field nor `Retry-After` is sent                                                   |
+| `RATE_LIMITED` (when an Organization invitation knows the wait)                          | Until the exhausted window resets (15 minutes or 24 hours); without a known wait the field is absent                                                           |
+| `RATE_LIMITED` (Writing chart uploads)                                                   | 1 hour, the whole rolling window                                                                                                                               |
+| `CONCURRENCY_LIMIT`                                                                      | 500–999 ms                                                                                                                                                     |
+| `CONCURRENCY_LIMIT` (Speaking upload ceiling)                                            | 1000–1999 ms                                                                                                                                                   |
+| `IDEMPOTENCY_CONFLICT` (request in flight)                                               | 2000–2999 ms                                                                                                                                                   |
+| `QUOTA_EXCEEDED`                                                                         | Until the next UTC month starts (can be weeks), plus a fixed 0–10 minute offset                                                                                |
+| `REDIS_UNAVAILABLE`                                                                      | 1000–1999 ms                                                                                                                                                   |
+| `DATABASE_UNAVAILABLE`                                                                   | 1000–1999 ms                                                                                                                                                   |
+| `AVATAR_STORAGE_UNAVAILABLE`                                                             | 1000–1999 ms                                                                                                                                                   |
+| `SPEAKING_AUDIO_STORAGE_UNAVAILABLE`                                                     | 1000–1999 ms                                                                                                                                                   |
+| `WRITING_CHART_STORAGE_UNAVAILABLE`                                                      | 1000–1999 ms                                                                                                                                                   |
+| `AUTH_ARGON2_CAPACITY`                                                                   | 1000–1999 ms                                                                                                                                                   |
+| `EMAIL_DELIVERY_BACKLOGGED`                                                              | The time the oldest waiting email has left before its link expires, between 30 seconds and 15 minutes, plus 0–999 ms                                           |
+| `IDENTITY_PROVIDER_UNAVAILABLE` (when the JWKS source failed or is in a cooldown)        | The remaining cooldown (30 s after a cold failure), plus 0–999 ms; absent for any other cause, such as the identity configuration store or replay-marker Redis |
+| `AI_SERVICE_UNAVAILABLE` (when AIHUB has stopped sending to the AI service)              | The time left before AIHUB tries the AI service again, at most 30 s; absent when the AI service itself refused or could not be reached                         |
+| `AI_SERVICE_ERROR` (when the AI service answered `503` with its own `Retry-After`)       | That wait, read from the AI service's `Retry-After`; absent for any other status                                                                               |
+| `AI_SERVICE_THROTTLED` (when the AI service answered `429` with its own `Retry-After`)   | That wait, read from the AI service's `Retry-After`; absent when the AI service sent none                                                                      |
+| `AUDIO_UNREADABLE` (when the AI service answered `503` with its own `Retry-After`)       | The same wait. The refusal stays `retryable: false`: send a new recording, not the same file again                                                             |
+| `SERVICE_OVERLOADED`                                                                     | 1000–1999 ms; the AI Services were saturated and AIHUB refused the request before reading its body                                                             |
 
 Every row with a hint also sends `Retry-After`. The header and the field never
 disagree: the header is the field rounded up to whole seconds.
@@ -1696,7 +1696,7 @@ separate table below.
 |  400 | `INVALID_REQUEST`               | Body failed validation, or carried an unknown field                                                                                        | Fix the request. Retrying is pointless                                                                             |
 |  401 | `UNAUTHORIZED`                  | Missing, unknown, revoked, or expired API key                                                                                              | Check the credential                                                                                               |
 |  401 | `USER_IDENTITY_REQUIRED`        | User-scoped operation called without `X-User-Identity`                                                                                     | Send `X-User-Identity`                                                                                             |
-|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification                                                         | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
+|  401 | `INVALID_USER_IDENTITY`         | Declared User ID breaks the rule, or the Signed User Assertion failed verification or was already used                                     | Declared: fix the value. Signed: mint a fresh assertion; check issuer, `kid`, and JWKS                             |
 |  403 | `FORBIDDEN`                     | Key lacks the scope for this operation                                                                                                     | Ask your Organization owner or AIHUB support to enable the scope and issue an appropriate key                      |
 |  403 | `ENVIRONMENT_NOT_ALLOWED`       | Key is not valid for this environment                                                                                                      | Use the key issued for that environment                                                                            |
 |  404 | `NOT_FOUND`                     | No such route, or a method the route does not accept; a v2 stored-result ID is unknown or belongs to another End-User                      | Check path and method; for v2 reads, verify the ID and User Identity                                               |
@@ -1713,7 +1713,7 @@ separate table below.
 |  503 | `AI_SERVICE_UNAVAILABLE`        | AI service unreachable or not accepting requests                                                                                           | Retry with backoff                                                                                                 |
 |  503 | `EMAIL_DELIVERY_BACKLOGGED`     | The email queue is too far behind to deliver a link before it expires (registration, resend, password recovery, invitation)                | Retry after `retry_after_ms`; the refused request created nothing and used no rate limit                           |
 |  503 | `DATABASE_UNAVAILABLE`          | AIHUB's database could not be reached, did not answer in time, or timed out a statement                                                    | Retry with backoff; observe `retry_after_ms` and `Retry-After` when present                                        |
-|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, or could not load public keys in signed mode                                                  | Retry; if using signed mode, check the configured JWKS source. The API key is fine                                 |
+|  503 | `IDENTITY_PROVIDER_UNAVAILABLE` | AIHUB could not read identity configuration, load public keys, or confirm the single-use assertion marker in Redis                         | Follow the identity mode; signed mode needs a fresh assertion. Check JWKS reachability. The API key is fine        |
 |  503 | `REDIS_UNAVAILABLE`             | AIHUB could not safely enforce a rate limit, check graded admission, or acquire/release its concurrency permit                             | Retry after `retry_after_ms`; AIHUB does not admit using local rate-limit counters                                 |
 |  503 | `SERVICE_OVERLOADED`            | The AI Services were saturated, so AIHUB refused a low-priority request before reading its body                                            | Retry after `Retry-After`; a `critical` route such as sign-in still answers                                        |
 |  503 | `RETRY_BUDGET_UNAVAILABLE`      | Reserved: AIHUB no longer returns this code; a Redis failure while checking graded admission is `REDIS_UNAVAILABLE`                        | If you handle it, treat it as `REDIS_UNAVAILABLE`: retry after `retry_after_ms`                                    |
@@ -1739,10 +1739,11 @@ request errors use `INVALID_REQUEST` from the table above.
 |  503 | `IDENTITY_CONFIG_CACHE_UNAVAILABLE`     | AIHUB could not clear cached identity configuration after saving           | Read the current configuration with `GET /v1/organizations/{organization_id}/identity-config` before retrying; the write may already have been saved |
 
 `IDENTITY_PROVIDER_UNAVAILABLE` on a grading request means AIHUB could not
-read the Organization's identity configuration, or could not use its JWKS
-source in signed mode. A configuration-store outage can affect either identity
-mode. It is a `503`, not a `401`: the API key is not the problem, and
-regenerating it will not help.
+read the Organization's identity configuration, use its JWKS source in signed
+mode, or confirm a Signed User Assertion's single-use marker in Redis. A
+configuration-store outage can affect either identity mode. It is a `503`, not
+a `401`: the API key is not the problem, and regenerating it will not help.
+In signed mode, retry with a fresh Signed User Assertion.
 
 ### Retry policy that works
 
@@ -1753,8 +1754,18 @@ regenerating it will not help.
   delay. Fixed delays make every client retry in lockstep and knock the service
   over again just as it recovers.
 - Cap at two or three attempts.
+- With Signed User Assertions, mint a fresh assertion with a fresh `jti` for
+  every HTTP attempt, including retries. A request keeps its assertion
+  consumed after later validation or dispatch failures, so never retry with the
+  same assertion. Reuse the same `Idempotency-Key` for a retry of a supported
+  operation such as Writing.
 - Always resend the same `Idempotency-Key` when retrying a Writing grade; do not
   blindly retry Speaking.
+
+Replay protection depends on ephemeral Redis state. If Redis loses marker data
+through restart, restore, or flush, a still-valid assertion may be accepted
+again during its remaining validity window. An attacker holding both an
+assertion and a matching API key may also win its first-use race.
 
 ### Rate-limit header fields
 

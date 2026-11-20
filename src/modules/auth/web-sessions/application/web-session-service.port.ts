@@ -1,3 +1,4 @@
+import type { DpopProofKeyInput } from './dpop-proof-key';
 import type { IssuedUserAccessToken } from './user-access-token.port';
 
 export interface CreatedWebSession {
@@ -39,6 +40,8 @@ export interface WebSessionServicePort {
   exchangeWebSession(
     input: {
       readonly token: string | undefined;
+      /** When present, the issued access token is bound to this Client proof key. */
+      readonly proofKey?: DpopProofKeyInput | undefined;
     },
     endUserIp: string | undefined,
   ): Promise<IssuedUserAccessToken>;

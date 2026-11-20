@@ -11,6 +11,7 @@ import type {
   ApiKeyRepositoryPort,
   AuthFailureCounterPort,
 } from './api-key-authenticator.port';
+import { hashApiKey } from './organization-api-key-generator';
 
 const VALID_KEY = `aihub_sk_${'A'.repeat(43)}`;
 
@@ -19,6 +20,15 @@ async function rejectedAuthCount(): Promise<number> {
     .split('\n')
     .find((sample) =>
       sample.startsWith('aihub_rejected_total{reason="auth"} '),
+    );
+  return Number(line?.split(' ').at(-1) ?? 0);
+}
+
+async function rejectedRateLimitCount(): Promise<number> {
+  const line = (await getMetrics())
+    .split('\n')
+    .find((sample) =>
+      sample.startsWith('aihub_rejected_total{reason="rate_limit"} '),
     );
   return Number(line?.split(' ').at(-1) ?? 0);
 }
@@ -90,6 +100,8 @@ class FakeFailureCounter implements AuthFailureCounterPort {
   failures = 0;
   sandboxLookups = 0;
   sandboxLookupAllowed = true;
+  uncachedLookups = 0;
+  uncachedLookupAllowed = true;
 
   get(_ip: string): Promise<number> {
     return Promise.resolve(this.failures);
@@ -103,6 +115,18 @@ class FakeFailureCounter implements AuthFailureCounterPort {
   consumeSandboxKeyLookup(_hashHex: string): Promise<boolean> {
     this.sandboxLookups += 1;
     return Promise.resolve(this.sandboxLookupAllowed);
+  }
+
+  consumeUncachedLookup() {
+    this.uncachedLookups += 1;
+    return Promise.resolve(
+      this.uncachedLookupAllowed
+        ? { allowed: true as const }
+        : {
+            allowed: false as const,
+            retryAfterMs: 45_000,
+          },
+    );
   }
 }
 
@@ -305,7 +329,7 @@ describe('ApiKeyAuthenticator', () => {
   });
 
   it('shares an ordinary Postgres lookup between concurrent misses for one key', async () => {
-    const { authenticator, repository } = createAuthenticator();
+    const { authenticator, repository, failures } = createAuthenticator();
     let releaseLookup: ((record: ApiKeyRecord | null) => void) | undefined;
     let markLookupStarted: (() => void) | undefined;
     const lookupStarted = new Promise<void>((resolve) => {
@@ -332,6 +356,7 @@ describe('ApiKeyAuthenticator', () => {
 
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
     expect(repository.calls).toBe(1);
+    expect(failures.uncachedLookups).toBe(1);
   });
 
   it('rejects a new hash at flight capacity while coalescing an existing hash', async () => {
@@ -436,6 +461,98 @@ describe('ApiKeyAuthenticator', () => {
     expect((error as AppError).code).toBe('RATE_LIMITED');
     expect(repository.calls).toBe(0);
     expect(await rejectedAuthCount()).toBe(before + 1);
+  });
+
+  it('refuses an uncached lookup before Postgres when the deployment-wide budget is spent', async () => {
+    const before = await rejectedRateLimitCount();
+    const { authenticator, repository, failures } = createAuthenticator();
+    failures.uncachedLookupAllowed = false;
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      }),
+    ).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      httpStatus: 429,
+      retryable: true,
+      retryAfterMs: 45_000,
+    });
+    expect(repository.calls).toBe(0);
+    expect(await rejectedRateLimitCount()).toBe(before + 1);
+    const metrics = await getMetrics();
+    expect(metrics).not.toContain(VALID_KEY);
+    expect(metrics).not.toContain(hashApiKey(VALID_KEY));
+    expect(metrics).not.toContain('203.0.113.10');
+  });
+
+  it('does not spend the lookup budget on a cached key or on a malformed credential', async () => {
+    const { authenticator, cache, failures } = createAuthenticator();
+    cache.value = activeRecord;
+
+    await authenticator.authenticate({
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    });
+    await authenticator
+      .authenticate({
+        value: 'not-a-key',
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      })
+      .catch(() => undefined);
+
+    expect(failures.uncachedLookups).toBe(0);
+  });
+
+  it('still authenticates a cached key while the uncached lookup budget is exhausted', async () => {
+    const { authenticator, cache, failures } = createAuthenticator();
+    cache.value = activeRecord;
+    failures.uncachedLookupAllowed = false;
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      }),
+    ).resolves.toMatchObject({ organizationId: 'org_acme' });
+  });
+
+  it('spends the lookup budget on Sandbox fresh reads as well', async () => {
+    const { authenticator, repository, failures } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['sandbox'],
+    });
+    failures.uncachedLookupAllowed = false;
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'sandbox',
+        clientIp: '203.0.113.10',
+      }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(failures.uncachedLookups).toBe(1);
+    expect(repository.calls).toBe(0);
+  });
+
+  it('passes a budgeted miss to the bounded cache port', async () => {
+    const { authenticator, repository, cache } = createAuthenticator(null);
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    expect(repository.calls).toBe(1);
+    expect(cache.missCalls).toBe(1);
   });
 
   it('does not spend a failure-counter round trip on a valid, already-cached key', async () => {

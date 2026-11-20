@@ -111,6 +111,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
   AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
+  AIHUB_DPOP_MODE: 'off',
   AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
   AIHUB_PRODUCTION_HOST: 'api.ci-boot.invalid',
   AIHUB_STAGING_HOST: 'staging.ci-boot.invalid',

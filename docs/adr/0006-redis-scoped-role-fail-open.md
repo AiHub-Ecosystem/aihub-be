@@ -1,6 +1,6 @@
 # ADR-0006: Redis has a scoped role and fails open where blocking costs more
 
-- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116; non-graded rate-limit outages amended by ADR-0168)
+- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116; non-graded rate-limit outages amended by ADR-0168; API-key brute-force outage row amended by ADR-0174; Signed User Assertion replay checking amended by ADR-0175)
 - Date: decided 2026-09-07 in the implementation specification suite; file written 2026-11-07
 
 ## Context
@@ -14,15 +14,15 @@ Redis is a cache/counter/protection layer, never the durable source of truth
 for identity, usage, quota, or idempotency. Per-consumer outage behavior
 ([04-redis §F.5](../superpowers/specs/2026-09-07-aihub/04-redis.md)):
 
-| Lost capability        | Behavior                                                                 |
-| ---------------------- | ------------------------------------------------------------------------ |
-| API key cache          | Fall back to Postgres                                                    |
-| Brute-force protection | Allow through + alert (256-bit keys cannot be brute-forced in an outage) |
-| Rate limiting          | Graded: refuse 503; non-graded: allow through + local backstop           |
-| Concurrency limiting   | Refuse 503 `REDIS_UNAVAILABLE`                                           |
-| Quotas                 | Graded: refuse 503; non-graded: allow through + `quota_unverified`       |
-| JWKS cache             | Fetch directly from upstream                                             |
-| Auth & authorization   | **Zero Redis dependency** — never "Redis is down, so grant access"       |
+| Lost capability        | Behavior                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API key cache          | Fall back to Postgres                                                                                                                                               |
+| Brute-force protection | Allow through + alert (256-bit keys cannot be brute-forced in an outage), except API-key lookup admission; see [ADR-0174](0174-bounded-uncached-api-key-lookups.md) |
+| Rate limiting          | Graded: refuse 503; non-graded: allow through + local backstop                                                                                                      |
+| Concurrency limiting   | Refuse 503 `REDIS_UNAVAILABLE`                                                                                                                                      |
+| Quotas                 | Graded: refuse 503; non-graded: allow through + `quota_unverified`                                                                                                  |
+| JWKS cache             | Fetch directly from upstream                                                                                                                                        |
+| Auth & authorization   | No Redis dependency, except the Signed User Assertion replay marker; see [ADR-0175](0175-single-use-environment-bound-user-assertions.md)                           |
 
 The principle: **passing a request can be reconciled, blocking cannot.**
 Every admitted request is recorded durably in `usage_records`; the morning
@@ -32,6 +32,9 @@ trust, which no operational action can undo.
 
 The absolute boundary stands separately from the economics: failing open on
 rate limiting risks money; failing open on authorization risks customer data.
+For signed assertions, ADR-0175 adds a narrow Redis dependency to enforce
+single-use credentials; an unavailable or ambiguous marker reservation refuses
+the request with `503 IDENTITY_PROVIDER_UNAVAILABLE`, without a local fallback.
 
 ## Consequences
 

@@ -22,10 +22,19 @@ export interface EmailDispatchOptions {
   readonly idempotencyKey?: string;
 }
 
+/**
+ * Which idempotency conflict a provider `409` reported (#441). `concurrent`
+ * means a request under the same key is still being processed; `payload_changed`
+ * means an earlier request under the key carried a different payload, so that
+ * earlier handoff may already have been accepted.
+ */
+export type EmailIdempotencyConflict = 'concurrent' | 'payload_changed';
+
 /** The only response metadata dispatch policy may inspect or retain. */
 export interface EmailProviderResponse {
   readonly status: number;
   readonly retryAfter: string | undefined;
+  readonly idempotencyConflict?: EmailIdempotencyConflict;
 }
 
 export interface EmailSenderPort {

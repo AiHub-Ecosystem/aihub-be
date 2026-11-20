@@ -1,12 +1,17 @@
 import { Response } from 'undici';
 
+import { once } from 'node:events';
+
+import { numberReply } from '@/common/redis/number-reply';
 import { RedisAuthRateLimiter } from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
+import { apiKeyLookupBudgetKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationIdentityConfigRepository } from '@/modules/identity/organization-identity-configuration/infrastructure/postgres-organization-identity-config.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { RedisAuthFailureCounter } from '@/modules/identity/shared/infrastructure/redis-auth-failure-counter';
+import type { RedisIdentityClient } from '@/modules/identity/shared/infrastructure/redis-identity-client';
 import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/redis-identity.store';
 import { UserAssertionVerifier } from '@/modules/identity/user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from '@/modules/identity/user-assertions/application/user-identity-resolver';
@@ -50,6 +55,25 @@ function nowSeconds(): number {
 
 function credential(value: string) {
   return { value, environment: 'production', clientIp: '198.51.100.7' };
+}
+
+function redisIdentityClient(
+  client: ReturnType<typeof createTenantIsolationRedis>,
+): RedisIdentityClient {
+  return {
+    get: (key) => client.get(key),
+    pttl: (key) => client.pttl(key),
+    set: (key, value, mode, seconds, condition) =>
+      condition === undefined
+        ? client.set(key, value, mode, seconds)
+        : client.set(key, value, mode, seconds, condition),
+    del: (...keys) => client.del(...keys),
+    incr: (key) => client.incr(key),
+    eval: (script, numberOfKeys, ...args) =>
+      client.eval(script, numberOfKeys, ...args).then(numberReply),
+    expire: (key, seconds) => client.expire(key, seconds),
+    quit: () => client.quit(),
+  };
 }
 
 beforeAll(async () => {
@@ -114,8 +138,8 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         });
         expect(valid.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
 
-        // Repeated failures cannot be counted, so brute-force protection
-        // allows each attempt through to Postgres, which still refuses it.
+        // The process-local failure count and lookup budget keep the cold
+        // Redis path bounded; Postgres still refuses the unknown key.
         const unknownKey = generateOrganizationApiKey(TEST_NOW).raw;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const refused = await timed(() =>
@@ -138,7 +162,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           expect.objectContaining({
             event: 'redis_degraded',
             seam: 'auth_failure_counter',
-            policy: 'API-key protection is failing open until it recovers',
+            policy: 'using bounded process-local lookup and failure budgets',
           }),
         ]);
       } finally {
@@ -148,7 +172,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       }
     });
 
-    it('verifies a signed assertion against keys fetched from the issuer', async () => {
+    it('fails closed when Redis cannot reserve a verified assertion', async () => {
       await pool.query(
         `UPDATE organization_identity_configs
          SET jwks_url = $2, public_keys_jwks = NULL
@@ -182,6 +206,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         new UserAssertionVerifier(
           provider,
           new JoseUserAssertionCrypto(),
+          store,
           nowSeconds,
         ),
       );
@@ -195,12 +220,12 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
             organizationId: ORGANIZATION_A,
           }),
         );
-        if (verified.result.status !== 'fulfilled') {
-          throw verified.result.reason;
+        if (verified.result.status !== 'rejected') {
+          throw new Error('assertion verification unexpectedly succeeded');
         }
-        expect(verified.result.value).toMatchObject({
-          organizationId: ORGANIZATION_A,
-          mode: 'signed_assertion',
+        expect(verified.result.reason).toMatchObject({
+          code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+          retryable: true,
         });
         expect(verified.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
         expect(fetched).toEqual(['https://tenant-a.example.test/jwks']);
@@ -279,5 +304,56 @@ it('uses organization B only for B while Redis is refused', async () => {
     await proxy.setMode('normal');
     await store.onModuleDestroy();
     await failures.onModuleDestroy();
+  }
+});
+
+it('shares an exhausted uncached API-key budget across Redis clients', async () => {
+  const budgetKey = apiKeyLookupBudgetKey();
+  const firstRedis = createTenantIsolationRedis();
+  const secondRedis = createTenantIsolationRedis();
+  const warnings: Record<string, unknown>[] = [];
+  const logger = {
+    warn: (fields: Record<string, unknown>) => warnings.push(fields),
+    log: () => undefined,
+  };
+  const first = new RedisAuthFailureCounter(
+    '',
+    redisIdentityClient(firstRedis),
+    logger,
+  );
+  const second = new RedisAuthFailureCounter(
+    '',
+    redisIdentityClient(secondRedis),
+    logger,
+  );
+
+  try {
+    await Promise.all(
+      [firstRedis, secondRedis].map(async (client) => {
+        if (client.status !== 'ready') await once(client, 'ready');
+        await client.ping();
+      }),
+    );
+    await raw.del(budgetKey);
+    await expect(first.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+    const updatedAt = String(Date.now() + 60 * 60 * 1_000);
+    await raw.hset(budgetKey, 'tokens', '0', 'updated_at', updatedAt);
+    await expect(raw.hgetall(budgetKey)).resolves.toEqual({
+      tokens: '0',
+      updated_at: updatedAt,
+    });
+
+    const decision = await second.consumeUncachedLookup();
+    expect(warnings).toEqual([]);
+    expect(decision).toEqual({
+      allowed: false,
+      retryAfterMs: 10,
+    });
+  } finally {
+    await raw.del(budgetKey);
+    await first.onModuleDestroy();
+    await second.onModuleDestroy();
   }
 });

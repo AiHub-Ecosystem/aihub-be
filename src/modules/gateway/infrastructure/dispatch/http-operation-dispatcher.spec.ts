@@ -29,6 +29,7 @@ import type {
 } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { DownstreamHttpClient } from './downstream-http.client';
+import { MAX_RETRY_AFTER_MS } from './http-operation-dispatcher';
 
 function fakeGradeAdapter(
   path: string,
@@ -612,6 +613,43 @@ describe('HttpOperationDispatcher', () => {
       mockAgent.assertNoPendingInterceptors();
     },
   );
+
+  it('caps a far-future downstream Retry-After below the 32-bit timer ceiling', async () => {
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/task-one' })
+      .reply(
+        503,
+        {},
+        { headers: { 'retry-after': 'Sat, 06 Nov 2094 08:49:37 GMT' } },
+      );
+    const httpClient = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+    const request = jest.spyOn(httpClient, 'request');
+    const retryBudget = fakeDownstreamRetryBudget();
+    const dispatcher = createHttpOperationDispatcher(
+      httpClient,
+      new FakeTokenIssuer(),
+      [fakeGradeAdapter('/task-one')],
+      noOpDispatchAttemptRecord,
+      undefined,
+      retryBudget.port,
+    );
+
+    const failure = await dispatcher
+      .dispatch('writing.task1.grade', gradeInput, context())
+      .catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      code: 'AI_SERVICE_ERROR',
+      retryAfterMs: MAX_RETRY_AFTER_MS,
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(retryBudget.reserveRetry).not.toHaveBeenCalled();
+    mockAgent.assertNoPendingInterceptors();
+  });
 
   it.each([400, 500, 502])(
     'does not retry downstream status %i for a POST operation',

@@ -1,6 +1,10 @@
+import type { PostgresSpeakingAudioUploadRepository } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
+
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorSpeakingAudioClient(databaseUrl: string) {
+export async function createOperatorSpeakingAudioClient(
+  databaseUrl: string,
+): Promise<PostgresSpeakingAudioUploadRepository & { close(): Promise<void> }> {
   const [
     { createOperatorPrismaClient },
     { PostgresSpeakingAudioUploadRepository },

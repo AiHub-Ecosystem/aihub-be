@@ -50,29 +50,66 @@ describe('PostgresEmailCredentialRepository', () => {
   });
 
   it.each([
-    ['verification_email', 'emailVerificationToken.findUnique'],
-    ['password_reset_email', 'passwordResetToken.findUnique'],
-    ['organization_invite_email', 'organizationInvitation.findUnique'],
+    [
+      'verification_email',
+      'emailVerificationToken.findUnique',
+      { expiresAt: true, consumedAt: true },
+    ],
+    [
+      'password_reset_email',
+      'passwordResetToken.findUnique',
+      { expiresAt: true, consumedAt: true },
+    ],
+    [
+      'organization_invite_email',
+      'organizationInvitation.findUnique',
+      {
+        expiresAt: true,
+        consumedAt: true,
+        organization: { select: { status: true } },
+      },
+    ],
   ] as const)(
     'reads a %s from its own table by token hash',
-    async (kind, name) => {
+    async (kind, name, select) => {
       const { result, script } = check(null, kind);
       await result;
 
       expect(script.statements).toEqual([
         {
           name,
-          args: [
-            {
-              where: { tokenHash: TOKEN_HASH },
-              select: { expiresAt: true, consumedAt: true },
-            },
-          ],
+          args: [{ where: { tokenHash: TOKEN_HASH }, select }],
           transaction: 0,
         },
       ]);
     },
   );
+
+  it('closes an open invitation once its Organization is suspended', async () => {
+    await expect(
+      check(
+        {
+          expiresAt: new Date(NOW.getTime() + 60_000),
+          consumedAt: null,
+          organization: { status: 'suspended' },
+        },
+        'organization_invite_email',
+      ).result,
+    ).resolves.toBe('closed');
+  });
+
+  it('keeps an open invitation of an active Organization actionable', async () => {
+    await expect(
+      check(
+        {
+          expiresAt: new Date(NOW.getTime() + 60_000),
+          consumedAt: null,
+          organization: { status: 'active' },
+        },
+        'organization_invite_email',
+      ).result,
+    ).resolves.toBe('actionable');
+  });
 
   it.each([
     ['no expiry column', {}],

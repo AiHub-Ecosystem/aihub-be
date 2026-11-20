@@ -9241,6 +9241,11 @@
                           "const": "Bearer",
                           "type": "string"
                         },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
+                          "const": true,
+                          "type": "boolean"
+                        },
                         "expires_in": {
                           "const": 900,
                           "type": "number"
@@ -9701,6 +9706,11 @@
                           "const": "Bearer",
                           "type": "string"
                         },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
+                          "const": true,
+                          "type": "boolean"
+                        },
                         "expires_in": {
                           "const": 900,
                           "type": "number"
@@ -10077,6 +10087,11 @@
                         "token_type": {
                           "const": "Bearer",
                           "type": "string"
+                        },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
+                          "const": true,
+                          "type": "boolean"
                         },
                         "expires_in": {
                           "const": 900,
@@ -10805,6 +10820,30 @@
                     "maxLength": 512,
                     "description": "The opaque token AIHUB returned when the Web Session was created. Expired, revoked, unknown, and malformed tokens all fail alike.",
                     "type": "string"
+                  },
+                  "client_proof_key": {
+                    "additionalProperties": false,
+                    "description": "Valid public JWK (ES256, P-256) the client signs DPoP proofs with. When first bound to a Web Session, it is stored by thumbprint; later exchanges must use the same key. The access token is bound through `cnf.jkt` and the response adds `dpop_bound: true`. Send DPoP proofs after the server is in `verify` or `enforce`; while it is `off`, use Bearer.",
+                    "type": "object",
+                    "required": ["kty", "crv", "x", "y"],
+                    "properties": {
+                      "kty": {
+                        "const": "EC",
+                        "type": "string"
+                      },
+                      "crv": {
+                        "const": "P-256",
+                        "type": "string"
+                      },
+                      "x": {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      "y": {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      }
+                    }
                   }
                 }
               }
@@ -10841,6 +10880,11 @@
                         "token_type": {
                           "const": "Bearer",
                           "type": "string"
+                        },
+                        "dpop_bound": {
+                          "description": "Present and true when the access token is bound to a DPoP proof key. In enforce mode, Bearer presentations of Web Session tokens are rejected.",
+                          "const": true,
+                          "type": "boolean"
                         },
                         "expires_in": {
                           "const": 900,

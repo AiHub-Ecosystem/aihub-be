@@ -187,6 +187,8 @@ interface InvitationDraft {
   /** The normalized email, kept plaintext and removable by Audit redaction. */
   readonly email: string;
   readonly role: OrganizationAuditRole;
+  /** The Email Delivery Request a sent or resent invitation queued (#441). */
+  readonly emailDeliveryRequestId?: string;
 }
 
 interface InvitationRevokedDraft {
@@ -358,7 +360,13 @@ function shape(draft: OrganizationAuditDraft): Shape {
         targetType: 'invitation',
         targetId: draft.invitationId,
         targetLabel: draft.email,
-        detail: { role: draft.role },
+        detail:
+          draft.emailDeliveryRequestId === undefined
+            ? { role: draft.role }
+            : {
+                role: draft.role,
+                emailDeliveryRequestId: draft.emailDeliveryRequestId,
+              },
         outcome: 'applied',
       };
     case 'invitation.revoked': {

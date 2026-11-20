@@ -1,10 +1,17 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
-import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
 import {
+  AUTH_FAILURE_LIMIT,
+  ApiKeyAuthenticator,
+} from '@/modules/identity/api-keys/application/api-key-authenticator';
+import {
+  API_KEY_LOOKUP_BUDGET_BURST,
+  API_KEY_LOOKUP_FALLBACK_BURST,
+  API_KEY_LOOKUP_FALLBACK_PER_SECOND,
   type ApiKeyRecord,
   apiKeyCacheKey,
   apiKeyCacheMissKey,
+  apiKeyLookupBudgetKey,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import {
   generateOrganizationApiKey,
@@ -14,7 +21,10 @@ import {
   signIdentityCacheEntry,
   verifyIdentityCacheEntry,
 } from './identity-cache-envelope';
-import { RedisAuthFailureCounter } from './redis-auth-failure-counter';
+import {
+  API_KEY_LOOKUP_BUDGET_SCRIPT,
+  RedisAuthFailureCounter,
+} from './redis-auth-failure-counter';
 import type { RedisIdentityClient } from './redis-identity-client';
 import { RedisIdentityStore } from './redis-identity.store';
 
@@ -60,6 +70,18 @@ function createKeylessStore(redis: RedisIdentityClient) {
   return new RedisIdentityStore('', redis, undefined);
 }
 
+/** Every command fails, as a refused or dead Redis answers. */
+const DEAD_REDIS: RedisIdentityClient = {
+  get: () => Promise.reject(new Error('redis down')),
+  pttl: () => Promise.reject(new Error('redis down')),
+  set: () => Promise.reject(new Error('redis down')),
+  del: () => Promise.reject(new Error('redis down')),
+  incr: () => Promise.reject(new Error('redis down')),
+  eval: () => Promise.reject(new Error('redis down')),
+  expire: () => Promise.reject(new Error('redis down')),
+  quit: () => Promise.resolve('OK'),
+};
+
 async function redisUnavailableCount(seam: string): Promise<number> {
   const line = (await getMetrics())
     .split('\n')
@@ -85,10 +107,16 @@ class FakeRedis implements RedisIdentityClient {
   readonly expirations = new Map<string, number>();
   readonly expiresAt = new Map<string, number>();
   getCalls = 0;
+  clock = Date.now();
   failReads = false;
   failWrites = false;
   failDeletes = false;
   failTtlSetup = false;
+  failLookupBudget = false;
+  readonly lookupBuckets = new Map<
+    string,
+    { tokens: number; updatedAt: number }
+  >();
 
   get(key: string): Promise<string | null> {
     this.getCalls += 1;
@@ -157,6 +185,33 @@ class FakeRedis implements RedisIdentityClient {
     numberOfKeys: number,
     ...args: readonly (string | number)[]
   ): Promise<number> {
+    if (script === API_KEY_LOOKUP_BUDGET_SCRIPT && numberOfKeys === 1) {
+      if (this.failLookupBudget) {
+        return Promise.reject(new Error('lookup budget unavailable'));
+      }
+      const key = String(args[0]);
+      const capacity = Number(args[1]);
+      const refillPerMs = Number(args[2]);
+      const previous = this.lookupBuckets.get(key) ?? {
+        tokens: capacity,
+        updatedAt: this.clock,
+      };
+      previous.tokens = Math.min(
+        capacity,
+        previous.tokens +
+          Math.max(0, this.clock - previous.updatedAt) * refillPerMs,
+      );
+      previous.updatedAt = Math.max(this.clock, previous.updatedAt);
+      if (previous.tokens >= 1) {
+        previous.tokens -= 1;
+        this.lookupBuckets.set(key, previous);
+        this.expirations.set(key, 120);
+        return Promise.resolve(1);
+      }
+      this.lookupBuckets.set(key, previous);
+      this.expirations.set(key, 120);
+      return Promise.resolve(-Math.ceil((1 - previous.tokens) / refillPerMs));
+    }
     if (script !== INCREMENT_WITH_EXPIRY_SCRIPT || numberOfKeys !== 1) {
       return Promise.reject(new Error('unexpected Redis script'));
     }
@@ -185,6 +240,31 @@ class FakeRedis implements RedisIdentityClient {
 }
 
 describe('RedisIdentityStore', () => {
+  it('reserves assertion replay markers once per Organization and environment', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    const input = {
+      organizationId: 'org_acme',
+      environment: 'production' as const,
+      jti: 'shared-jti',
+      ttlSeconds: 160,
+    };
+
+    await expect(store.reserve(input)).resolves.toBe(true);
+    await expect(store.reserve(input)).resolves.toBe(false);
+    await expect(
+      store.reserve({ ...input, environment: 'sandbox' }),
+    ).resolves.toBe(true);
+    await expect(
+      store.reserve({ ...input, organizationId: 'org_other' }),
+    ).resolves.toBe(true);
+    expect(
+      redis.expirations.get(
+        'aihub:v1:user-assertion-replay:org_acme:production:shared-jti',
+      ),
+    ).toBe(160);
+  });
+
   it('stores and reads a positive API-key cache entry with a 60-second TTL', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);
@@ -222,6 +302,9 @@ describe('RedisIdentityStore', () => {
       get: async () => 0,
       recordFailure: async () => 1,
       consumeSandboxKeyLookup: async () => true,
+      consumeUncachedLookup: async () => ({
+        allowed: true,
+      }),
     });
 
     await expect(
@@ -239,7 +322,7 @@ describe('RedisIdentityStore', () => {
     expect(redis.values.get(cacheKey)).not.toContain('org_forged');
   });
 
-  it.each(['set', 'setMiss', 'delete'] as const)(
+  it.each(['set', 'delete'] as const)(
     'counts a failed API-key cache %s once without throwing',
     async (operation) => {
       const before = await redisUnavailableCount('api_key_cache');
@@ -249,9 +332,6 @@ describe('RedisIdentityStore', () => {
       if (operation === 'set') {
         redis.failWrites = true;
         operationResult = store.set('a'.repeat(64), record);
-      } else if (operation === 'setMiss') {
-        redis.failWrites = true;
-        operationResult = store.setMiss('a'.repeat(64));
       } else {
         redis.failDeletes = true;
         operationResult = store.delete('a'.repeat(64));
@@ -313,19 +393,45 @@ describe('RedisIdentityStore', () => {
     expect(redis.values.has(`aihub:v1:key:${'d'.repeat(64)}`)).toBe(false);
   });
 
-  it('stores and reads a negative API-key cache entry with a jittered TTL capped at 30 seconds', async () => {
+  it('keeps negative API-key cache entries in bounded local memory only', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);
+    const hash = 'b'.repeat(64);
 
-    await store.setMiss('b'.repeat(64));
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      await store.setMiss(hash);
 
-    await expect(store.get('b'.repeat(64))).resolves.toBeNull();
+      await expect(store.get(hash)).resolves.toBeNull();
+      expect(redis.values.has(apiKeyCacheMissKey(hash))).toBe(false);
+      expect(redis.expirations.has(apiKeyCacheMissKey(hash))).toBe(false);
+      expect(redis.getCalls).toBe(0);
+
+      jest.advanceTimersByTime(15_001);
+      await expect(store.get(hash)).resolves.toBeUndefined();
+      expect(redis.getCalls).toBe(2);
+    } finally {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('evicts negative API-key entries at the local cache ceiling', async () => {
+    const redis = new FakeRedis();
+    const store = createStore(redis);
+    const oldestHash = 'a'.repeat(64);
+
+    await store.setMiss(oldestHash);
+    for (let entry = 0; entry < 1_024; entry += 1) {
+      await store.setMiss(String(entry).padStart(64, '0'));
+    }
+
+    await expect(store.get(oldestHash)).resolves.toBeUndefined();
+    expect(redis.getCalls).toBe(2);
     expect(
-      redis.expirations.get(`aihub:v1:key:miss:${'b'.repeat(64)}`),
-    ).toBeLessThanOrEqual(30);
-    expect(
-      redis.expirations.get(`aihub:v1:key:miss:${'b'.repeat(64)}`),
-    ).toBeGreaterThanOrEqual(15);
+      [...redis.values.keys()].filter((key) => key.includes(':miss:')),
+    ).toHaveLength(0);
   });
 
   it('serves API-key entries from a non-sliding local lease before Redis', async () => {
@@ -408,7 +514,7 @@ describe('RedisIdentityStore', () => {
   });
 
   it.each(['new', 'legacy'])(
-    'does not increment a %s auth-failure counter when setting its TTL fails',
+    'keeps a %s auth-failure counter local when setting its TTL fails',
     async (kind) => {
       const redis = new FakeRedis();
       const key = 'aihub:v1:authfail:203.0.113.10';
@@ -419,19 +525,22 @@ describe('RedisIdentityStore', () => {
       const logger = new FakeLogger();
       const counter = new RedisAuthFailureCounter('', redis, logger);
 
-      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+      // Redis must not hold an untimed counter, but the outage cannot lift the
+      // per-address bound, so the count lives in this process instead (#1511).
+      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(1);
 
       expect(redis.values.get(key)).toBe(kind === 'legacy' ? '4' : undefined);
       expect(redis.expirations.has(key)).toBe(false);
       expect(logger.warnings).toHaveLength(1);
       expect(JSON.stringify(logger.warnings[0])).not.toContain('203.0.113.10');
 
-      await counter.recordFailure('203.0.113.10');
+      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(2);
       expect(logger.warnings).toHaveLength(1);
 
       redis.failTtlSetup = false;
+      // The local count is a floor, so the shared counter never reads lower.
       await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(
-        kind === 'legacy' ? 5 : 1,
+        kind === 'legacy' ? 5 : 3,
       );
       expect(redis.expirations.get(key)).toBe(300);
       expect(logger.logs).toHaveLength(1);
@@ -444,17 +553,135 @@ describe('RedisIdentityStore', () => {
     const logger = new FakeLogger();
     const counter = new RedisAuthFailureCounter('', redis, logger);
 
-    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
-    await expect(counter.get('203.0.113.10')).resolves.toBe(0);
-    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(0);
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(1);
+    await expect(counter.get('203.0.113.10')).resolves.toBe(1);
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(2);
 
     expect(logger.warnings).toHaveLength(1);
     expect(logger.logs).toHaveLength(0);
 
     redis.failTtlSetup = false;
-    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(1);
+    await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(3);
     expect(logger.warnings).toHaveLength(1);
     expect(logger.logs).toHaveLength(1);
+  });
+
+  it('shares a token bucket across counter instances and refills at the configured rate', async () => {
+    const redis = new FakeRedis();
+    redis.clock = 1_000_000;
+    const counter = new RedisAuthFailureCounter('', redis);
+    const otherCounter = new RedisAuthFailureCounter('', redis);
+
+    for (
+      let attempt = 1;
+      attempt <= API_KEY_LOOKUP_BUDGET_BURST;
+      attempt += 1
+    ) {
+      await expect(counter.consumeUncachedLookup()).resolves.toEqual({
+        allowed: true,
+      });
+    }
+
+    await expect(otherCounter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: 10,
+    });
+    redis.clock += 10;
+    await expect(otherCounter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+    expect(redis.expirations.get(apiKeyLookupBudgetKey())).toBe(120);
+  });
+
+  it('uses a stricter burst and refill limit in the process-local fallback', async () => {
+    const redis = new FakeRedis();
+    redis.failLookupBudget = true;
+    let now = 1_000_000;
+    const counter = new RedisAuthFailureCounter(
+      '',
+      redis,
+      undefined,
+      () => now,
+    );
+
+    for (
+      let attempt = 1;
+      attempt <= API_KEY_LOOKUP_FALLBACK_BURST;
+      attempt += 1
+    ) {
+      await counter.consumeUncachedLookup();
+    }
+
+    const refillMs = Math.ceil(1_000 / API_KEY_LOOKUP_FALLBACK_PER_SECOND);
+    await expect(counter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: false,
+      retryAfterMs: refillMs,
+    });
+
+    now += refillMs;
+    await expect(counter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+  });
+
+  it('reports missing Redis without exposing request identifiers', async () => {
+    const logger = new FakeLogger();
+    const counter = new RedisAuthFailureCounter('', undefined, logger);
+    const before = await redisUnavailableCount('auth_failure_counter');
+
+    await expect(counter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+    await counter.get('203.0.113.10');
+
+    expect(logger.warnings).toHaveLength(1);
+    expect(JSON.stringify(logger.warnings)).not.toContain('203.0.113.10');
+    expect(await redisUnavailableCount('auth_failure_counter')).toBeGreaterThan(
+      before,
+    );
+  });
+
+  it('keeps counting an over-threshold address when every Redis command fails', async () => {
+    const counter = new RedisAuthFailureCounter('', DEAD_REDIS);
+
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+      await expect(counter.recordFailure('203.0.113.10')).resolves.toBe(
+        attempt,
+      );
+    }
+
+    await expect(counter.get('203.0.113.10')).resolves.toBe(20);
+    await expect(counter.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
+  });
+
+  it('refuses an over-threshold local IP before Postgres during a Redis outage', async () => {
+    const counter = new RedisAuthFailureCounter('', DEAD_REDIS);
+    const repository = {
+      findByHash: jest.fn(async () => null),
+      touchLastUsed: async () => undefined,
+    };
+    const cache = {
+      get: async () => undefined,
+      set: async () => undefined,
+      setMiss: async () => undefined,
+      delete: async () => undefined,
+    };
+    const authenticator = new ApiKeyAuthenticator(repository, cache, counter);
+    const clientIp = '203.0.113.10';
+    for (let attempt = 0; attempt < AUTH_FAILURE_LIMIT; attempt += 1) {
+      await counter.recordFailure(clientIp);
+    }
+
+    await expect(
+      authenticator.authenticate({
+        value: generateOrganizationApiKey(new Date()).raw,
+        environment: 'production',
+        clientIp,
+      }),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(repository.findByHash).not.toHaveBeenCalled();
   });
 
   it('stores JWKS metadata for the stale-cache window and gates refreshes per organization', async () => {
@@ -586,26 +813,22 @@ describe('RedisIdentityStore', () => {
     expect(redis.values.has(currentKey)).toBe(false);
   });
 
-  it('fails open for cache and brute-force protection when Redis is unavailable', async () => {
-    const redis: RedisIdentityClient = {
-      get: () => Promise.reject(new Error('redis down')),
-      pttl: () => Promise.reject(new Error('redis down')),
-      set: () => Promise.reject(new Error('redis down')),
-      del: () => Promise.reject(new Error('redis down')),
-      incr: () => Promise.reject(new Error('redis down')),
-      eval: () => Promise.reject(new Error('redis down')),
-      expire: () => Promise.reject(new Error('redis down')),
-      quit: () => Promise.resolve('OK'),
-    };
-    const store = createStore(redis);
-    const failures = new RedisAuthFailureCounter('', redis);
+  it('falls back to Postgres and a local brute-force count when Redis is unavailable', async () => {
+    const store = createStore(DEAD_REDIS);
+    const failures = new RedisAuthFailureCounter('', DEAD_REDIS);
 
     await expect(store.get('a'.repeat(64))).resolves.toBeUndefined();
     await expect(store.deleteJwks('org_acme', '1')).rejects.toThrow(
       'redis down',
     );
+    // A failed read no longer becomes zero: the address keeps its local count,
+    // and the lookup budget is spent locally instead of failing open (#1511).
     await expect(failures.get('203.0.113.10')).resolves.toBe(0);
-    await expect(failures.recordFailure('203.0.113.10')).resolves.toBe(0);
+    await expect(failures.recordFailure('203.0.113.10')).resolves.toBe(1);
+    await expect(failures.get('203.0.113.10')).resolves.toBe(1);
+    await expect(failures.consumeUncachedLookup()).resolves.toEqual({
+      allowed: true,
+    });
   });
   it('bypasses unsigned Redis API-key entries when the integrity key is absent', async () => {
     const redis = new FakeRedis();
