@@ -299,7 +299,9 @@ function createUserAccessTokenCrypto(
         if (redisUrl !== undefined && redisUrl.length > 0) {
           publisher = createRedisClient(redisUrl, {
             commandTimeoutMs: 500,
+            ...REDIS_NO_REPLAY_OPTIONS,
           });
+          // arch-check: pub/sub subscriber only, not request-path; it needs the offline queue and unlimited retries so a SUBSCRIBE survives a reconnect (#1993).
           subscriber = new Redis(redisUrl, {
             lazyConnect: true,
             enableOfflineQueue: true,

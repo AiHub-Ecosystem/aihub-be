@@ -1422,6 +1422,66 @@ describe('request bodies reach their contract through parseRequestBody', () => {
   });
 });
 
+describe('every Redis client comes from createRedisClient', () => {
+  function runWithProbe(source: string): string {
+    return checkFixtures([
+      ['src/modules/auth/probe/infrastructure/probe.ts', source],
+    ]).output;
+  }
+
+  it('fails the hand-built rate limiter shape that #1345 replaced', () => {
+    const output = runWithProbe(
+      `import Redis from 'ioredis';
+
+export function probe(url: string): Redis {
+  const redis = new Redis(url, {
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    connectTimeout: 1_000,
+    commandTimeout: 400,
+  });
+  redis.on('error', () => undefined);
+  return redis;
+}
+`,
+    );
+
+    expect(output).toContain('constructs a Redis client directly');
+    expect(output).toContain('createRedisClient');
+    expect(output).toContain('probe.ts:4');
+  });
+
+  it('accepts the factory call', () => {
+    const output = runWithProbe(
+      `import { createRedisClient } from '@/common/redis/create-redis-client';
+
+export function probe(url: string) {
+  return createRedisClient(url, { commandTimeoutMs: 400, lazyConnect: true });
+}
+`,
+    );
+
+    expect(output).not.toContain('constructs a Redis client directly');
+  });
+
+  it('accepts a direct constructor that says why above it', () => {
+    const output = runWithProbe(
+      `import Redis from 'ioredis';
+
+export function probe(url: string): Redis {
+  // arch-check: probe
+  const redis = new Redis(url, { lazyConnect: true });
+  redis.on('error', () => undefined);
+  return redis;
+}
+`,
+    );
+
+    expect(output).not.toContain('constructs a Redis client directly');
+  });
+});
+
 describe('isRecord has one declaration', () => {
   it('fails a file that declares its own', () => {
     const result = checkFixtures([

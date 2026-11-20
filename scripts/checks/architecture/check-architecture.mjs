@@ -1712,6 +1712,42 @@ export function collectSourceTextFailures(options) {
     }
   }
 
+  // #1345: a request-path Redis client states no offline queue, one retry, a
+  // command timeout and no reconnect replay in one place, `createRedisClient`.
+  // A client built by hand beside it carries whatever its author remembered;
+  // the two rate limiters did, and silently replayed a mutating EVAL after a
+  // reconnect. A constructor outside the factory says why on its line or the
+  // line above, with the same marker the other rules use.
+  const REDIS_CONSTRUCTOR_OWNER = join(
+    srcDirectory,
+    'common',
+    'redis',
+    'create-redis-client.ts',
+  );
+  const REDIS_CONSTRUCTOR = /\bnew\s+Redis\s*\(/;
+
+  for (const file of sourceFiles) {
+    if (file.endsWith('.spec.ts') || file === REDIS_CONSTRUCTOR_OWNER) {
+      continue;
+    }
+
+    const lines = sourceText(file).split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      if (!REDIS_CONSTRUCTOR.test(line)) {
+        continue;
+      }
+
+      const markedOn = `${lines[index - 1] ?? ''}\n${line}`;
+      if (markedOn.includes(BODY_VALIDATION_MARKER)) {
+        continue;
+      }
+
+      fail(
+        `${relative(root, file)}:${index + 1} constructs a Redis client directly; call createRedisClient from '@/common/redis/create-redis-client', or mark the line with "${BODY_VALIDATION_MARKER} <reason>" (#1345)`,
+      );
+    }
+  }
+
   if (failures.length > 0) {
     return { failures, stoppedEarly: true };
   }

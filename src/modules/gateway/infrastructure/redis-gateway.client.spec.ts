@@ -19,6 +19,7 @@ describe('createRedisGatewayClient', () => {
       expect.objectContaining({
         connectTimeout: 1_000,
         commandTimeout: 400,
+        autoResendUnfulfilledCommands: false,
       }),
     );
   });

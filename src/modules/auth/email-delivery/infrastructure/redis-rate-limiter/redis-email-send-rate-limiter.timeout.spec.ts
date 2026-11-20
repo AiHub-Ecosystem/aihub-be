@@ -31,7 +31,15 @@ describe('RedisEmailSendRateLimiter Redis client', () => {
       ),
     ).toBeInstanceOf(RedisEmailSendRateLimiter);
 
-    const options = mockConstructed[0]?.[1] as { commandTimeout: number };
+    const options = mockConstructed[0]?.[1] as {
+      commandTimeout: number;
+      connectTimeout: number;
+      autoResendUnfulfilledCommands: boolean;
+      lazyConnect: boolean;
+    };
     expect(options.commandTimeout).toBeGreaterThanOrEqual(400);
+    expect(options.connectTimeout).toBe(1_000);
+    expect(options.autoResendUnfulfilledCommands).toBe(false);
+    expect(options.lazyConnect).toBe(true);
   });
 });
