@@ -360,7 +360,7 @@ describe('GradingOrchestratorPort', () => {
       ].map((id) => ({
         id,
         band: 7,
-        band_reason: '',
+        band_reason: 'x'.repeat(4_000),
         strengths: [],
         areas_for_improvement: [],
         errors: [],
@@ -378,28 +378,60 @@ describe('GradingOrchestratorPort', () => {
       },
       data_micro: {},
     };
-    stored.set('writing.v2.task2.grade:legacy-writing-v2-replay', {
-      operation: 'writing.v2.task2.grade',
-      data: legacyData,
-      downstreamMs: 23,
-    });
-
-    const replay = await port.execute({
+    const key = 'writing.v2.task2.grade:legacy-writing-v2-replay';
+    const command = {
       ...metadata(new AbortController().signal),
-      operation: 'writing.v2.task2.grade',
+      operation: 'writing.v2.task2.grade' as const,
       input: {
         question: 'Discuss the topic.',
         topic: 'education',
         essay: 'A clear essay.',
       },
       idempotencyKey: 'legacy-writing-v2-replay',
+    };
+    stored.set(key, {
+      operation: 'writing.v2.task2.grade',
+      data: legacyData,
+      downstreamMs: 23,
     });
+
+    const replay = await port.execute(command);
 
     expect(replay.data).toEqual(legacyData);
     expect(replay.data).not.toHaveProperty('error_priority');
     expect(replay).toMatchObject({
       downstreamMs: 0,
       idempotentReplay: true,
+    });
+
+    const microExercise = { prompt: '', question_type: '', comments: [] };
+    const rejectsMalformedReplay = async (data: unknown) => {
+      stored.set(key, {
+        operation: 'writing.v2.task2.grade',
+        data,
+        downstreamMs: 23,
+      });
+      await expect(port.execute(command)).rejects.toThrow(
+        'stored Writing grading response is malformed',
+      );
+    };
+    await rejectsMalformedReplay({
+      ...legacyData,
+      criteria: legacyData.criteria.map((criterion, index) =>
+        index === 0
+          ? { ...criterion, band_reason: 'x'.repeat(4_001) }
+          : criterion,
+      ),
+    });
+    await rejectsMalformedReplay({
+      ...legacyData,
+      data_micro: { ['t'.repeat(4_001)]: { LR03: microExercise } },
+    });
+    await rejectsMalformedReplay({
+      ...legacyData,
+      data_micro: {
+        lexical_resource: { ['c'.repeat(4_001)]: microExercise },
+      },
     });
     expect(calls).toHaveLength(0);
   });

@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError, internalError } from '@/common/errors/app-error';
 import { isDownstreamCredentialRejection } from '@/common/errors/downstream-fault';
@@ -238,6 +239,12 @@ export class HttpOperationTransport implements OperationTransportPort {
         ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
         : undefined;
 
+    // An operation whose adapter is registered before its catalog entry reads
+    // with the client's default limit, so no response is ever read unbounded.
+    const responseLimit = Object.hasOwn(OPERATION_CATALOG, operation)
+      ? OPERATION_CATALOG[operation].maxResponseBytes
+      : undefined;
+
     return {
       send: async (call) => {
         const startedAt = performance.now();
@@ -251,6 +258,9 @@ export class HttpOperationTransport implements OperationTransportPort {
               downstream: adapter.downstream,
               requestId: context.requestId,
               deadlineMs: call.deadlineMs,
+              ...(responseLimit === undefined
+                ? {}
+                : { maxResponseBytes: responseLimit }),
               signal: call.signal,
               onResponseReceived: (statusCode) => {
                 responseStatus = statusCode;

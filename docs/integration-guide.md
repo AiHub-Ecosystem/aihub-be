@@ -930,6 +930,22 @@ text that AIHUB refuses with `400 INVALID_REQUEST`. Check these fields with
 `String.length` or the equivalent UTF-16 length in your language, for example
 `len(text.encode("utf-16-le")) // 2` in Python.
 
+### Model-generated text in results
+
+The feedback an AI Service writes is model-generated, and it can repeat what the
+learner wrote. This covers fields such as `band_reason`, `strengths`,
+`explanation`, `improved_version`, `summary_vi`, and the Speaking transcript.
+Treat every such field as untrusted plain text: render it as text, never as HTML
+or markup, and never use it to build a URL, a query, or a command.
+
+AIHUB removes control characters from these fields before it answers: the C0
+and C1 controls other than tab, line feed, and carriage return, and the
+bidirectional controls U+202A to U+202E and U+2066 to U+2069. It also bounds
+their length. Feedback, explanations, and labels are at most 4,000 units; a
+quotation or a transcript is at most 20,000 units. A unit is a UTF-16 code unit,
+as in "Text length limits". A response with a longer text, or with a body larger
+than its operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
+
 ### A worked grading call
 
 Supply the prompt and essay from your own application:

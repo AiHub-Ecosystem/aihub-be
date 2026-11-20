@@ -1,39 +1,13 @@
 import { isRecord } from '@/common/is-record';
-import { ValueErrorType } from '@sinclair/typebox/errors';
 import { Value } from '@sinclair/typebox/value';
-
-import type { TSchema } from '@sinclair/typebox';
 
 import {
   type SpeakingGradeResponse,
   SpeakingGradeResponseSchema,
 } from '@/contracts/speaking/grading';
 import { contractViolation } from '@/downstream/contract-violation';
-
-const MAX_REPORTED_FAILURES = 3;
-const MAX_PATH_LENGTH = 120;
-
-/**
- * The first few places `body` breaks `schema`, as `path (Kind)`: the JSON
- * pointer to the field and the schema's own name for the mismatch, such as
- * `Integer` for a null where a number belongs. Both come from the schema and
- * the shape of the response, never from a value in it.
- */
-function schemaFailures(schema: TSchema, body: unknown): string {
-  const failures: string[] = [];
-  for (const error of Value.Errors(schema, body)) {
-    // A key is provider-chosen text, so anything outside a plain field name is
-    // replaced rather than copied into the log.
-    const path = error.path.replace(/[^A-Za-z0-9_/.[\]-]/g, '?');
-    failures.push(
-      `${path.slice(0, MAX_PATH_LENGTH) || '/'} (${ValueErrorType[error.type] ?? 'Invalid'})`,
-    );
-    if (failures.length === MAX_REPORTED_FAILURES) {
-      break;
-    }
-  }
-  return failures.join('; ');
-}
+import { stripControlCharacters } from '@/downstream/model-text';
+import { schemaFailures } from '@/downstream/public-contract';
 
 function requiredString(data: Record<string, unknown>, field: string): string {
   const value = data[field];
@@ -138,8 +112,9 @@ function normalizeLanguageAnalysis(value: unknown): unknown {
  * until the D2 TSD confirms their public meaning.
  */
 export function parseSpeakingGradeResponse(
-  body: unknown,
+  rawBody: unknown,
 ): SpeakingGradeResponse {
+  const body = stripControlCharacters(rawBody);
   if (
     !isRecord(body) ||
     body['status'] !== 'success' ||
