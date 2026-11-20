@@ -10,8 +10,10 @@ import {
   backgroundWorkSettled,
   backgroundWorkStarted,
 } from '@/common/background-work-tracker';
+import { AppError } from '@/common/errors/app-error';
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
+import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
@@ -31,6 +33,17 @@ import {
 /** How often an instance reconciles stale and terminal delivery rows. */
 export const EMAIL_OUTBOX_RECONCILE_INTERVAL_MS = 5_000;
 export const AUTH_EMAIL_RECIPIENT_LIMIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+function emailOutboxFailureClass(
+  error: unknown,
+): 'database_unavailable' | 'database_timeout' | 'database_error' | 'unknown' {
+  if (isPostgresUnavailable(error)) return 'database_unavailable';
+  if (postgresTimeoutKind(error) !== undefined) return 'database_timeout';
+  if (error instanceof AppError && error.cause !== undefined) {
+    return 'database_error';
+  }
+  return 'unknown';
+}
 
 export interface EmailOutboxPollerSchedulerOptions {
   readonly poller: EmailDeliveryPoller;
@@ -194,7 +207,10 @@ export class EmailOutboxPollerScheduler
       }
       if (!this.recipientKeyGateReported) {
         this.recipientKeyGateReported = true;
-        this.logger.error({ event: 'email_outbox_keyring_gate_not_passed' });
+        this.logger.error({
+          event: 'email_outbox_keyring_gate_not_passed',
+          failure_class: emailOutboxFailureClass(error),
+        });
       }
       return false;
     }
@@ -213,9 +229,7 @@ export class EmailOutboxPollerScheduler
     } catch (error: unknown) {
       this.logger.error({
         event: 'email_outbox_key_version_check_failed',
-        failure_class: isPostgresUnavailable(error)
-          ? 'database_unavailable'
-          : 'query_failed',
+        failure_class: emailOutboxFailureClass(error),
       });
     }
   }
@@ -303,9 +317,10 @@ export class EmailOutboxPollerScheduler
     backgroundWorkStarted();
     try {
       await this.pruneExpiredRecipientLimits?.();
-    } catch {
+    } catch (error: unknown) {
       this.logger.error({
         event: 'authentication_email_recipient_counter_cleanup_failed',
+        failure_class: emailOutboxFailureClass(error),
       });
     } finally {
       this.pruning = false;

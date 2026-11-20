@@ -143,6 +143,32 @@ describe('EmailOutboxPollerScheduler', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('classifies a failed recipient counter cleanup without logging its message', async () => {
+    const poller = new ControllablePoller();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const rawMessage = 'database.invalid private-value';
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      pruneExpiredRecipientLimits: async () => {
+        throw new Error(rawMessage);
+      },
+    });
+    subjects.push(subject);
+
+    try {
+      await subject.onModuleInit();
+
+      expect(error).toHaveBeenCalledWith({
+        event: 'authentication_email_recipient_counter_cleanup_failed',
+        failure_class: 'unknown',
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain(rawMessage);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it('reports queued key versions missing from this instance before polling', async () => {
     const poller = new ControllablePoller();
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -198,7 +224,7 @@ describe('EmailOutboxPollerScheduler', () => {
 
       expect(error).toHaveBeenCalledWith({
         event: 'email_outbox_key_version_check_failed',
-        failure_class: 'query_failed',
+        failure_class: 'unknown',
       });
       expect(JSON.stringify(error.mock.calls)).not.toContain(rawMessage);
     } finally {
@@ -234,6 +260,7 @@ describe('EmailOutboxPollerScheduler', () => {
 
   it('refuses to start when a retired key version still has live recipient windows', async () => {
     const poller = new ControllablePoller();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     const subject = new EmailOutboxPollerScheduler({
       poller: poller as unknown as EmailDeliveryPoller,
       intervalMs: INTERVAL_MS,
@@ -245,11 +272,18 @@ describe('EmailOutboxPollerScheduler', () => {
     });
     subjects.push(subject);
 
-    await expect(subject.onModuleInit()).rejects.toThrow(
-      /v1 \(windows live until 2026-10-25T00:00:00.000Z\)/,
-    );
-    expect(poller.calls).toBe(0);
-    subject.onApplicationShutdown();
+    try {
+      await expect(subject.onModuleInit()).rejects.toThrow(
+        /v1 \(windows live until 2026-10-25T00:00:00.000Z\)/,
+      );
+      expect(error).not.toHaveBeenCalledWith(
+        expect.objectContaining({ failure_class: 'database_unavailable' }),
+      );
+      expect(poller.calls).toBe(0);
+      subject.onApplicationShutdown();
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('boots with the gate deferred while the counter table cannot be read, and holds every pass until it resolves', async () => {
@@ -276,6 +310,7 @@ describe('EmailOutboxPollerScheduler', () => {
       expect(poller.calls).toBe(0);
       expect(error).toHaveBeenCalledWith({
         event: 'email_outbox_keyring_gate_not_passed',
+        failure_class: 'unknown',
       });
 
       // The table becomes readable: the next tick passes the gate and the

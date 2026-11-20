@@ -560,6 +560,22 @@ tick reads the table and the gate passes, so a premature prune can never
 silently reset a recipient's ceiling either way. Rotation steps live in
 [vault-runtime-secrets.md](vault-runtime-secrets.md).
 
+The scheduler's startup and hourly database checks add a bounded
+`failure_class` to `email_outbox_key_version_check_failed`,
+`email_outbox_keyring_gate_not_passed`, and
+`authentication_email_recipient_counter_cleanup_failed`:
+
+- `database_unavailable`: Postgres could not be reached or stopped answering;
+  check database availability and connection-pool readiness.
+- `database_timeout`: a statement or lock timed out; inspect database load and
+  lock contention.
+- `database_error`: Postgres answered but rejected the query; check schema,
+  permissions, and the deployed migration state.
+- `unknown`: the failure did not match a known Postgres condition.
+
+These events never include exception messages or SQL. A live-retired-key
+retention error still refuses startup and is not reported as a database outage.
+
 To check active versions or overdue cleanup without reading fingerprints:
 
 ```sql
