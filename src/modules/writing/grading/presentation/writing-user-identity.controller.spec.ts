@@ -40,6 +40,7 @@ import {
   JWKS_KEY_PROVIDER,
   type JwksKeyProviderPort,
 } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { USER_ASSERTION_REPLAY_MARKER } from '@/modules/identity/user-assertions/application/user-assertion-replay-marker.port';
 import { useTestRuntimeConfiguration } from '../../../../../test/support/test-runtime-configuration';
 
 const RequestIdEnvelopeSchema = Type.Object({
@@ -66,6 +67,7 @@ const gradePayload = {
 };
 
 describe('Writing user identity HTTP flow', () => {
+  const replayMarker = { reserve: async () => true };
   let app: NestFastifyApplication;
   let privateKey: unknown;
   let publicJwk: Record<string, unknown>;
@@ -172,14 +174,17 @@ describe('Writing user identity HTTP flow', () => {
       .useValue(configRepository)
       .overrideProvider(JWKS_KEY_PROVIDER)
       .useValue(keyProvider)
+      .overrideProvider(USER_ASSERTION_REPLAY_MARKER)
+      .useValue(replayMarker)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ genReqId: () => generateRequestId() }),
     );
-    registerRequestLifecycle(app.getHttpAdapter().getInstance());
+    const fastify = app.getHttpAdapter().getInstance();
+    registerRequestLifecycle(fastify);
     await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    await fastify.ready();
   });
 
   afterAll(async () => {

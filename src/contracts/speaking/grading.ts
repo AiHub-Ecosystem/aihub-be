@@ -1,5 +1,6 @@
 import type { Blob } from 'node:buffer';
 
+import { ModelQuote, ModelText } from '@/contracts/model-text';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/public/audio-asset';
 import { FormatRegistry, type Static, Type } from '@sinclair/typebox';
 
@@ -104,9 +105,9 @@ const NullableNonNegativeIntegerSchema = Type.Union([
 const ScorabilitySchema = Type.Object(
   {
     is_scorable: Type.Boolean(),
-    confidence: Type.String(),
+    confidence: ModelText(),
     display_band: Type.Boolean(),
-    message_vi: Type.Union([Type.String(), Type.Null()]),
+    message_vi: Type.Union([ModelText(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -124,7 +125,7 @@ const EstimatedBandSchema = Type.Object(
 
 const TranscriptSchema = Type.Object(
   {
-    text: Type.String(),
+    text: ModelQuote(),
     word_count: Type.Integer({ minimum: 0 }),
     duration_seconds: NonNegativeNumberSchema,
   },
@@ -135,7 +136,7 @@ const RelevanceSchema = Type.Object(
   {
     on_topic: Type.Boolean(),
     score: Type.Number({ minimum: 0, maximum: 1 }),
-    feedback_vi: Type.Union([Type.String(), Type.Null()]),
+    feedback_vi: Type.Union([ModelText(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -160,7 +161,7 @@ const AudioExtentSchema = Type.Tuple([
 
 const SyllableSchema = Type.Object(
   {
-    letters: Type.String(),
+    letters: ModelText(),
     stress_level: Type.Union([
       Type.Integer({ minimum: 0, maximum: 2 }),
       Type.Null(),
@@ -180,9 +181,9 @@ const SyllableSchema = Type.Object(
 
 const PhonemeSchema = Type.Object(
   {
-    phone: Type.String(),
+    phone: ModelText(),
     quality_score: ScoreSchema,
-    sound_most_like: Type.String(),
+    sound_most_like: ModelText(),
     stress_level: Type.Union([
       Type.Integer({ minimum: 0, maximum: 2 }),
       Type.Null(),
@@ -195,9 +196,9 @@ const PhonemeSchema = Type.Object(
 
 const PronunciationWordSchema = Type.Object(
   {
-    word: Type.String(),
+    word: ModelText(),
     quality_score: ScoreSchema,
-    quality_class: Type.String(),
+    quality_class: ModelText(),
     syllables: Type.Array(SyllableSchema),
     phonemes: Type.Array(PhonemeSchema),
   },
@@ -221,22 +222,22 @@ const PronunciationDetailSchema = Type.Object(
 
 const GrammarErrorSchema = Type.Object(
   {
-    sentence: Type.String(),
-    error_segment: Type.String(),
-    correction: Type.String(),
-    error_type: Type.String(),
-    explanation_vi: Type.String(),
+    sentence: ModelText(),
+    error_segment: ModelText(),
+    correction: ModelText(),
+    error_type: ModelText(),
+    explanation_vi: ModelText(),
   },
   { additionalProperties: false },
 );
 
 const VocabularyUpgradeSchema = Type.Object(
   {
-    original_word: Type.String(),
-    suggested_word: Type.String(),
-    cefr_level: Type.String(),
-    context: Type.Optional(Type.String()),
-    reason_vi: Type.String(),
+    original_word: ModelText(),
+    suggested_word: ModelText(),
+    cefr_level: ModelText(),
+    context: Type.Optional(ModelText()),
+    reason_vi: ModelText(),
   },
   { additionalProperties: false },
 );
@@ -251,17 +252,17 @@ const LanguageAnalysisSchema = Type.Object(
 
 const FeedbackSchema = Type.Object(
   {
-    summary_vi: Type.String(),
-    strong_point_vi: Type.String(),
-    action_plan_vi: Type.String(),
+    summary_vi: ModelText(),
+    strong_point_vi: ModelText(),
+    action_plan_vi: ModelText(),
   },
   { additionalProperties: false },
 );
 
 export const SpeakingGradeResponseSchema = Type.Object(
   {
-    test_type: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-    question_id: Type.String({ minLength: 1 }),
+    test_type: Type.Optional(Type.Union([ModelText(), Type.Null()])),
+    question_id: ModelText({ minLength: 1 }),
     scorability: ScorabilitySchema,
     estimated_band: EstimatedBandSchema,
     transcript: TranscriptSchema,

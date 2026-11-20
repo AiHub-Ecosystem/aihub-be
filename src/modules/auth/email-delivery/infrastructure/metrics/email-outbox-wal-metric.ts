@@ -7,7 +7,11 @@ export interface EmailOutboxWalSlotHealthSample {
   readonly status: 'reserved' | 'extended' | 'unreserved' | 'lost';
 }
 
-export function registerEmailOutboxWalMetric(registry: Registry) {
+export function registerEmailOutboxWalMetric(registry: Registry): {
+  setSource(
+    next: (() => Promise<EmailOutboxWalSlotHealthSample | null>) | undefined,
+  ): void;
+} {
   let source:
     | (() => Promise<EmailOutboxWalSlotHealthSample | null>)
     | undefined;

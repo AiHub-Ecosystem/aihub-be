@@ -16,7 +16,8 @@ export type RedisProtectionSeam =
   | 'jwks_cache'
   | 'email_send_rate'
   | 'shedding_level'
-  | 'token_revocation';
+  | 'token_revocation'
+  | 'dpop_replay';
 
 export type ApiKeyCacheInvalidationSeam =
   | 'api_key_cache_invalidation_revoke'
@@ -39,6 +40,7 @@ const REDIS_PROTECTION_SEAMS = [
   'email_send_rate',
   'shedding_level',
   'token_revocation',
+  'dpop_replay',
 ] as const satisfies readonly RedisProtectionSeam[];
 
 const redisUnavailableTotal = new Counter({

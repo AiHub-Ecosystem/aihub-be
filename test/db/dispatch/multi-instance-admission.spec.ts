@@ -42,18 +42,19 @@ function createProvider(onCall: () => void): Server {
   });
 }
 
-function grade(
+async function grade(
   worker: TestWorker,
   organization: GradingOrganization,
   idempotencyKey: string,
   host = 'api.production.test',
 ): Promise<HttpAnswer | undefined> {
+  const assertion = await organization.signAssertion();
   return sendRequest(worker.url, {
     path: WRITING_TASK1_PATH,
     headers: {
       host,
       'x-api-key': organization.apiKey.raw,
-      'x-user-identity': organization.assertion,
+      'x-user-identity': assertion,
       'idempotency-key': idempotencyKey,
     },
     body: GRADE_BODY,

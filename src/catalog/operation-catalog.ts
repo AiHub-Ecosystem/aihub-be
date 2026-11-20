@@ -54,6 +54,15 @@ export type IdempotencyMode = 'none' | 'optional' | 'required';
 export type MeteringMode = 'model' | 'none';
 type ResponseContract = TSchema | 'unresolved';
 
+// The most response body AIHUB reads from an AI Service for one operation. An
+// AI Service answer is untrusted input and the container is small, so a body
+// past the limit is cancelled and refused as AI_SERVICE_CONTRACT_VIOLATION
+// (#377). Each limit is at least nine times the largest captured response of its
+// family; the measurements and the reasoning live in the README beside the
+// fixtures, and raising a limit means re-measuring there first.
+const WRITING_RESPONSE_MAX_BYTES = 256 * 1024;
+const SPEAKING_RESPONSE_MAX_BYTES = 1024 * 1024;
+
 // The one canonical Task 1 sample chart URL. The AI Writing service fetches
 // the image itself, outside the customer's request, so it is published rather
 // than signed (ADR-0060). Postman, the integration guide, and the drift guard
@@ -74,6 +83,8 @@ interface OperationDefBase {
   readonly family: 'writing' | 'speaking';
   readonly meteringMode: MeteringMode;
   readonly maxBodyBytes: number;
+  /** Ceiling on the AI Service response body read for this operation. */
+  readonly maxResponseBytes: number;
   readonly timeoutMs: number;
   readonly downstream: DownstreamId;
   readonly downstreamPath: string;
@@ -119,6 +130,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v1/grading-feedback-task1',
     requestSchema: GradeTask1RequestSchema,
@@ -137,6 +149,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v1/grading-feedback-task2',
     requestSchema: GradeTask2RequestSchema,
@@ -158,6 +171,7 @@ export const OPERATION_CATALOG = {
     // its own 504. 125 s lets AIHUB answer that 504 as AI_SERVICE_TIMEOUT; the
     // edge allows 135 s (ADR-0143 decisions 5 and 7).
     timeoutMs: 125_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v3/grading-feedback-task1',
     requestSchema: WritingV2GradeTask1RequestSchema,
@@ -176,6 +190,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 125_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v3/grading-feedback-task2',
     requestSchema: WritingV2GradeTask2RequestSchema,
@@ -194,6 +209,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 45_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v2/create-micro-exercise',
     requestSchema: CreateMicroExerciseRequestSchema,
@@ -213,6 +229,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 35_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v2/create-longwriting-exercise',
     requestSchema: CreateLongWritingExerciseRequestSchema,
@@ -232,6 +249,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 20_000,
+    maxResponseBytes: WRITING_RESPONSE_MAX_BYTES,
     downstream: 'ai-writing',
     downstreamPath: '/v2/grading-micro-exercise',
     requestSchema: GradeMicroExerciseRequestSchema,
@@ -257,6 +275,7 @@ export const OPERATION_CATALOG = {
     // One deadline covers upload and downstream grading. Uploading 25 MiB on
     // a slow link alone can outlast the old 30s budget before grading starts.
     timeoutMs: 60_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v1/speaking/grading',
     requestSchema: SpeakingGradeRequestSchema,
@@ -278,6 +297,7 @@ export const OPERATION_CATALOG = {
     maxBodyBytes: 256 * 1024,
     // URL grading runs the same inference pipeline; leave room for its >30s responses.
     timeoutMs: 60_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v1/speaking/grading-json',
     requestSchema: SpeakingGradeJsonRequestSchema,
@@ -299,6 +319,7 @@ export const OPERATION_CATALOG = {
     // audio at 25 MiB and one deadline covers upload plus grading.
     maxBodyBytes: 26 * 1024 * 1024,
     timeoutMs: 60_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/questions/grading',
     requestSchema: SpeakingV2QuestionGradeMultipartSchema,
@@ -319,6 +340,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/parts/grading',
     requestSchema: SpeakingV2PartGradeRequestSchema,
@@ -338,6 +360,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
     timeoutMs: 60_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/tests/grading',
     requestSchema: SpeakingV2TestGradeRequestSchema,
@@ -356,6 +379,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'none',
     maxBodyBytes: 0,
     timeoutMs: 30_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/responses/{response_id}',
     pathParamsSchema: SpeakingV2ResponsePathSchema,
@@ -374,6 +398,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'none',
     maxBodyBytes: 0,
     timeoutMs: 30_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/parts/{part_result_id}',
     pathParamsSchema: SpeakingV2PartPathSchema,
@@ -392,6 +417,7 @@ export const OPERATION_CATALOG = {
     meteringMode: 'none',
     maxBodyBytes: 0,
     timeoutMs: 30_000,
+    maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/tests/{test_id}',
     pathParamsSchema: SpeakingV2TestPathSchema,
@@ -418,7 +444,7 @@ export function publishedEntitlements(): readonly string[] {
   return [
     ...new Set(
       publishedScopes()
-        .map((scope) => scope.split('.')[0]!)
+        .map((scope) => scope.split('.')[0] ?? '')
         .filter(Boolean),
     ),
   ];

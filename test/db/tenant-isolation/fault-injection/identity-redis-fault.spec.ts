@@ -1,5 +1,7 @@
 import { Response } from 'undici';
 
+import { once } from 'node:events';
+
 import { numberReply } from '@/common/redis/number-reply';
 import { RedisAuthRateLimiter } from '@/modules/auth/rate-limit/infrastructure/redis-auth-rate-limiter';
 import { ApiKeyAuthenticator } from '@/modules/identity/api-keys/application/api-key-authenticator';
@@ -170,7 +172,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
       }
     });
 
-    it('verifies a signed assertion against keys fetched from the issuer', async () => {
+    it('fails closed when Redis cannot reserve a verified assertion', async () => {
       await pool.query(
         `UPDATE organization_identity_configs
          SET jwks_url = $2, public_keys_jwks = NULL
@@ -204,6 +206,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         new UserAssertionVerifier(
           provider,
           new JoseUserAssertionCrypto(),
+          store,
           nowSeconds,
         ),
       );
@@ -217,12 +220,12 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
             organizationId: ORGANIZATION_A,
           }),
         );
-        if (verified.result.status !== 'fulfilled') {
-          throw verified.result.reason;
+        if (verified.result.status !== 'rejected') {
+          throw new Error('assertion verification unexpectedly succeeded');
         }
-        expect(verified.result.value).toMatchObject({
-          organizationId: ORGANIZATION_A,
-          mode: 'signed_assertion',
+        expect(verified.result.reason).toMatchObject({
+          code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+          retryable: true,
         });
         expect(verified.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
         expect(fetched).toEqual(['https://tenant-a.example.test/jwks']);
@@ -325,7 +328,12 @@ it('shares an exhausted uncached API-key budget across Redis clients', async () 
   );
 
   try {
-    await Promise.all([firstRedis.ping(), secondRedis.ping()]);
+    await Promise.all(
+      [firstRedis, secondRedis].map(async (client) => {
+        if (client.status !== 'ready') await once(client, 'ready');
+        await client.ping();
+      }),
+    );
     await raw.del(budgetKey);
     await expect(first.consumeUncachedLookup()).resolves.toEqual({
       allowed: true,

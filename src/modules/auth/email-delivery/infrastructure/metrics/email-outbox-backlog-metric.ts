@@ -7,7 +7,12 @@ export interface EmailOutboxBacklogSample {
   readonly oldestAgeSeconds: number;
 }
 
-export function registerEmailOutboxBacklogMetric(registry: Registry) {
+export function registerEmailOutboxBacklogMetric(registry: Registry): {
+  setLabels(kinds: readonly EmailDeliveryKindLabel[]): void;
+  setSource(
+    next: (() => Promise<readonly EmailOutboxBacklogSample[]>) | undefined,
+  ): void;
+} {
   let labels: readonly EmailDeliveryKindLabel[] = ['unknown'];
   let source: (() => Promise<readonly EmailOutboxBacklogSample[]>) | undefined;
   let pending: Promise<void> | undefined;

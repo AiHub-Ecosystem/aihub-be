@@ -103,7 +103,7 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.create'].path)
   @RequireApiKeyScope(
-    PUBLIC_ROUTES['speaking.audioUploads.create'].requiredScope!,
+    PUBLIC_ROUTES['speaking.audioUploads.create'].requiredScope,
   )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.create'].successStatus)
   async requestUpload(
@@ -126,7 +126,7 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.refresh'].path)
   @RequireApiKeyScope(
-    PUBLIC_ROUTES['speaking.audioUploads.refresh'].requiredScope!,
+    PUBLIC_ROUTES['speaking.audioUploads.refresh'].requiredScope,
   )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.refresh'].successStatus)
   async refreshUpload(
@@ -142,7 +142,7 @@ export class SpeakingAudioUploadController {
 
   @Post(PUBLIC_ROUTES['speaking.audioUploads.complete'].path)
   @RequireApiKeyScope(
-    PUBLIC_ROUTES['speaking.audioUploads.complete'].requiredScope!,
+    PUBLIC_ROUTES['speaking.audioUploads.complete'].requiredScope,
   )
   @HttpCode(PUBLIC_ROUTES['speaking.audioUploads.complete'].successStatus)
   async completeUpload(

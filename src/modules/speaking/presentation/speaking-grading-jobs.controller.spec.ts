@@ -12,6 +12,7 @@ import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
 import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
+import { DispatchAttemptPolicy } from '@/modules/gateway/application/dispatch/dispatch-attempt-policy';
 import type { DispatchObserverPort } from '@/modules/gateway/application/dispatch/dispatch-observer.port';
 import { GuardedOperationDispatcher } from '@/modules/gateway/application/dispatch/guarded-operation-dispatcher';
 import type { OperationTransportPort } from '@/modules/gateway/application/dispatch/operation-transport.port';
@@ -553,6 +554,7 @@ describe('Speaking grading jobs HTTP flow', () => {
       new SandboxAdmission(undefined, () => undefined),
       observer,
       () => undefined,
+      new DispatchAttemptPolicy(undefined, () => false),
     );
     const worker = new ProcessSpeakingGradingJob({
       repository,

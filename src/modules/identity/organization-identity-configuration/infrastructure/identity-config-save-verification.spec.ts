@@ -178,7 +178,12 @@ describe('identity configuration save and next assertion verification', () => {
     };
     const verifier = new UserIdentityResolver(
       repository,
-      new UserAssertionVerifier(keys, crypto, () => 1_800_000_000),
+      new UserAssertionVerifier(
+        keys,
+        crypto,
+        { reserve: async () => true },
+        () => 1_800_000_000,
+      ),
     );
 
     await expect(

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import Redis from 'ioredis';
 import {
@@ -76,6 +77,7 @@ export async function signUserAssertion(
   identity: TenantIdentity,
   now: Date = TEST_NOW,
   audience = 'aihub',
+  jti = randomUUID(),
 ): Promise<string> {
   const issuedAt = Math.floor(now.getTime() / 1_000) - 10;
   const expiresAt = issuedAt + 300;
@@ -86,7 +88,7 @@ export async function signUserAssertion(
     .setSubject(SHARED_SUBJECT)
     .setIssuedAt(issuedAt)
     .setExpirationTime(expiresAt)
-    .setJti('jti_tenant_isolation')
+    .setJti(jti)
     .sign(identity.privateKey);
 }
 

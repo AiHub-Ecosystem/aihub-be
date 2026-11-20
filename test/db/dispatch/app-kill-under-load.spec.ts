@@ -26,16 +26,17 @@ const GRADE_RESPONSE = readFileSync(
   join(process.cwd(), 'test/fixtures/ai-writing/grade-task1.response.json'),
 );
 
-function grade(
+async function grade(
   worker: TestWorker,
   organization: GradingOrganization,
   idempotencyKey: string,
 ): Promise<HttpAnswer | undefined> {
+  const assertion = await organization.signAssertion();
   return sendRequest(worker.url, {
     path: WRITING_TASK1_PATH,
     headers: {
       'x-api-key': organization.apiKey.raw,
-      'x-user-identity': organization.assertion,
+      'x-user-identity': assertion,
       'idempotency-key': idempotencyKey,
     },
     body: {
@@ -102,6 +103,8 @@ describe('an app process killed under grading load', () => {
     worker = await startWorker({
       downstreamUrl: await listen(stalledProvider),
     });
+    // real-timer-ok: Redis connections finish after the app starts listening
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const keys = Array.from({ length: IN_FLIGHT }, () => `kill-${ulid()}`);
     const killed = keys.map((key) => grade(worker as TestWorker, tenant, key));
 
@@ -152,6 +155,8 @@ describe('an app process killed under grading load', () => {
     worker = await startWorker({
       downstreamUrl: await listen(healthyProvider),
     });
+    // real-timer-ok: Redis connections finish after the app starts listening
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const restarted = worker;
     const freshKeys = Array.from(
       { length: IN_FLIGHT },

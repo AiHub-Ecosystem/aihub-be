@@ -117,6 +117,7 @@ describe('sandbox assertion round trip', () => {
       new UserAssertionVerifier(
         keyProvider(organizations),
         new JoseUserAssertionCrypto(),
+        { reserve: async () => true },
         undefined,
         'sandbox',
       ),
@@ -126,6 +127,7 @@ describe('sandbox assertion round trip', () => {
       new UserAssertionVerifier(
         keyProvider(organizations),
         new JoseUserAssertionCrypto(),
+        { reserve: async () => true },
       ),
     );
   });

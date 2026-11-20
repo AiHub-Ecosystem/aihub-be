@@ -1,5 +1,6 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import { ModelQuote, ModelText } from '@/contracts/model-text';
 import {
   CRITERION_IDS,
   TASK1_IMAGE_URL_MAX_LENGTH,
@@ -107,28 +108,28 @@ export const GradeResponseSchema = Type.Object(
       Type.Object(
         {
           id: CriterionIdSchema,
-          name: Type.String(),
+          name: ModelText(),
           band: BandSchema,
-          band_reason: Type.String(),
-          strengths: Type.Array(Type.String()),
-          improvements: Type.Array(Type.String()),
+          band_reason: ModelText(),
+          strengths: Type.Array(ModelText()),
+          improvements: Type.Array(ModelText()),
         },
         { additionalProperties: false },
       ),
       { minItems: 4, maxItems: 4 },
     ),
-    summary: Type.String(),
-    suggestions: Type.Array(Type.String()),
-    next_steps: Type.Array(Type.String()),
+    summary: ModelText(),
+    suggestions: Type.Array(ModelText()),
+    next_steps: Type.Array(ModelText()),
     // Commentary anchored to a quote from the essay. Not a replacement
     // suggestion: downstream returns `{quote, explanation}`, never a rewrite.
     annotations: Type.Array(
       Type.Object(
         {
           criterion: CriterionIdSchema,
-          issue: Type.String(),
-          quote: Type.String(),
-          explanation: Type.String(),
+          issue: ModelText(),
+          quote: ModelQuote(),
+          explanation: ModelText(),
         },
         { additionalProperties: false },
       ),

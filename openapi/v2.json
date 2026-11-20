@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.10.0"
+    "version": "2.11.0"
   },
   "servers": [
     {
@@ -965,17 +965,23 @@
                                 "type": "number"
                               },
                               "band_reason": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "strengths": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               },
                               "areas_for_improvement": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               },
@@ -993,18 +999,28 @@
                                   ],
                                   "properties": {
                                     "quote": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     },
                                     "error_codes": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "error_name": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "explanation": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "improved_version": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     }
                                   }
@@ -1022,12 +1038,18 @@
                                   ],
                                   "properties": {
                                     "quote": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     },
                                     "explanation": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "improved_version": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     }
                                   }
@@ -1036,6 +1058,8 @@
                               "feedback_detail": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               }
@@ -1053,15 +1077,21 @@
                               "required": ["overall", "detail", "cta"],
                               "properties": {
                                 "overall": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 },
                                 "detail": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "cta": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               }
@@ -1077,23 +1107,31 @@
                               ],
                               "properties": {
                                 "status": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 },
                                 "error_recur": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "error_impro": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "error_new": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -1138,15 +1176,23 @@
                                 ]
                               },
                               "code": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "name_en": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "name_vi": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "reason_vi": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               }
                             }
@@ -1168,9 +1214,13 @@
                                   ],
                                   "properties": {
                                     "prompt": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "question_type": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "comments": {
@@ -1181,9 +1231,13 @@
                                         "required": ["quote", "explanation"],
                                         "properties": {
                                           "quote": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 20000,
                                             "type": "string"
                                           },
                                           "explanation": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -1439,17 +1493,23 @@
                                 "type": "number"
                               },
                               "band_reason": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "strengths": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               },
                               "areas_for_improvement": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               },
@@ -1467,18 +1527,28 @@
                                   ],
                                   "properties": {
                                     "quote": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     },
                                     "error_codes": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "error_name": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "explanation": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "improved_version": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     }
                                   }
@@ -1496,12 +1566,18 @@
                                   ],
                                   "properties": {
                                     "quote": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     },
                                     "explanation": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "improved_version": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 20000,
                                       "type": "string"
                                     }
                                   }
@@ -1510,6 +1586,8 @@
                               "feedback_detail": {
                                 "type": "array",
                                 "items": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               }
@@ -1527,15 +1605,21 @@
                               "required": ["overall", "detail", "cta"],
                               "properties": {
                                 "overall": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 },
                                 "detail": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "cta": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 }
                               }
@@ -1551,23 +1635,31 @@
                               ],
                               "properties": {
                                 "status": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 },
                                 "error_recur": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "error_impro": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 },
                                 "error_new": {
                                   "type": "array",
                                   "items": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -1612,15 +1704,23 @@
                                 ]
                               },
                               "code": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "name_en": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "name_vi": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               },
                               "reason_vi": {
+                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                "maxLength": 4000,
                                 "type": "string"
                               }
                             }
@@ -1642,9 +1742,13 @@
                                   ],
                                   "properties": {
                                     "prompt": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "question_type": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "comments": {
@@ -1655,9 +1759,13 @@
                                         "required": ["quote", "explanation"],
                                         "properties": {
                                           "quote": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 20000,
                                             "type": "string"
                                           },
                                           "explanation": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -3745,6 +3853,8 @@
                           "required": ["text", "stats", "tokens"],
                           "properties": {
                             "text": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 20000,
                               "type": "string"
                             },
                             "stats": {
@@ -3793,6 +3903,8 @@
                                     "type": "integer"
                                   },
                                   "text": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "start_ms": {
@@ -3871,6 +3983,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -3881,9 +3995,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -3916,17 +4034,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -3971,6 +4095,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -3998,11 +4124,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4013,6 +4143,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4023,6 +4155,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4033,6 +4167,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4062,17 +4198,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -4117,6 +4259,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -4144,11 +4288,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4159,6 +4307,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4169,6 +4319,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4179,6 +4331,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4208,17 +4362,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -4263,6 +4423,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -4290,11 +4452,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4305,6 +4471,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4315,6 +4483,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4325,6 +4495,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4354,17 +4526,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -4409,6 +4587,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -4436,11 +4616,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4451,6 +4635,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4461,6 +4647,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4471,6 +4659,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4810,6 +5000,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -4820,9 +5012,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -4855,17 +5051,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -4910,6 +5112,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -4937,11 +5141,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4952,6 +5160,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4962,6 +5172,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -4972,6 +5184,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5001,17 +5215,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -5056,6 +5276,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -5083,11 +5305,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5098,6 +5324,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5108,6 +5336,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5118,6 +5348,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5147,17 +5379,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -5202,6 +5440,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -5229,11 +5469,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5244,6 +5488,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5254,6 +5500,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5264,6 +5512,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5293,17 +5543,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -5348,6 +5604,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -5375,11 +5633,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5390,6 +5652,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5400,6 +5664,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5410,6 +5676,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5779,6 +6047,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -5789,9 +6059,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -5824,17 +6098,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -5879,6 +6159,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -5906,11 +6188,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5921,6 +6207,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5931,6 +6219,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5941,6 +6231,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -5970,17 +6262,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -6025,6 +6323,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -6052,11 +6352,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6067,6 +6371,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6077,6 +6383,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6087,6 +6395,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6116,17 +6426,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -6171,6 +6487,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -6198,11 +6516,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6213,6 +6535,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6223,6 +6547,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6233,6 +6559,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6262,17 +6590,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -6317,6 +6651,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -6344,11 +6680,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6359,6 +6699,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6369,6 +6711,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6379,6 +6723,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6632,6 +6978,8 @@
                           "required": ["text", "stats", "tokens"],
                           "properties": {
                             "text": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 20000,
                               "type": "string"
                             },
                             "stats": {
@@ -6680,6 +7028,8 @@
                                     "type": "integer"
                                   },
                                   "text": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "start_ms": {
@@ -6758,6 +7108,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -6768,9 +7120,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -6803,17 +7159,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -6858,6 +7220,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -6885,11 +7249,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6900,6 +7268,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6910,6 +7280,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6920,6 +7292,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -6949,17 +7323,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -7004,6 +7384,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -7031,11 +7413,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7046,6 +7432,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7056,6 +7444,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7066,6 +7456,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7095,17 +7487,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -7150,6 +7548,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -7177,11 +7577,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7192,6 +7596,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7202,6 +7608,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7212,6 +7620,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7241,17 +7651,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -7296,6 +7712,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -7323,11 +7741,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7338,6 +7760,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7348,6 +7772,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7358,6 +7784,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7738,6 +8166,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -7748,9 +8178,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -7783,17 +8217,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -7838,6 +8278,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -7865,11 +8307,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7880,6 +8326,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7890,6 +8338,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7900,6 +8350,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -7929,17 +8381,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -7984,6 +8442,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -8011,11 +8471,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8026,6 +8490,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8036,6 +8502,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8046,6 +8514,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8075,17 +8545,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -8130,6 +8606,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -8157,11 +8635,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8172,6 +8654,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8182,6 +8666,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8192,6 +8678,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8221,17 +8709,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -8276,6 +8770,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -8303,11 +8799,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8318,6 +8818,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8328,6 +8830,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8338,6 +8842,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8716,6 +9222,8 @@
                           "required": ["overview_vi", "details"],
                           "properties": {
                             "overview_vi": {
+                              "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                              "maxLength": 4000,
                               "type": "string"
                             },
                             "details": {
@@ -8726,9 +9234,13 @@
                                 "required": ["criterion", "comment_vi"],
                                 "properties": {
                                   "criterion": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   },
                                   "comment_vi": {
+                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                    "maxLength": 4000,
                                     "type": "string"
                                   }
                                 }
@@ -8761,17 +9273,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -8816,6 +9334,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -8843,11 +9363,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8858,6 +9382,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8868,6 +9394,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8878,6 +9406,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -8907,17 +9437,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -8962,6 +9498,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -8989,11 +9527,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9004,6 +9546,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9014,6 +9558,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9024,6 +9570,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9053,17 +9601,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -9108,6 +9662,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -9135,11 +9691,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9150,6 +9710,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9160,6 +9722,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9170,6 +9734,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9199,17 +9765,23 @@
                                   ],
                                   "properties": {
                                     "reason_for_band_vi": {
+                                      "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                      "maxLength": 4000,
                                       "type": "string"
                                     },
                                     "strengths_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     },
                                     "areas_for_improvement_vi": {
                                       "type": "array",
                                       "items": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -9254,6 +9826,8 @@
                                                 }
                                               },
                                               "text": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "start_ms": {
@@ -9281,11 +9855,15 @@
                                             }
                                           },
                                           "kind": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           },
                                           "error_codes": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9296,6 +9874,8 @@
                                           "explain_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9306,6 +9886,8 @@
                                           "improvement": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -9316,6 +9898,8 @@
                                           "improvement_vi": {
                                             "anyOf": [
                                               {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               {
@@ -11019,6 +11603,8 @@
                               "required": ["text", "stats", "tokens"],
                               "properties": {
                                 "text": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 20000,
                                   "type": "string"
                                 },
                                 "stats": {
@@ -11070,6 +11656,8 @@
                                         "type": "integer"
                                       },
                                       "text": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       },
                                       "start_ms": {
@@ -11148,6 +11736,8 @@
                               "required": ["overview_vi", "details"],
                               "properties": {
                                 "overview_vi": {
+                                  "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                  "maxLength": 4000,
                                   "type": "string"
                                 },
                                 "details": {
@@ -11158,9 +11748,13 @@
                                     "required": ["criterion", "comment_vi"],
                                     "properties": {
                                       "criterion": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       },
                                       "comment_vi": {
+                                        "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                        "maxLength": 4000,
                                         "type": "string"
                                       }
                                     }
@@ -11193,17 +11787,23 @@
                                       ],
                                       "properties": {
                                         "reason_for_band_vi": {
+                                          "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                          "maxLength": 4000,
                                           "type": "string"
                                         },
                                         "strengths_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         },
                                         "areas_for_improvement_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -11248,6 +11848,8 @@
                                                     }
                                                   },
                                                   "text": {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   "start_ms": {
@@ -11275,11 +11877,15 @@
                                                 }
                                               },
                                               "kind": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "error_codes": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11290,6 +11896,8 @@
                                               "explain_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11300,6 +11908,8 @@
                                               "improvement": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11310,6 +11920,8 @@
                                               "improvement_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11339,17 +11951,23 @@
                                       ],
                                       "properties": {
                                         "reason_for_band_vi": {
+                                          "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                          "maxLength": 4000,
                                           "type": "string"
                                         },
                                         "strengths_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         },
                                         "areas_for_improvement_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -11394,6 +12012,8 @@
                                                     }
                                                   },
                                                   "text": {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   "start_ms": {
@@ -11421,11 +12041,15 @@
                                                 }
                                               },
                                               "kind": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "error_codes": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11436,6 +12060,8 @@
                                               "explain_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11446,6 +12072,8 @@
                                               "improvement": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11456,6 +12084,8 @@
                                               "improvement_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11485,17 +12115,23 @@
                                       ],
                                       "properties": {
                                         "reason_for_band_vi": {
+                                          "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                          "maxLength": 4000,
                                           "type": "string"
                                         },
                                         "strengths_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         },
                                         "areas_for_improvement_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -11540,6 +12176,8 @@
                                                     }
                                                   },
                                                   "text": {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   "start_ms": {
@@ -11567,11 +12205,15 @@
                                                 }
                                               },
                                               "kind": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "error_codes": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11582,6 +12224,8 @@
                                               "explain_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11592,6 +12236,8 @@
                                               "improvement": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11602,6 +12248,8 @@
                                               "improvement_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11631,17 +12279,23 @@
                                       ],
                                       "properties": {
                                         "reason_for_band_vi": {
+                                          "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                          "maxLength": 4000,
                                           "type": "string"
                                         },
                                         "strengths_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         },
                                         "areas_for_improvement_vi": {
                                           "type": "array",
                                           "items": {
+                                            "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                            "maxLength": 4000,
                                             "type": "string"
                                           }
                                         }
@@ -11686,6 +12340,8 @@
                                                     }
                                                   },
                                                   "text": {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   "start_ms": {
@@ -11713,11 +12369,15 @@
                                                 }
                                               },
                                               "kind": {
+                                                "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                "maxLength": 4000,
                                                 "type": "string"
                                               },
                                               "error_codes": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11728,6 +12388,8 @@
                                               "explain_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11738,6 +12400,8 @@
                                               "improvement": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {
@@ -11748,6 +12412,8 @@
                                               "improvement_vi": {
                                                 "anyOf": [
                                                   {
+                                                    "description": "Model-generated plain text. Treat it as untrusted: render it as text, never as HTML. Control characters are removed. The limit counts UTF-16 code units.",
+                                                    "maxLength": 4000,
                                                     "type": "string"
                                                   },
                                                   {

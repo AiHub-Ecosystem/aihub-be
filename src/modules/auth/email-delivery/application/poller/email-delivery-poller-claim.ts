@@ -5,7 +5,7 @@ export function claimEmailDeliveryBatch(
   store: EmailDispatchClaimPort,
   input: ClaimEmailDeliveryRequestsInput & { readonly batchSize: number },
   claimSuppressed: boolean,
-) {
+): ReturnType<EmailDispatchClaimPort['claim']> {
   if (claimSuppressed) return Promise.resolve([]);
   const { batchSize, ...claim } = input;
   return store.claim({

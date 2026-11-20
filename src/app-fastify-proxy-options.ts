@@ -17,7 +17,9 @@ function trustSocketPeerOnly(_address: string, hop: number): boolean {
 export function createAppFastifyProxyOptions(
   trustedProxyIp: string,
   listenSocket?: string,
-) {
+): {
+  readonly trustProxy: string | ((address: string, hop: number) => boolean);
+} {
   return {
     trustProxy:
       listenSocket === undefined ? trustedProxyIp : trustSocketPeerOnly,

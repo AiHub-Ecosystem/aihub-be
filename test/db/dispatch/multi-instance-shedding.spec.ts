@@ -28,15 +28,16 @@ function createStalledProvider(): Server {
   return createServer((request) => request.resume());
 }
 
-function grade(
+async function grade(
   worker: TestWorker,
   organization: GradingOrganization,
 ): Promise<HttpAnswer | undefined> {
+  const assertion = await organization.signAssertion();
   return sendRequest(worker.url, {
     path: WRITING_TASK1_PATH,
     headers: {
       'x-api-key': organization.apiKey.raw,
-      'x-user-identity': organization.assertion,
+      'x-user-identity': assertion,
       'idempotency-key': `shed-${ulid()}`,
     },
     body: {

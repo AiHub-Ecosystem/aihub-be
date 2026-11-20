@@ -136,6 +136,7 @@ describe('tenant isolation for identity boundaries', () => {
           TEST_NOW.getTime(),
         ),
         new JoseUserAssertionCrypto(),
+        identityStore,
         nowSeconds,
       ),
     );
@@ -164,6 +165,7 @@ describe('tenant isolation for identity boundaries', () => {
           TEST_NOW.getTime(),
         ),
         new JoseUserAssertionCrypto(),
+        identityStore,
         nowSeconds,
       ),
     );
@@ -255,11 +257,23 @@ describe('tenant isolation for identity boundaries', () => {
       new UserAssertionVerifier(
         provider,
         new JoseUserAssertionCrypto(),
+        identityStore,
         nowSeconds,
       ),
     );
-    const assertionA = await signUserAssertion(fixture.organizationA.identity);
-    const assertionB = await signUserAssertion(fixture.organizationB.identity);
+    const sharedJti = 'same-jti-in-two-organizations';
+    const assertionA = await signUserAssertion(
+      fixture.organizationA.identity,
+      TEST_NOW,
+      'aihub',
+      sharedJti,
+    );
+    const assertionB = await signUserAssertion(
+      fixture.organizationB.identity,
+      TEST_NOW,
+      'aihub',
+      sharedJti,
+    );
     const forgedAssertion = await signUserAssertion({
       ...fixture.organizationB.identity,
       issuer: fixture.organizationA.identity.issuer,
@@ -291,7 +305,12 @@ describe('tenant isolation for identity boundaries', () => {
     ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
     await expect(
       verifier.resolve({
-        value: assertionB,
+        value: await signUserAssertion(
+          fixture.organizationB.identity,
+          TEST_NOW,
+          'aihub',
+          sharedJti,
+        ),
         organizationId: ORGANIZATION_B,
       }),
     ).resolves.toEqual({
@@ -301,7 +320,7 @@ describe('tenant isolation for identity boundaries', () => {
       mode: 'signed_assertion',
     });
     await verifier.resolve({
-      value: assertionB,
+      value: await signUserAssertion(fixture.organizationB.identity),
       organizationId: ORGANIZATION_B,
     });
 

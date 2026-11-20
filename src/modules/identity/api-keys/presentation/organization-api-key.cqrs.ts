@@ -51,7 +51,9 @@ export class CreateOrganizationApiKeyHandler
     private readonly useCase: CreateOrganizationApiKeyPort,
   ) {}
 
-  execute(command: CreateOrganizationApiKeyCommand) {
+  execute(
+    command: CreateOrganizationApiKeyCommand,
+  ): Promise<CreatedOrganizationApiKey> {
     return this.useCase.create(command.input);
   }
 }
@@ -71,7 +73,9 @@ export class RotateOrganizationApiKeyHandler
     private readonly useCase: RotateOrganizationApiKeyPort,
   ) {}
 
-  execute(command: RotateOrganizationApiKeyCommand) {
+  execute(
+    command: RotateOrganizationApiKeyCommand,
+  ): Promise<RotatedOrganizationApiKey> {
     return this.useCase.rotate(command.input);
   }
 }
@@ -91,7 +95,9 @@ export class RevokeOrganizationApiKeyHandler
     private readonly useCase: RevokeOrganizationApiKeyPort,
   ) {}
 
-  execute(command: RevokeOrganizationApiKeyCommand) {
+  execute(
+    command: RevokeOrganizationApiKeyCommand,
+  ): Promise<OrganizationApiKeyView> {
     return this.useCase.revoke(command.input);
   }
 }
@@ -113,7 +119,9 @@ export class ListOrganizationApiKeysHandler
     private readonly useCase: ListOrganizationApiKeysPort,
   ) {}
 
-  execute(query: ListOrganizationApiKeysQuery) {
+  execute(
+    query: ListOrganizationApiKeysQuery,
+  ): Promise<readonly OrganizationApiKeyView[]> {
     return this.useCase.list(query.input);
   }
 }

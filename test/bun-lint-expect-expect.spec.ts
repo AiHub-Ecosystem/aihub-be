@@ -1,100 +1,47 @@
-import { spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  rmdirSync,
-  writeFileSync,
-} from 'node:fs';
-import { join } from 'node:path';
+import { lintFixture } from './support/lint-fixture';
 
-const repositoryRoot = process.cwd();
-const temporaryRoot = join(repositoryRoot, 'temp');
-
-function removeTemporaryRootIfCreated(createdByThisRun: boolean): void {
-  if (!createdByThisRun) return;
-
-  try {
-    rmdirSync(temporaryRoot);
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error.code === 'ENOENT' || error.code === 'ENOTEMPTY')
-    ) {
-      return;
-    }
-    throw error;
-  }
-}
-
-function lintFixture(source: string): {
-  status: number | null;
-  output: string;
-} {
-  const temporaryRootExisted = existsSync(temporaryRoot);
-  mkdirSync(temporaryRoot, { recursive: true });
-  const fixtureDirectory = mkdtempSync(join(temporaryRoot, 'expect-expect-'));
-
-  try {
-    const fixturePath = join(fixtureDirectory, 'expect-expect.spec.ts');
-    writeFileSync(fixturePath, source, 'utf8');
-    const result = spawnSync(
-      'bun',
-      [
-        'lint',
-        '--no-script',
-        '--allow=typescript/no-unsafe-assignment',
-        '--allow=typescript/no-unsafe-member-access',
-        '--allow=typescript/no-unsafe-call',
-        '--allow=typescript/no-unsafe-return',
-        '--allow=typescript/no-unsafe-argument',
-        '--no-ignore',
-        '--format=unix',
-        fixturePath,
-      ],
-      {
-        cwd: repositoryRoot,
-        encoding: 'utf8',
-        timeout: 10_000,
-        windowsHide: true,
-      },
-    );
-
-    if (result.error) throw result.error;
-    return {
-      status: result.status,
-      output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
-    };
-  } finally {
-    rmSync(fixtureDirectory, { recursive: true, force: true });
-    removeTemporaryRootIfCreated(!temporaryRootExisted);
-  }
-}
+const LINT_ARGS = [
+  '--no-script',
+  '--allow=typescript/no-unsafe-assignment',
+  '--allow=typescript/no-unsafe-member-access',
+  '--allow=typescript/no-unsafe-call',
+  '--allow=typescript/no-unsafe-return',
+  '--allow=typescript/no-unsafe-argument',
+  '--no-ignore',
+  '--format=unix',
+];
+const OPTIONS = {
+  fileName: 'expect-expect.spec.ts',
+  args: LINT_ARGS,
+} as const;
 
 describe('jest/expect-expect', () => {
   it('accepts a test whose assertion is made through expectRefused', () => {
-    const result = lintFixture(`
+    const result = lintFixture(
+      `
       function expectRefused(): void {}
       describe('query refusals', () => {
         it('counts a shared assertion helper', () => {
           expectRefused();
         });
       });
-    `);
+    `,
+      OPTIONS,
+    );
 
     expect(result.status).toBe(0);
     expect(result.output).not.toContain('jest/expect-expect');
   });
 
   it('still rejects a test with no assertion', () => {
-    const result = lintFixture(`
+    const result = lintFixture(
+      `
       describe('query refusals', () => {
         it('has no assertion', () => {});
       });
-    `);
+    `,
+      OPTIONS,
+    );
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('expect-expect');

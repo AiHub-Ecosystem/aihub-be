@@ -9,6 +9,18 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.11.0] - 2026-11-19
+
+### Changed
+
+- Model-generated text in `/v2` Writing and Speaking grading results is
+  published as untrusted plain text with a length limit. Feedback, explanation,
+  and label fields carry `maxLength` 4000, and a quotation or transcript carries
+  `maxLength` 20000, counted in UTF-16 code units. AIHUB removes control
+  characters from these fields. Render them as text, never as HTML.
+- An AI service response with a text field over its limit, or a body over the
+  operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
+
 ## [2.10.0] - 2026-11-19
 
 ### Added
@@ -23,6 +35,32 @@ out.
 
 - Writing `/v2` grading responses include provider-ranked `error_priority`
   entries for up to three priority errors.
+
+## [1.20.0] - 2026-11-20
+
+### Changed
+
+- `POST /v1/auth/web-sessions/logout` answers `400 INVALID_REQUEST` when the
+  request carries a cookie, an `Authorization` header, or a query value
+  alongside the body token. The route used to answer a bodyless `204` and
+  revoke nothing in that case, which reported a sign-out that never happened.
+  A request that carries the token only in the body keeps the existing quiet
+  `204` contract for valid, already-revoked, unknown, expired, and malformed
+  tokens. `POST /v1/auth/logout` applies the same rule to a presented refresh
+  cookie, except that a BFF-forwarded call without the session CSRF token still
+  answers the quiet `204` of ADR-0157.
+
+## [1.19.0] - 2026-11-20
+
+### Changed
+
+- Model-generated text in `/v1` Writing and Speaking grading results is
+  published as untrusted plain text with a length limit. Feedback, explanation,
+  and label fields carry `maxLength` 4000, and a quotation or transcript carries
+  `maxLength` 20000, counted in UTF-16 code units. AIHUB removes control
+  characters from these fields. Render them as text, never as HTML.
+- An AI service response with a text field over its limit, or a body over the
+  operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
 
 ## [2.8.0] - 2026-11-15
 
@@ -164,17 +202,18 @@ out.
 
 ## [1.18.0] - 2026-11-19
 
-### Changed
+### Added
 
-- `POST /v1/auth/web-sessions/logout` answers `400 INVALID_REQUEST` when the
-  request carries a cookie, an `Authorization` header, or a query value
-  alongside the body token. The route used to answer a bodyless `204` and
-  revoke nothing in that case, which reported a sign-out that never happened.
-  A request that carries the token only in the body keeps the existing quiet
-  `204` contract for valid, already-revoked, unknown, expired, and malformed
-  tokens. `POST /v1/auth/logout` applies the same rule to a presented refresh
-  cookie, except that a BFF-forwarded call without the session CSRF token still
-  answers the quiet `204` of ADR-0157.
+- `POST /v1/auth/web-sessions/exchange` accepts an optional `client_proof_key`:
+  the public JWK (`kty: EC`, `crv: P-256`, `x`, `y`) of a key the Customer Web
+  holds. Its first thumbprint is stored with the Web Session, which rejects a
+  replacement key until the user signs in again. Bound access tokens carry
+  `cnf.jkt` and responses add `dpop_bound: true`; `token_type` remains `Bearer`
+  for v1 compatibility. Clients send DPoP after the server enters `verify`.
+  Callers that omit the key get an unbound Bearer token. Private keys, invalid P-256 coordinates, another
+  curve, or any other member are refused with `INVALID_REQUEST` (`400`). Enable
+  `AIHUB_DPOP_MODE=verify` before clients start using the DPoP scheme; `off`
+  accepts Bearer only. `enforce` later requires DPoP for Web Session tokens.
 
 ## [1.17.0] - 2026-11-19
 

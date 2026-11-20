@@ -56,7 +56,13 @@ export class EnvelopeCipher {
   }
 
   seal(plaintext: string, aad?: Buffer): string {
-    const key = this.keys.get(this.currentKeyId)!;
+    const key = this.keys.get(this.currentKeyId);
+    if (key === undefined) {
+      throw new EnvelopeCipherError(
+        'malformed',
+        this.messages.currentNotProvisioned,
+      );
+    }
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     if (aad !== undefined) cipher.setAAD(aad);
@@ -88,13 +94,24 @@ export class EnvelopeCipher {
     let ciphertextB64: string;
 
     if (this.layout === 'self-describing') {
-      if (parts.length !== 5 || parts[0] !== this.version) {
+      if (parts.length !== 5) {
         throw new EnvelopeCipherError('malformed', this.messages.malformed);
       }
-      keyId = parts[1]!;
-      ivB64 = parts[2]!;
-      tagB64 = parts[3]!;
-      ciphertextB64 = parts[4]!;
+      const [version, selfKeyId, selfIvB64, selfTagB64, selfCiphertextB64] =
+        parts;
+      if (
+        version !== this.version ||
+        selfKeyId === undefined ||
+        selfIvB64 === undefined ||
+        selfTagB64 === undefined ||
+        selfCiphertextB64 === undefined
+      ) {
+        throw new EnvelopeCipherError('malformed', this.messages.malformed);
+      }
+      keyId = selfKeyId;
+      ivB64 = selfIvB64;
+      tagB64 = selfTagB64;
+      ciphertextB64 = selfCiphertextB64;
     } else {
       if (parts.length !== 3) {
         throw new EnvelopeCipherError('malformed', this.messages.malformed);
@@ -102,10 +119,18 @@ export class EnvelopeCipher {
       if (externalKeyId === undefined) {
         throw new EnvelopeCipherError('malformed', this.messages.malformed);
       }
+      const [compactIvB64, compactTagB64, compactCiphertextB64] = parts;
+      if (
+        compactIvB64 === undefined ||
+        compactTagB64 === undefined ||
+        compactCiphertextB64 === undefined
+      ) {
+        throw new EnvelopeCipherError('malformed', this.messages.malformed);
+      }
       keyId = externalKeyId;
-      ivB64 = parts[0]!;
-      tagB64 = parts[1]!;
-      ciphertextB64 = parts[2]!;
+      ivB64 = compactIvB64;
+      tagB64 = compactTagB64;
+      ciphertextB64 = compactCiphertextB64;
     }
 
     const key = this.keys.get(keyId);

@@ -193,6 +193,7 @@ describe('the web_sessions schema on PostgreSQL', () => {
         data_type: 'timestamp with time zone',
         is_nullable: 'YES',
       },
+      { column_name: 'proof_key_jkt', data_type: 'text', is_nullable: 'YES' },
     ]);
   });
 
@@ -307,6 +308,51 @@ describe('the Web Session credential on PostgreSQL', () => {
         [userId],
       ),
     ).toMatchObject({ rows: [] });
+  });
+});
+
+describe('binding one proof key to a Web Session on PostgreSQL', () => {
+  it('wins one concurrent first bind and refuses every replacement', async () => {
+    const userId = await seedAccount();
+    const hash = await createWebSession(userId, {
+      expiresAt: new Date(NOW.getTime() + 30 * DAY),
+    });
+    const candidates = ['A'.repeat(43), 'B'.repeat(43)];
+
+    const results = await Promise.all(
+      candidates.map((proofKeyJkt) =>
+        webSessions.bindWebSessionProofKey({
+          tokenHash: hash,
+          proofKeyJkt,
+          now: NOW,
+        }),
+      ),
+    );
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const { rows } = await pool.query<{ proof_key_jkt: string }>(
+      'SELECT proof_key_jkt FROM web_sessions WHERE token_hash = $1',
+      [hash],
+    );
+    const stored = rows[0]?.proof_key_jkt;
+    expect(candidates).toContain(stored);
+    await expect(
+      webSessions.bindWebSessionProofKey({
+        tokenHash: hash,
+        proofKeyJkt: stored ?? '',
+        now: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      webSessions.bindWebSessionProofKey({
+        tokenHash: hash,
+        proofKeyJkt: candidates.find((candidate) => candidate !== stored) ?? '',
+        now: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      webSessions.findExchangeableWebSession({ tokenHash: hash, now: NOW }),
+    ).resolves.toMatchObject({ proofKeyJkt: stored });
   });
 });
 

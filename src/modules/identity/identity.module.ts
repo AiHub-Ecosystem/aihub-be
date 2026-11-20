@@ -181,6 +181,10 @@ import {
   USER_ASSERTION_CRYPTO,
   type UserAssertionCryptoPort,
 } from './user-assertions/application/user-assertion-crypto.port';
+import {
+  USER_ASSERTION_REPLAY_MARKER,
+  type UserAssertionReplayMarkerPort,
+} from './user-assertions/application/user-assertion-replay-marker.port';
 import { UserAssertionVerifier } from './user-assertions/application/user-assertion-verifier';
 import { UserIdentityResolver } from './user-assertions/application/user-identity-resolver';
 import { USER_IDENTITY_RESOLVER } from './user-assertions/application/user-identity-resolver.port';
@@ -543,6 +547,10 @@ type IdentityTransactionClient = ReturnType<
       useExisting: API_KEY_CACHE,
     },
     {
+      provide: USER_ASSERTION_REPLAY_MARKER,
+      useExisting: API_KEY_CACHE,
+    },
+    {
       provide: AUTH_FAILURE_COUNTER,
       inject: [RUNTIME_CONNECTION_CONFIGURATION],
       useFactory: (configuration: RuntimeConnectionConfigurationPort) =>
@@ -582,6 +590,7 @@ type IdentityTransactionClient = ReturnType<
         repository: OrganizationIdentityConfigRepositoryPort,
         keyProvider: JwksKeyProviderPort,
         crypto: UserAssertionCryptoPort,
+        replayMarker: UserAssertionReplayMarkerPort,
         configuration: ConfigType<typeof appConfig>,
       ) =>
         new UserIdentityResolver(
@@ -589,6 +598,7 @@ type IdentityTransactionClient = ReturnType<
           new UserAssertionVerifier(
             keyProvider,
             crypto,
+            replayMarker,
             undefined,
             configuration.AIHUB_RUNTIME_DATABASE_SCOPE,
           ),
@@ -597,6 +607,7 @@ type IdentityTransactionClient = ReturnType<
         ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
         JWKS_KEY_PROVIDER,
         USER_ASSERTION_CRYPTO,
+        USER_ASSERTION_REPLAY_MARKER,
         appConfig.KEY,
       ],
     },

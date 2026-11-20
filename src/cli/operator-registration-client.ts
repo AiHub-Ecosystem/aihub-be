@@ -1,6 +1,10 @@
+import type { PendingRegistrationRecordPort } from '@/modules/auth/public/pending-registration-expiry';
+
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorRegistrationClient(databaseUrl: string) {
+export async function createOperatorRegistrationClient(
+  databaseUrl: string,
+): Promise<PendingRegistrationRecordPort & { close(): Promise<void> }> {
   const [
     { createOperatorPrismaClient },
     { createOperatorPendingRegistrationRecords },

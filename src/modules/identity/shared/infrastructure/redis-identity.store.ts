@@ -1,5 +1,6 @@
 import { apiKeyRecordFromRow } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 
+import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   type ApiKeyCacheInvalidationSeam,
@@ -18,6 +19,7 @@ import type {
   JwksCacheSnapshot,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
+import type { UserAssertionReplayMarkerPort } from '@/modules/identity/user-assertions/application/user-assertion-replay-marker.port';
 import {
   signIdentityCacheEntry,
   verifyIdentityCacheEntry,
@@ -107,7 +109,9 @@ function parseJwksCacheEntry(value: unknown): JwksCacheEntry | undefined {
   return { jwks, freshUntil, staleUntil };
 }
 
-export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
+export class RedisIdentityStore
+  implements ApiKeyCachePort, JwksCachePort, UserAssertionReplayMarkerPort
+{
   private readonly client: RedisIdentityClient | undefined;
   private readonly hmacKey: Buffer | undefined;
   private readonly localApiKeys = new Map<string, LocalApiKeyEntry>();
@@ -116,6 +120,37 @@ export class RedisIdentityStore implements ApiKeyCachePort, JwksCachePort {
   constructor(url: string, client?: RedisIdentityClient, hmacKey?: Buffer) {
     this.client = client ?? connectRedisIdentityClient(url);
     this.hmacKey = hmacKey;
+  }
+
+  async reserve(input: {
+    readonly organizationId: string;
+    readonly environment: 'production' | 'sandbox';
+    readonly jti: string;
+    readonly ttlSeconds: number;
+  }): Promise<boolean> {
+    if (this.client === undefined) {
+      throw new AppError({
+        code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+        message: 'Identity provider is unavailable',
+        retryable: true,
+      });
+    }
+
+    const key = `aihub:v1:user-assertion-replay:${input.organizationId}:${input.environment}:${input.jti}`;
+    const result = await this.client.set(
+      key,
+      '1',
+      'EX',
+      input.ttlSeconds,
+      'NX',
+    );
+    if (result === 'OK') return true;
+    if (result === null) return false;
+    throw new AppError({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      message: 'Identity provider is unavailable',
+      retryable: true,
+    });
   }
 
   async get(hashHex: string): Promise<ApiKeyRecord | null | undefined> {

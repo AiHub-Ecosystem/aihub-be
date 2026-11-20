@@ -7,6 +7,7 @@ import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
+import { DispatchAttemptPolicy } from './dispatch-attempt-policy';
 import { GuardedOperationDispatcher } from './guarded-operation-dispatcher';
 import type {
   DispatchResult,
@@ -96,6 +97,7 @@ function fixture(options: { admit?: boolean | Error } = {}) {
     new SandboxAdmission(budget, warn),
     { deadlineMsRemaining, cancelledByDeadline },
     warn,
+    new DispatchAttemptPolicy(undefined, () => false),
   );
   return {
     dispatcher,

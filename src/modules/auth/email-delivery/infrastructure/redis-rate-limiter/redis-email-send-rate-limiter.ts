@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { OnModuleDestroy } from '@nestjs/common';
-import Redis from 'ioredis';
 
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import {
+  REDIS_NO_REPLAY_OPTIONS,
+  createRedisClient,
+} from '@/common/redis/create-redis-client';
 import type {
   EmailProviderOutageCircuitPort,
   EmailProviderSendPermit,
@@ -164,15 +167,11 @@ export class RedisEmailSendRateLimiter
       redisClient.on('error', () => undefined);
       this.redis = redisClient;
     } else if (redisUrl.trim().length > 0) {
-      const redis = new Redis(redisUrl, {
+      this.redis = createRedisClient(redisUrl, {
+        commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
         lazyConnect: true,
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: 1,
-        connectTimeout: 1_000,
-        commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+        ...REDIS_NO_REPLAY_OPTIONS,
       });
-      redis.on('error', () => undefined);
-      this.redis = redis;
     }
   }
 

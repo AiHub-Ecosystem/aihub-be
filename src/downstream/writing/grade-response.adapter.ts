@@ -3,8 +3,11 @@ import {
   CRITERION_IDS,
   type CriterionId,
   type GradeResponse,
+  GradeResponseSchema,
 } from '@/contracts/writing/grading';
 import { contractViolation } from '@/downstream/contract-violation';
+import { stripControlCharacters } from '@/downstream/model-text';
+import { assertPublicContract } from '@/downstream/public-contract';
 
 const CRITERION_NAMES: Readonly<Record<CriterionId, string>> = {
   task_achievement: 'Task Achievement',
@@ -121,7 +124,8 @@ function toCriteria(value: unknown): GradeResponse['criteria'] {
  * - `data_micro.*.*.question_type` — means the chart type on Task 1 and the
  *   subject on Task 2, so it is not usable as one field.
  */
-export function parseGradeResponse(body: unknown): GradeResponse {
+export function parseGradeResponse(rawBody: unknown): GradeResponse {
+  const body = stripControlCharacters(rawBody);
   if (!isRecord(body)) {
     throw contractViolation('response body is not an object');
   }
@@ -145,7 +149,7 @@ export function parseGradeResponse(body: unknown): GradeResponse {
   const assessment = data['Overall Assessment'];
   const overall = isRecord(assessment) ? assessment : {};
 
-  return {
+  const response: GradeResponse = {
     overall_band: data['overall_band'],
     language: 'vi',
     criteria,
@@ -154,4 +158,6 @@ export function parseGradeResponse(body: unknown): GradeResponse {
     next_steps: toStringList(overall['Next Steps']),
     annotations: toAnnotations(body['data_micro']),
   };
+  assertPublicContract(GradeResponseSchema, response);
+  return response;
 }

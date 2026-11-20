@@ -1,6 +1,6 @@
 # ADR-0123: A pending registration is replaced by the next one, and verification re-enters its password
 
-- Status: Accepted; a refused recipient reservation leaves a pending registration untouched, added by [#932](https://github.com/AiHub-Ecosystem/aihub-be/issues/932)
+- Status: Accepted; a refused recipient reservation leaves a pending registration untouched, added by [#932](https://github.com/AiHub-Ecosystem/aihub-be/issues/932); the account-existence signal this record noted is stated as a decision by [ADR-0178](0178-registration-may-confirm-an-active-account.md)
 - Date: 2026-10-23
 - Related issue: [#932](https://github.com/AiHub-Ecosystem/aihub-be/issues/932)
 - Amends: [ADR-0054](0054-verification-sign-in-bound-to-signup-browser.md) (what verification proves about the credential)
