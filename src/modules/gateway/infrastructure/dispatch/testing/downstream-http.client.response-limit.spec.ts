@@ -62,6 +62,14 @@ function serve(route: string, sink: Sink): void {
       sink.start(200, { ...JSON_TYPE, 'content-length': String(LIMIT + 1) });
       sink.writeUnframed(jsonOfSize(LIMIT + 10));
       return;
+    case '/truncated':
+      sink.start(200, {
+        ...JSON_TYPE,
+        'content-length': '100',
+        connection: 'close',
+      });
+      sink.end('{"ok":true}');
+      return;
     case '/gzip':
       sink.start(200, { ...JSON_TYPE, 'content-encoding': 'gzip' });
       sink.end(gzipSync('{"ok":true}'));
@@ -287,6 +295,15 @@ describe('DownstreamHttpClient response byte limit over HTTP/1.1', () => {
 
   afterEach(async () => {
     await stub.close();
+  });
+
+  it('classifies a truncated response as a retryable transport failure', async () => {
+    const error = await rejection(get(stub.client, '/truncated'));
+
+    expect(error).toMatchObject({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      retryable: true,
+    });
   });
 
   it('serves the next request after cancelling an underreported body', async () => {

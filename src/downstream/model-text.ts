@@ -4,7 +4,8 @@ import { contractViolation } from './contract-violation';
 // drops the C0 and C1 controls except tab, line feed and carriage return, which
 // feedback legitimately uses, and the bidirectional controls that can make text
 // read in a different order than it is stored.
-const CONTROL_CHARACTERS = /(?![\t\n\r])\p{Cc}|[‪-‮⁦-⁩]/gu;
+const CONTROL_CHARACTERS =
+  /(?![\t\n\r])\p{Cc}|[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
 
 /**
  * The deepest nesting a provider body may have. The captured responses nest

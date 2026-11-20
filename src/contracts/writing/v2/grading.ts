@@ -1,8 +1,11 @@
-import { type Static, type TSchema, Type } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import { type Static, Type } from '@sinclair/typebox';
 
 import { isRecord } from '@/common/is-record';
-import { ModelQuote, ModelText } from '@/contracts/model-text';
+import {
+  MODEL_TEXT_MAX_LENGTH,
+  ModelQuote,
+  ModelText,
+} from '@/contracts/model-text';
 
 import {
   BandSchema,
@@ -156,32 +159,23 @@ export const WritingV2GradeResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-function withoutMaxLength<T extends TSchema>(schema: T): T {
-  const clone = Value.Clone(schema);
-  const pending: unknown[] = [clone];
-  while (pending.length > 0) {
-    const node = pending.pop();
-    if (Array.isArray(node)) {
-      for (const item of node as unknown[]) pending.push(item);
-      continue;
-    }
-    if (!isRecord(node)) continue;
-    delete node['maxLength'];
-    for (const value of Object.values(node)) pending.push(value);
-  }
-  return clone;
+/** Returns whether both open-ended data_micro key levels fit the text limit. */
+export function hasBoundedWritingV2DataMicroKeys(dataMicro: unknown): boolean {
+  if (!isRecord(dataMicro)) return false;
+  return Object.entries(dataMicro).every(
+    ([trait, errors]) =>
+      trait.length <= MODEL_TEXT_MAX_LENGTH &&
+      isRecord(errors) &&
+      Object.keys(errors).every((code) => code.length <= MODEL_TEXT_MAX_LENGTH),
+  );
 }
 
 /** Read-only idempotency shape for completed grades written before `error_priority`. */
-const StoredWritingV2GradeResponseSchema = withoutMaxLength(
-  WritingV2GradeResponseSchema,
-);
-
 export const WritingV2StoredGradeResponseSchema = Type.Object(
   {
-    ...StoredWritingV2GradeResponseSchema.properties,
+    ...WritingV2GradeResponseSchema.properties,
     error_priority: Type.Optional(
-      StoredWritingV2GradeResponseSchema.properties.error_priority,
+      WritingV2GradeResponseSchema.properties.error_priority,
     ),
   },
   { additionalProperties: false },

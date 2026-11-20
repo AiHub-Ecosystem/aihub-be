@@ -24,6 +24,10 @@ describe('stripControlCharacters', () => {
     expect(stripControlCharacters('line\r\n\tnext')).toBe('line\r\n\tnext');
   });
 
+  it('drops Arabic and left/right mark Bidi_Control characters', () => {
+    expect(stripControlCharacters('\u061c\u200e\u200f')).toBe('');
+  });
+
   it('leaves ordinary text, including Vietnamese and emoji, unchanged', () => {
     const text = 'Bài viết có bố cục rõ ràng 👍 — đạt band 6.5';
 

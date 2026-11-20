@@ -305,20 +305,22 @@ export class DownstreamHttpClient {
       }
       options.onResponseReceived?.(response.statusCode);
 
+      const headers = normalizeHeaders(response.headers);
+      const maxResponseBytes =
+        options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+      if (Number(headers['content-length']) > maxResponseBytes) {
+        response.body.destroy();
+        throw contractViolation(
+          `response body exceeds the ${maxResponseBytes} byte limit`,
+        );
+      }
+
       let parsedBody: unknown;
       try {
-        parsedBody = await readJsonWithin(
-          response.body,
-          options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
-        );
+        parsedBody = await readJsonWithin(response.body, maxResponseBytes);
       } catch (error) {
         // An oversized body is a contract violation on any status.
         if (error instanceof AppError) throw error;
-        if (errorCode(error) === 'UND_ERR_RES_CONTENT_LENGTH_MISMATCH') {
-          throw contractViolation(
-            'response body length does not match content-length',
-          );
-        }
         if (options.signal.aborted || isTransportFailure(error)) {
           throw transportError(error, options.signal.aborted);
         }
@@ -331,7 +333,7 @@ export class DownstreamHttpClient {
 
       return {
         status: response.statusCode,
-        headers: normalizeHeaders(response.headers),
+        headers,
         body: parsedBody,
       };
     } finally {
