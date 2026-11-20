@@ -16,6 +16,16 @@ import { VERIFICATION_TOKEN } from '@/modules/auth/verification/application/veri
 import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
 import { REFRESH_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/refresh-token.port';
 import { USER_ACCESS_TOKEN_ISSUER } from '@/modules/auth/web-sessions/application/user-access-token.port';
+import {
+  PersistenceModule,
+  type PrismaClientHolder,
+  RUNTIME_PRISMA_CLIENT,
+} from '@/modules/persistence/persistence.module';
+import {
+  RUNTIME_SECRET_PROVIDER,
+  type RuntimeSecretProvider,
+} from '@/modules/secrets/application/runtime-secret-provider.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
 import { USER_ACCOUNT_REPOSITORY } from './accounts/application/user-account.port';
 import { AuthRuntimeModule } from './auth-runtime.module';
 import type { CredentialCheckPorts } from './local-credentials/application/local-credentials';
@@ -29,7 +39,12 @@ import { PasswordChangeService } from './local-credentials/application/password-
 import { PASSWORD_HASHER } from './local-credentials/application/password-hasher.port';
 import { PASSWORD_RECOVERY } from './local-credentials/application/password-recovery.port';
 import { PasswordRecoveryService } from './local-credentials/application/password-recovery.service';
+import {
+  REGISTRATION_ATTEMPT_COUNTER,
+  type RegistrationAttemptCounterPort,
+} from './local-credentials/application/registration-attempt-counter.port';
 import type { SessionTokenIssuers } from './local-credentials/application/session-token-issuers';
+import { countRegistrationAttempt } from './local-credentials/infrastructure/postgres-registration-attempt-counter';
 import { LocalAuthController } from './local-credentials/presentation/local-auth.controller';
 import { PasswordChangeController } from './local-credentials/presentation/password-change.controller';
 import { PasswordResetController } from './password-reset/presentation/password-reset.controller';
@@ -42,7 +57,13 @@ const CREDENTIAL_CHECK_PORTS = Symbol('CREDENTIAL_CHECK_PORTS');
 const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
 
 @Module({
-  imports: [RuntimeConfigurationModule, EmailDeliveryModule, AuthRuntimeModule],
+  imports: [
+    RuntimeConfigurationModule,
+    PersistenceModule,
+    SecretsModule,
+    EmailDeliveryModule,
+    AuthRuntimeModule,
+  ],
   controllers: [
     LocalAuthController,
     PasswordChangeController,
@@ -50,6 +71,21 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
     VerificationController,
   ],
   providers: [
+    {
+      provide: REGISTRATION_ATTEMPT_COUNTER,
+      inject: [RUNTIME_PRISMA_CLIENT, RUNTIME_SECRET_PROVIDER],
+      useFactory: (
+        runtime: PrismaClientHolder,
+        secrets: RuntimeSecretProvider,
+      ): RegistrationAttemptCounterPort => ({
+        count: (input) =>
+          countRegistrationAttempt(
+            runtime.prisma,
+            secrets.getSnapshot().emailOutbox,
+            input,
+          ),
+      }),
+    },
     {
       provide: EMAIL_VERIFICATION_REQUIRES_PASSWORD,
       inject: [appConfig.KEY],
@@ -84,6 +120,7 @@ const SESSION_TOKEN_ISSUERS = Symbol('SESSION_TOKEN_ISSUERS');
       ) => new LocalRegistrationService(...ports),
       inject: [
         CREDENTIAL_CHECK_PORTS,
+        REGISTRATION_ATTEMPT_COUNTER,
         VERIFICATION_TOKEN_REPOSITORY,
         VERIFICATION_TOKEN,
         EMAIL_OUTBOX,

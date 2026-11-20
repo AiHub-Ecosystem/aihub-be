@@ -11,8 +11,9 @@ import {
 
 describe('LocalRegistrationService', () => {
   describe('email outbox backpressure', () => {
-    it('refuses a registration with a retryable 503 before any rate limit or durable write', async () => {
-      const { registration, state, limiter, refusals } = localAuth(backlogged);
+    it('counts a valid attempt before backpressure refuses account and email writes', async () => {
+      const { registration, state, limiter, refusals, registrationAttempts } =
+        localAuth(backlogged);
 
       const error = await refusal(
         registration.register(
@@ -28,6 +29,9 @@ describe('LocalRegistrationService', () => {
       });
       expect(error.retryAfterMs).toBeGreaterThan(0);
       expect(limiter.calls).toEqual([]);
+      expect(registrationAttempts).toEqual([
+        { email: 'person@example.com', now: NOW },
+      ]);
       expect(state.accounts.size).toBe(0);
       expect(state.verificationTokens.size).toBe(0);
       expect(state.emailDeliveryRequests).toEqual([]);
@@ -64,7 +68,8 @@ describe('LocalRegistrationService', () => {
     });
 
     it('does not ask about the queue for an invalid request', async () => {
-      const { registration, queueAges } = localAuth(backlogged);
+      const { registration, queueAges, registrationAttempts } =
+        localAuth(backlogged);
 
       await expect(
         registration.register(
@@ -74,6 +79,7 @@ describe('LocalRegistrationService', () => {
       ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 
       expect(queueAges).toEqual([]);
+      expect(registrationAttempts).toEqual([]);
     });
   });
 

@@ -13,7 +13,7 @@ import {
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
-import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
+import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import {
   type EmailDeliveryKindLabel,
   type EmailOutboxBacklogSample,

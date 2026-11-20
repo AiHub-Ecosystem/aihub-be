@@ -32,6 +32,7 @@ import type {
   LocalRegistrationPort,
   RegisteredLocalAccount,
 } from './local-registration.port';
+import type { RegistrationAttemptCounterPort } from './registration-attempt-counter.port';
 import {
   type IssuedSession,
   type SessionTokenIssuers,
@@ -56,6 +57,7 @@ const REGISTRATION_RATE_LIMITS = {
 export class LocalRegistrationService implements LocalRegistrationPort {
   constructor(
     private readonly credentials: CredentialCheckPorts,
+    private readonly registrationAttempts: RegistrationAttemptCounterPort,
     private readonly verificationTokens: VerificationTokenRepositoryPort,
     private readonly tokenIssuer: VerificationTokenPort,
     private readonly emailOutbox: EmailOutboxPort,
@@ -78,6 +80,9 @@ export class LocalRegistrationService implements LocalRegistrationPort {
       throw invalidRequest(error);
     }
 
+    const now = this.clock.now();
+    await this.registrationAttempts.count({ email: normalized.email, now });
+
     return this.emailOutbox.withAdmission('verification_email', async () => {
       // Before the limits are spent: an outage is not the caller's fault.
       await enforceAuthRateLimits(this.credentials.rateLimiter, [
@@ -88,7 +93,6 @@ export class LocalRegistrationService implements LocalRegistrationPort {
         },
       ]);
 
-      const now = this.clock.now();
       const issued = this.tokenIssuer.issue(now);
       const passwordHash = await this.credentials.passwordHasher.hash(
         normalized.password,
