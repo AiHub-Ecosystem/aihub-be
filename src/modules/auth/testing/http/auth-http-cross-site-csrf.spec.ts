@@ -260,6 +260,46 @@ describe('local auth HTTP boundary - cross-site BFF forwarding', () => {
     expect(afterLogout.statusCode).toBe(401);
   });
 
+  it('keeps a forwarded logout quiet without CSRF, and refuses an ambiguous one with it', async () => {
+    const login = await loginForwarded(preLoginCsrfToken(CLIENT_SECRET));
+    const loginValue = refreshValueOf(login);
+
+    // ADR-0157's quiet `204` outranks the ambiguity refusal: a probe that
+    // cannot produce the CSRF token must not learn whether its cookie parsed.
+    const probe = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      headers: {
+        ...bffHeaders(),
+        cookie: `${REFRESH_COOKIE_NAME}=${loginValue}; unrelated=1`,
+      },
+      payload: {},
+    });
+    expect(probe.statusCode).toBe(204);
+    expect(probe.headers['set-cookie']).toBeUndefined();
+
+    const csrf = sessionCsrfToken(CLIENT_SECRET, loginValue);
+    const ambiguous = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      headers: {
+        ...bffHeaders(csrf),
+        cookie: `${REFRESH_COOKIE_NAME}=${loginValue}; unrelated=1`,
+      },
+      payload: {},
+    });
+    expect(ambiguous.statusCode).toBe(400);
+    expect(ambiguous.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+    expect(ambiguous.headers['set-cookie']).toBeUndefined();
+
+    // Neither answer revoked or cleared the session.
+    expect(c.state.refreshTokens.size).toBe(1);
+    const survived = await refreshForwarded(loginValue, csrf);
+    expect(survived.statusCode).toBe(200);
+  });
+
   it('keeps the same-site flow free of the CSRF contract', async () => {
     const login = await c.app.inject({
       method: 'POST',

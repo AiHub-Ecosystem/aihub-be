@@ -599,6 +599,32 @@ tests:
               description: "writing.task1.grade in aihub-production-app received repeated 401 or 403 answers from ai-writing in the last five minutes."
               runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#downstream-credential-rejections
 
+  # #437 TM-04: a steady stream of failed BFF client-secret guesses fires for
+  # that process; one stray refusal stays below the threshold, and a process
+  # outside the two customer tiers is never in scope.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_auth_web_session_client_secret_failures_total{job="aihub-production-app",instance="prod"}'
+        values: "0 1 2 3 4 5 6 7 8 9 10"
+      - series: 'aihub_auth_web_session_client_secret_failures_total{job="aihub-sandbox-app",instance="sandbox"}'
+        values: "0 0 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AIHUBWebSessionClientSecretRejected
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: AIHUBWebSessionClientSecretRejected
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+            exp_annotations:
+              summary: "The Customer Web BFF keeps failing Web Session client-secret authentication"
+              description: "aihub-production-app refused at least three Web Session requests with a missing or wrong client secret in the last five minutes. Check the BFF's provisioned `client_secret` against `web-session.json` and whether the secret is being guessed."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#web-session-client-secret-rejections
+
   # #237: Redis failures fire on any request-path protection seam, except the
   # separately owned email send-rate alert; initialized counters catch first failures.
   - interval: 1m

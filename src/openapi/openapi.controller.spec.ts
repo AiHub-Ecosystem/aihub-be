@@ -95,7 +95,7 @@ describe('OpenApiController', () => {
       headers,
     });
     expect(v1.statusCode).toBe(200);
-    expect(v1.json()).toMatchObject({ info: { version: '1.19.0' } });
+    expect(v1.json()).toMatchObject({ info: { version: '1.20.0' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['content-security-policy']).toBe(

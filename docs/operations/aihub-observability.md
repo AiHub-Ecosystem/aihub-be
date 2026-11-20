@@ -86,6 +86,10 @@ Speaking `grading-json` audio URL policy refusals. Its bounded reasons are
 no Organization ID, URL, or object-key label and is separate from the
 admission-only `aihub_rejected_total`.
 
+`aihub_auth_web_session_client_secret_failures_total` has no labels and counts
+every Web Session client-secret refusal (#437 TM-04); see
+[Web Session client-secret rejections](#web-session-client-secret-rejections).
+
 ## Existing collectors audited
 
 | Service             | Existing behavior                                                                                                                                                                                             | AIHUB Prometheus coverage                                                                                                                  |
@@ -281,6 +285,12 @@ is shared through Redis and refreshed every second, so an instance that cannot
 read Redis keeps its last known peer level for the key's lifetime and an
 outage alone never sheds;
 `aihub_redis_unavailable_total{seam="shedding_level"}` counts those reads.
+
+### Web Session client-secret rejections
+
+`aihub_auth_web_session_client_secret_failures_total` counts requests the Customer Web BFF routes (`/v1/auth/web-sessions/*` and the optional-secret auth routes) refused for a missing or wrong `x-aihub-client-secret` (#437 TM-04). It carries no secret, no caller address, and no token. `AIHUBWebSessionClientSecretRejected` fires when a Production or Sandbox process refuses at least three in five minutes for two minutes. A single refusal is a misconfigured client and stays quiet.
+
+Check the BFF's deployed `client_secret` against the `web-session.json` bundle the app reads; a rotation that reached one side only is the common cause. The app refuses a secret shorter than 32 random bytes at boot, so a shorter value means the bundle itself is wrong. A steady refusal rate with a matching configuration means someone is guessing: confirm the BFF source IPs at the edge and rotate the secret. Do not restart an instance just to clear the alert.
 
 ### Target health
 

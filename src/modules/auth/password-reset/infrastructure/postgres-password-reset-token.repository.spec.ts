@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import { UNUSED_EMAIL_OUTBOX } from '@/modules/auth/testing/email-outbox.stub';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
@@ -34,6 +35,20 @@ function repositoryOver(
 
 function allArgs(script: ScriptedPrisma): string {
   return JSON.stringify(script.statements.map(({ args }) => args));
+}
+
+/** The Verification Token update whose predicate satisfies `matches`. */
+function verificationUpdate(
+  script: ScriptedPrisma,
+  matches: (where: Record<string, unknown>) => boolean,
+) {
+  return script.statements.find(({ name, args }) => {
+    if (name !== 'emailVerificationToken.updateMany' || !isRecord(args[0])) {
+      return false;
+    }
+    const { where } = args[0];
+    return isRecord(where) && matches(where);
+  });
 }
 
 /** What the reset token's locking read returns, aliased to model field names. */
@@ -101,29 +116,89 @@ describe('PostgresPasswordResetTokenRepository', () => {
       userId: USER_ID,
     });
 
-    expect(script.statements.slice(3).map(({ name }) => name)).toEqual([
-      'passwordResetToken.updateMany',
-      'authIdentity.updateMany',
-      'passwordResetToken.updateMany',
-      'refreshToken.updateMany',
-      'webSession.updateMany',
-    ]);
+    expect(
+      script.statements
+        .map(({ name }) => name)
+        .filter((name) => name.endsWith('.updateMany'))
+        .sort(),
+    ).toEqual(
+      [
+        'passwordResetToken.updateMany',
+        'authIdentity.updateMany',
+        'passwordResetToken.updateMany',
+        'refreshToken.updateMany',
+        'webSession.updateMany',
+        'emailVerificationToken.updateMany',
+        'emailVerificationToken.updateMany',
+      ].sort(),
+    );
     // Both revocations ride the ONE transaction that changed the password, so
     // a failure anywhere rolls them back together.
     expect(script.opened).toBe(1);
     expect(
       script.statements.every(({ transaction }) => transaction === 1),
     ).toBe(true);
-    expect(script.statements.slice(-2).map(({ args }) => args[0])).toEqual([
-      {
-        where: { userAccountId: USER_ID, revokedAt: null },
-        data: { revokedAt: input.now },
-      },
-      {
-        where: { userAccountId: USER_ID, revokedAt: null },
-        data: { revokedAt: input.now },
-      },
-    ]);
+    expect(
+      script.statements.find(({ name }) => name === 'refreshToken.updateMany'),
+    ).toMatchObject({
+      transaction: 1,
+      args: [
+        {
+          where: { userAccountId: USER_ID, revokedAt: null },
+          data: { revokedAt: input.now },
+        },
+      ],
+    });
+    expect(
+      script.statements.find(({ name }) => name === 'webSession.updateMany'),
+    ).toMatchObject({
+      transaction: 1,
+      args: [
+        {
+          where: { userAccountId: USER_ID, revokedAt: null },
+          data: { revokedAt: input.now },
+        },
+      ],
+    });
+    // The reset also closes every open Verification Token and burns the
+    // unclaimed sign-in of a verified one (#437 TM-05).
+    const verificationUpdates = script.statements.filter(
+      ({ name }) => name === 'emailVerificationToken.updateMany',
+    );
+    expect(verificationUpdates).toHaveLength(2);
+    expect(
+      verificationUpdate(
+        script,
+        (where) => where['consumedAt'] === null && !('consumedReason' in where),
+      ),
+    ).toMatchObject({
+      transaction: 1,
+      args: [
+        {
+          where: { userAccountId: USER_ID, consumedAt: null },
+          data: { consumedAt: input.now, consumedReason: 'superseded' },
+        },
+      ],
+    });
+    expect(
+      verificationUpdate(
+        script,
+        (where) => where['consumedReason'] === 'verified',
+      ),
+    ).toMatchObject({
+      transaction: 1,
+      args: [
+        {
+          where: {
+            userAccountId: USER_ID,
+            consumedReason: 'verified',
+            signedInAt: null,
+            browserBindingHash: { not: null },
+          },
+          data: { signedInAt: input.now },
+        },
+      ],
+    });
     expect(allArgs(script)).not.toContain('reset-token');
   });
 

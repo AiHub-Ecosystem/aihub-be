@@ -22,6 +22,14 @@ type RuntimeSecretSource = 'env' | 'agent-file';
 type SecretValues = Readonly<Record<string, string | undefined>>;
 type ReadFile = (path: string) => string;
 
+/**
+ * A base64 or base64url encoding of 32 random bytes is at least 43 characters;
+ * anything shorter cannot carry that entropy, and the charset refuses a value
+ * a human typed (spaces, quotes, control characters).
+ */
+const WEB_SESSION_CLIENT_SECRET_MIN_LENGTH = 43;
+const WEB_SESSION_CLIENT_SECRET_PATTERN = /^[A-Za-z0-9_+/=-]+$/;
+
 export interface RuntimeSecretProviderOptions {
   readonly nodeEnv: string | undefined;
   readonly source: string | undefined;
@@ -272,10 +280,12 @@ function loadFromAgentFile(
     'Web Session runtime secret bundle',
   );
   const webSession: WebSessionRuntimeSecrets = {
-    clientSecret: requiredRecordString(
-      webSessionRecord,
-      'client_secret',
-      'Customer Web BFF client secret',
+    clientSecret: webSessionClientSecret(
+      requiredRecordString(
+        webSessionRecord,
+        'client_secret',
+        'Customer Web BFF client secret',
+      ),
     ),
   };
   return freezeSnapshot(
@@ -358,7 +368,28 @@ function loadOptionalWebSession(
   values: SecretValues,
 ): WebSessionRuntimeSecrets | undefined {
   const clientSecret = values['AIHUB_WEB_SESSION_CLIENT_SECRET'];
-  return hasValue(clientSecret) ? { clientSecret } : undefined;
+  if (!hasValue(clientSecret)) return undefined;
+  return { clientSecret: webSessionClientSecret(clientSecret) };
+}
+
+/**
+ * The BFF secret is guessable at the public edge, so a boot refuses a value
+ * that cannot have 32 random bytes behind it: shorter than 43 characters, or
+ * built from anything but the base64/base64url alphabet it is generated in.
+ * Checked here rather than in the env schema so both sources get one rule.
+ */
+function webSessionClientSecret(value: string): string {
+  if (value.length < WEB_SESSION_CLIENT_SECRET_MIN_LENGTH) {
+    throw configurationError(
+      'Customer Web BFF client secret is shorter than 32 bytes',
+    );
+  }
+  if (!WEB_SESSION_CLIENT_SECRET_PATTERN.test(value)) {
+    throw configurationError(
+      'Customer Web BFF client secret has characters outside the base64 alphabet',
+    );
+  }
+  return value;
 }
 
 function loadOptionalSeaweedFs(

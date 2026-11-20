@@ -94,6 +94,19 @@ export class InMemoryPasswordResetTokenAdapter
         session.revokedAt = input.now;
       }
     }
+    for (const token of this.state.verificationTokens.values()) {
+      if (token.userId !== account.userId) continue;
+      if (token.consumedAt === undefined) {
+        token.consumedAt = input.now;
+        token.consumedReason = 'superseded';
+      } else if (
+        token.consumedReason === 'verified' &&
+        token.signedInAt === undefined &&
+        token.browserBindingHash !== undefined
+      ) {
+        token.signedInAt = input.now;
+      }
+    }
     return { kind: 'reset', userId: account.userId };
   }
 
