@@ -36,7 +36,7 @@ out.
 - Writing `/v2` grading responses include provider-ranked `error_priority`
   entries for up to three priority errors.
 
-## [1.18.0] - 2026-11-19
+## [1.19.0] - 2026-11-20
 
 ### Changed
 
