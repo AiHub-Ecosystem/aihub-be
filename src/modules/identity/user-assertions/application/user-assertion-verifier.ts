@@ -286,7 +286,16 @@ export class UserAssertionVerifier {
       return true;
     }
     if (this.rotationReloadCooldowns.size >= MAX_TRACKED_ROTATION_RELOADS) {
-      this.rotationReloadCooldowns.clear();
+      for (const [tracked, retryAtSeconds] of this.rotationReloadCooldowns) {
+        if (retryAtSeconds <= nowSeconds) {
+          this.rotationReloadCooldowns.delete(tracked);
+        }
+      }
+      // Every tracked cooldown is still live: keep the bound and refuse this
+      // reload rather than clearing cooldowns other Organizations still hold.
+      if (this.rotationReloadCooldowns.size >= MAX_TRACKED_ROTATION_RELOADS) {
+        return true;
+      }
     }
     this.rotationReloadCooldowns.set(
       organizationId,

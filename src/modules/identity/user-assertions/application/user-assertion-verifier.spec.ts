@@ -152,6 +152,14 @@ function unsignedAssertion(header: Record<string, unknown>): string {
   return `${part(header)}.${part({})}.c2ln`;
 }
 
+/** Flips the first signature character, so the key resolves but cannot verify. */
+function tamperedSignature(assertion: string): string {
+  const [header, payload, signature = ''] = assertion.split('.');
+  return `${header}.${payload}.${
+    signature[0] === 'a' ? 'b' : 'a'
+  }${signature.slice(1)}`;
+}
+
 function verifier(
   provider: JwksKeyProviderPort,
   activeConfig: OrganizationIdentityConfig = {
@@ -417,6 +425,41 @@ describe('UserAssertionVerifier', () => {
       }),
     ).resolves.toMatchObject({ userId: 'user_123' });
     expect(calls).toEqual([false, true, false, false]);
+  });
+
+  it('keeps live cooldowns when the rotation-reload map is full', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+    const subject = verifier(provider);
+    const tampered = tamperedSignature(
+      await token(oldFixture.privateKey, {
+        kid: 'shared',
+        jti: 'jti-stale',
+      }),
+    );
+    const organizations = Array.from(
+      { length: 257 },
+      (_unused, index) => `org_fill_${index}`,
+    );
+
+    for (const organizationId of organizations) {
+      await expect(
+        subject.verify({ signedAssertion: tampered, organizationId }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    }
+
+    provider.calls.length = 0;
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-after-map-fill',
+        }),
+        organizationId: organizations[0] ?? '',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(provider.calls).toEqual([false, false]);
   });
 
   it('rejects multiple matching keys when kid is absent', async () => {
