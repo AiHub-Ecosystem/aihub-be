@@ -12,6 +12,7 @@ import {
 } from '@/common/background-work-tracker';
 import { isShuttingDown } from '@/common/http/background-work-drain';
 import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
+import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import {
@@ -209,8 +210,13 @@ export class EmailOutboxPollerScheduler
           missing_key_version_count: versions.length,
         });
       }
-    } catch {
-      this.logger.error({ event: 'email_outbox_key_version_check_failed' });
+    } catch (error: unknown) {
+      this.logger.error({
+        event: 'email_outbox_key_version_check_failed',
+        failure_class: isPostgresUnavailable(error)
+          ? 'database_unavailable'
+          : 'query_failed',
+      });
     }
   }
 
