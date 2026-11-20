@@ -1,6 +1,9 @@
 import Redis from 'ioredis';
 
-import { createRedisClient } from '@/common/redis/create-redis-client';
+import {
+  REDIS_NO_REPLAY_OPTIONS,
+  createRedisClient,
+} from '@/common/redis/create-redis-client';
 import { numberReply } from '@/common/redis/number-reply';
 
 export interface RedisIdentityClient {
@@ -87,6 +90,7 @@ export function connectRedisIdentityClient(
 
   const client = createRedisClient(url, {
     commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
+    ...REDIS_NO_REPLAY_OPTIONS,
   });
   return new IoredisIdentityClient(client);
 }

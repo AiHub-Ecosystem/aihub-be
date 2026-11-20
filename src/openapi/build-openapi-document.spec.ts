@@ -175,6 +175,7 @@ describe('buildOpenApiDocument', () => {
       family: 'speaking',
       meteringMode: 'none',
       maxBodyBytes: 0,
+      maxResponseBytes: 1024 * 1024,
       timeoutMs: 60_000,
       downstream: 'ai-speaking',
       downstreamPath: '/api/v2/speaking/responses/{response_id}',

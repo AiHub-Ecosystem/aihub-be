@@ -1,8 +1,8 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
+import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { Logger } from '@nestjs/common';
-import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 import { missingQueuedEmailPayloadKeyVersions } from './outbox-store/email-outbox-key-retention';
 
 import {
@@ -175,6 +175,58 @@ describe('EmailOutboxPollerScheduler', () => {
 
       await advance(INTERVAL_MS * 3);
       expect(poller.calls).toBeGreaterThan(0);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('logs a bounded class when the queued key-version check fails', async () => {
+    const poller = new ControllablePoller();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const rawMessage = 'database.invalid secret-value';
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      readMissingQueuedKeyVersions: async () => {
+        throw new Error(rawMessage);
+      },
+    });
+    subjects.push(subject);
+
+    try {
+      await subject.onModuleInit();
+
+      expect(error).toHaveBeenCalledWith({
+        event: 'email_outbox_key_version_check_failed',
+        failure_class: 'query_failed',
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain(rawMessage);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('classifies an unavailable database without logging its error text', async () => {
+    const poller = new ControllablePoller();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const rawMessage = 'database.invalid credential-value';
+    const subject = new EmailOutboxPollerScheduler({
+      poller: poller as unknown as EmailDeliveryPoller,
+      intervalMs: INTERVAL_MS,
+      readMissingQueuedKeyVersions: async () => {
+        throw Object.assign(new Error(rawMessage), { code: 'P1001' });
+      },
+    });
+    subjects.push(subject);
+
+    try {
+      await subject.onModuleInit();
+
+      expect(error).toHaveBeenCalledWith({
+        event: 'email_outbox_key_version_check_failed',
+        failure_class: 'database_unavailable',
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain(rawMessage);
     } finally {
       error.mockRestore();
     }

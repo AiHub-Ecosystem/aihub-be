@@ -1,6 +1,10 @@
+import type { PostgresAvatarRepository } from '@/modules/avatar/infrastructure/postgres-avatar.repository';
+
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorAvatarClient(databaseUrl: string) {
+export async function createOperatorAvatarClient(
+  databaseUrl: string,
+): Promise<PostgresAvatarRepository & { close(): Promise<void> }> {
   const [{ createOperatorPrismaClient }, { PostgresAvatarRepository }] =
     await Promise.all([
       import('@/modules/persistence/infrastructure/prisma-client'),

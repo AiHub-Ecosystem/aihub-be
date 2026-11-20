@@ -181,7 +181,7 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
         operationId: 'auth.web_sessions.logout',
         summary: 'Revoke a Web Session',
         description:
-          'Server-to-server only, Customer Web BFF. Idempotent and quiet: a valid, already-revoked, unknown, expired, and malformed token all answer the same bodyless 204, so a stale tab or a repeated logout never shows a confusing error and no caller can probe which sessions exist. Only the presented session is revoked — the account’s other devices stay signed in. The Web Session token travels in this body and nowhere else; offered in a cookie, an authorization header, or a query parameter it is read from nowhere, so nothing is revoked. A password reset is what ends every Web Session of an account; there is no log-out-all-devices route. A JWT signed before a logout stays valid for up to 15 minutes.',
+          'Server-to-server only, Customer Web BFF. Idempotent and quiet: a valid, already-revoked, unknown, expired, and malformed token all answer the same bodyless 204, so a stale tab or a repeated logout never shows a confusing error and no caller can probe which sessions exist. Only the presented session is revoked — the account’s other devices stay signed in. The Web Session token travels in this body and nowhere else: a request that also carries a cookie, an authorization header, or a query parameter is refused with 400 rather than answering a 204 that revoked nothing. A password reset is what ends every Web Session of an account; there is no log-out-all-devices route. A JWT signed before a logout stays valid for up to 15 minutes.',
         ...routeIdentityScopeOf('auth.web_sessions.logout'),
         ...routeSecurityOf('auth.web_sessions.logout'),
         parameters: [{ $ref: '#/components/parameters/CorrelationId' }],
@@ -200,6 +200,12 @@ export function webSessionPathItems(): Record<string, Record<string, unknown>> {
             headers: routeCacheControlHeadersOf('auth.web_sessions.logout'),
           },
           ...routeErrorResponsesOf('auth.web_sessions.logout'),
+          // A token offered in a cookie, an authorization header, or a query
+          // parameter is refused instead of being read from nowhere.
+          '400': errorResponse(
+            'Malformed request, or a Web Session token offered outside the request body',
+            ['INVALID_REQUEST'],
+          ),
           // The client secret, and nothing about the session: logout has no
           // session failure to report, so a missing or wrong secret is the only
           // 401 here.

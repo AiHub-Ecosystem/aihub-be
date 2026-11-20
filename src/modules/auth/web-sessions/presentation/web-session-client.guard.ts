@@ -17,6 +17,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { recordWebSessionClientSecretFailure } from './web-session-client-secret-metric';
 
 function authenticateClient(
   context: ExecutionContext,
@@ -38,6 +39,7 @@ function authenticateClient(
   }
   const presented = clientSecretFrom(request);
   if (presented === undefined || !constantTimeEquals(presented, expected)) {
+    recordWebSessionClientSecretFailure();
     throw clientSecretMissingOrInvalid();
   }
   request.aihubClientIpSource = 'customer_web_bff';

@@ -25,6 +25,9 @@ const path = require('node:path');
 
 const SECRETS_MOUNT = '/run/secrets/aihub';
 const FAKE = 'ci-boot-fake';
+// The runtime secret loader refuses a BFF client secret shorter than 32 bytes.
+const FAKE_WEB_SESSION_CLIENT_SECRET =
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const DATABASE_URL = 'postgres://ci-boot:ci-boot@database.invalid:5432/aihub';
 
 /** @param {import('node:crypto').KeyObject} key */
@@ -43,7 +46,7 @@ function runtimeSecrets() {
       ),
       key_id: FAKE,
     },
-    'web-session': { client_secret: FAKE },
+    'web-session': { client_secret: FAKE_WEB_SESSION_CLIENT_SECRET },
     seaweedfs: { access_key_id: FAKE, secret_access_key: FAKE },
     'email-outbox': {
       current_key_id: FAKE,
@@ -111,6 +114,7 @@ const BOOT_ENVIRONMENT = {
   AIHUB_EMAIL_SEND_RATE_DURATION_MS: '1000',
   AIHUB_EMAIL_DAILY_SEND_BUDGET: '80',
   AIHUB_USER_ACCESS_ISSUER: 'https://api.ci-boot.invalid',
+  AIHUB_DPOP_MODE: 'off',
   AIHUB_TRUSTED_PROXY_IP: '127.0.0.1',
   AIHUB_PRODUCTION_HOST: 'api.ci-boot.invalid',
   AIHUB_STAGING_HOST: 'staging.ci-boot.invalid',

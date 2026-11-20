@@ -11,6 +11,7 @@ import {
  * instead of hanging it. The socket is closed when the connect fails.
  */
 export async function connectCliRedis(url: string): Promise<Redis> {
+  // arch-check: operator CLI, not request-path; its own 5 s timeouts fail the command in seconds (#1345).
   const redis = new Redis(url, {
     commandTimeout: 5_000,
     connectTimeout: 5_000,

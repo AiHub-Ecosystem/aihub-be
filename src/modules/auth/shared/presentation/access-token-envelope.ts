@@ -9,9 +9,15 @@ export function accessTokenEnvelope(
   token: string,
   expiresIn: number,
   requestId: string,
+  dpopBound = false,
 ): LoginResponse {
   const response = {
-    data: { access_token: token, token_type: 'Bearer', expires_in: expiresIn },
+    data: {
+      access_token: token,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
+      ...(dpopBound ? { dpop_bound: true } : {}),
+    },
     meta: { request_id: requestId },
   };
   if (!Value.Check(LoginResponseSchema, response)) {

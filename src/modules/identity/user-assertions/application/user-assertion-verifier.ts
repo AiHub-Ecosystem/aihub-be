@@ -11,6 +11,7 @@ import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from './user-assertion-crypto.port';
+import type { UserAssertionReplayMarkerPort } from './user-assertion-replay-marker.port';
 import {
   identityProviderUnavailable,
   invalidSignedUserAssertion,
@@ -133,7 +134,7 @@ function validateClaims(
   config: OrganizationIdentityConfig,
   nowSeconds: number,
   audience: string,
-): { userId: string } {
+): { userId: string; jti: string; expirationSeconds: number } {
   if (
     payload['iss'] !== config.issuer ||
     payload['aud'] !== audience ||
@@ -149,7 +150,11 @@ function validateClaims(
     throw invalidSignedUserAssertion();
   }
 
-  return { userId: payload['sub'] };
+  return {
+    userId: payload['sub'],
+    jti: payload['jti'],
+    expirationSeconds: payload['exp'],
+  };
 }
 
 export class UserAssertionVerifier {
@@ -158,6 +163,7 @@ export class UserAssertionVerifier {
   constructor(
     private readonly keyProvider: JwksKeyProviderPort,
     private readonly crypto: UserAssertionCryptoPort,
+    private readonly replayMarkers: UserAssertionReplayMarkerPort,
     private readonly now: () => number = () => Math.floor(Date.now() / 1_000),
     private readonly runtimeScope: 'production' | 'sandbox' = 'production',
   ) {}
@@ -195,7 +201,6 @@ export class UserAssertionVerifier {
     // matched-but-stale key fails verification for the whole cache TTL. One
     // forced reload per Organization per cooldown covers that.
     let verified: Readonly<Record<string, unknown>>;
-    const nowSeconds = this.now();
     try {
       verified = await this.crypto.verify({
         signedAssertion: input.signedAssertion,
@@ -232,12 +237,29 @@ export class UserAssertionVerifier {
       }
     }
 
+    const nowSeconds = this.now();
     const claims = validateClaims(
       verified,
       config,
       this.now(),
       this.runtimeScope === 'sandbox' ? SANDBOX_ASSERTION_AUDIENCE : 'aihub',
     );
+    let reserved: boolean;
+    try {
+      reserved = await this.replayMarkers.reserve({
+        organizationId: input.organizationId,
+        environment: this.runtimeScope,
+        jti: claims.jti,
+        ttlSeconds:
+          claims.expirationSeconds + ASSERTION_CLOCK_SKEW_SECONDS - nowSeconds,
+      });
+    } catch (error) {
+      throw identityProviderUnavailable(error);
+    }
+    if (!reserved) {
+      throw invalidSignedUserAssertion();
+    }
+
     return {
       userId: claims.userId,
       organizationId: input.organizationId,

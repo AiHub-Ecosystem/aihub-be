@@ -43,6 +43,7 @@ export interface InMemoryWebSession {
   expiresAt: Date;
   lastRenewedAt: Date;
   revokedAt: Date | undefined;
+  proofKeyJkt?: string | undefined;
 }
 
 export interface InMemoryMfaFactor {

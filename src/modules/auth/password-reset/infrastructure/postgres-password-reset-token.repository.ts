@@ -216,6 +216,24 @@ export class PostgresPasswordResetTokenRepository
         data: { revokedAt: input.now },
       });
       await revokeUserWebSessions(transaction, inspection.userId, input.now);
+      // A reset closes every way into the account it was meant to close. An
+      // open verification token is superseded, and a verified token that has
+      // not signed in yet spends its one claim by recording the sign-in
+      // (#437 TM-05). Only a bound token can ever sign in, so a token without
+      // a binding is left as verification alone.
+      await transaction.emailVerificationToken.updateMany({
+        where: { userAccountId: inspection.userId, consumedAt: null },
+        data: { consumedAt: input.now, consumedReason: 'superseded' },
+      });
+      await transaction.emailVerificationToken.updateMany({
+        where: {
+          userAccountId: inspection.userId,
+          consumedReason: 'verified',
+          signedInAt: null,
+          browserBindingHash: { not: null },
+        },
+        data: { signedInAt: input.now },
+      });
       return { kind: 'reset', userId: inspection.userId };
     });
   }

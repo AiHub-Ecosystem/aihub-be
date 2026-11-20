@@ -35,3 +35,14 @@ export function refreshCookieFrom(request: FastifyRequest): string | undefined {
 export function hasAlternateRefreshSource(request: FastifyRequest): boolean {
   return offersCredentialOutsideTransport(request, REFRESH_COOKIE_NAME);
 }
+
+/**
+ * Whether the request carried a refresh credential at all, including two
+ * cookies of the credential's own name that the parsed map cannot disambiguate.
+ */
+export function refreshCredentialPresent(request: FastifyRequest): boolean {
+  return (
+    request.cookies?.[REFRESH_COOKIE_NAME] !== undefined ||
+    hasDuplicateCookie(request, REFRESH_COOKIE_NAME)
+  );
+}

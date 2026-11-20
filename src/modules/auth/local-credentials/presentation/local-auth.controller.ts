@@ -12,6 +12,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError, internalError } from '@/common/errors/app-error';
+import { invalidRequest } from '@/common/errors/invalid-request';
 import { parseRequestBody } from '@/common/http/parse-request-body';
 import {
   EmptyAuthRequestSchema,
@@ -55,6 +56,7 @@ import { OptionalWebSessionClientGuard } from '@/modules/auth/web-sessions/publi
 import {
   hasAlternateRefreshSource,
   refreshCookieFrom,
+  refreshCredentialPresent,
 } from '@/modules/auth/web-sessions/public/refresh-cookie';
 
 interface RegisterEnvelope {
@@ -200,9 +202,7 @@ export class LocalAuthController {
   ): Promise<void> {
     parseRequestBody(EmptyAuthRequestSchema, body, request);
     const forwarded = bffForwarded(request);
-    const rawToken = hasAlternateRefreshSource(request)
-      ? undefined
-      : refreshCookieFrom(request);
+    const rawToken = refreshCookieFrom(request);
     if (
       forwarded &&
       (rawToken === undefined ||
@@ -215,6 +215,19 @@ export class LocalAuthController {
       // CSRF token answers the same `204` and revokes nothing, so a probe
       // learns nothing and the session survives.
       return;
+    }
+    // A refresh credential that arrived alongside another cookie, an
+    // Authorization header or a query value is still a credential the caller
+    // presented, so a quiet `204` that revokes nothing is never the answer.
+    if (
+      refreshCredentialPresent(request) &&
+      hasAlternateRefreshSource(request)
+    ) {
+      throw invalidRequest(
+        undefined,
+        undefined,
+        'alternate refresh credential source',
+      );
     }
     await this.sessions.logout(rawToken);
     clearRefreshCookie(reply);

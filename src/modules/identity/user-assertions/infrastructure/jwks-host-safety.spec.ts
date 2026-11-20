@@ -1,6 +1,10 @@
 import { unsafeJwksUrl } from '@/modules/identity/shared/application/jwks-errors';
 
-import { assertSafeHost, defaultJwksResolverFactory } from './jwks-host-safety';
+import {
+  assertSafeHost,
+  defaultJwksResolverFactory,
+  pinnedLookup,
+} from './jwks-host-safety';
 
 /**
  * The unsafe-address decision is pinned at the public seam: a literal host
@@ -155,5 +159,56 @@ describe('assertSafeHost address check (#419)', () => {
     await expect(
       assertSafeHost('not-an-ip.example', failingFactory, Date.now() + 5_000),
     ).rejects.toMatchObject({ code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE' });
+  });
+});
+
+describe('pinnedLookup (#1867)', () => {
+  const pinned = [
+    { address: '8.8.8.8', family: 4 },
+    { address: '2606:4700::1111', family: 6 },
+  ];
+
+  interface LookupAnswer {
+    readonly error: NodeJS.ErrnoException | null;
+    readonly address: string | { address: string; family: number }[];
+    readonly family: number | undefined;
+  }
+
+  function lookupAnswer(
+    addresses: readonly { address: string; family: number }[],
+    options: { all?: boolean },
+  ): LookupAnswer {
+    let captured: LookupAnswer | undefined;
+    pinnedLookup(addresses)(
+      'id.example.test',
+      options,
+      (error, address, family) => {
+        captured = { error, address, family };
+      },
+    );
+    if (captured === undefined) {
+      throw new Error('pinnedLookup did not answer');
+    }
+    return captured;
+  }
+
+  it('answers every pinned address when the agent asks for all of them', () => {
+    expect(lookupAnswer(pinned, { all: true })).toEqual({
+      error: null,
+      address: pinned,
+      family: undefined,
+    });
+  });
+
+  it('answers the first pinned address and its family to a single-address lookup', () => {
+    expect(lookupAnswer(pinned, {})).toEqual({
+      error: null,
+      address: '8.8.8.8',
+      family: 4,
+    });
+  });
+
+  it('answers ENOTFOUND when the host-safety check pinned no address', () => {
+    expect(lookupAnswer([], {}).error).toMatchObject({ code: 'ENOTFOUND' });
   });
 });

@@ -9,7 +9,10 @@ import {
 } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import { WritingV2StoredGradeResponseSchema } from '@/contracts/writing/v2/grading';
+import {
+  WritingV2StoredGradeResponseSchema,
+  hasBoundedWritingV2DataMicroKeys,
+} from '@/contracts/writing/v2/grading';
 import {
   readDispatchTelemetry,
   withDispatchTelemetry,
@@ -97,11 +100,21 @@ function parseStoredData(
       ? WritingV2StoredGradeResponseSchema
       : contract;
   try {
-    return Value.Parse(
+    const parsed = Value.Parse(
       ['Clone', 'Clean', 'Default', 'Assert', 'Decode'],
       storedContract,
       data,
     );
+    if (
+      (operation === 'writing.v2.task1.grade' ||
+        operation === 'writing.v2.task2.grade') &&
+      !hasBoundedWritingV2DataMicroKeys(
+        isRecord(parsed) ? parsed['data_micro'] : undefined,
+      )
+    ) {
+      return undefined;
+    }
+    return parsed;
   } catch {
     return undefined;
   }

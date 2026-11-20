@@ -180,6 +180,21 @@ groups:
           description: "{{ $labels.instance }} of {{ $labels.job }} refused {{ $value | humanizePercentage }} of its {{ $labels.tier }} requests to protect the AI Services. Shedding this long means demand exceeds capacity in that tier: read aihub_shed_level for how far shedding has escalated, then compare with the downstream concurrency limits and the AI Services' own health. This uses the existing non-page warning route; #412 owns final severity and tier-routing policy."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#prioritized-load-shedding
 
+      # #437 TM-04: a BFF that keeps presenting a wrong client secret is either
+      # misconfigured or guessing; either way the public Web Session edge is
+      # refusing callers and the operator must know.
+      - alert: AIHUBWebSessionClientSecretRejected
+        expr: sum by (job) (increase(aihub_auth_web_session_client_secret_failures_total{job=~"aihub-(production|sandbox)-app"}[5m])) >= 3
+        for: 2m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "The Customer Web BFF keeps failing Web Session client-secret authentication"
+          description: "{{ $labels.job }} refused at least three Web Session requests with a missing or wrong client secret in the last five minutes. Check the BFF's provisioned `client_secret` against `web-session.json` and whether the secret is being guessed."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#web-session-client-secret-rejections
+
   - name: aihub-tracing
     rules:
       - alert: AIHUBTraceReceiverNotReceiving
@@ -232,7 +247,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "384b8ec514db5e88c152dbdad32ff4b9bf54e0444729489a119fe0fd309b2eea"
+          rules_sha256: "3272797dbeeb36d65b1bb9177dc30cd86734dcb759398426ae8f91b14eb9a19b"
 
   - name: aihub-email-outbox
     rules:

@@ -17,9 +17,17 @@ describe('RedisAuthRateLimiter Redis client', () => {
 
     const calls = jest.mocked(Redis).mock.calls as unknown as [
       string,
-      { commandTimeout: number },
+      {
+        commandTimeout: number;
+        connectTimeout: number;
+        autoResendUnfulfilledCommands: boolean;
+        lazyConnect: boolean;
+      },
     ][];
     const options = calls[0]?.[1];
     expect(options?.commandTimeout).toBeGreaterThanOrEqual(400);
+    expect(options?.connectTimeout).toBe(1_000);
+    expect(options?.autoResendUnfulfilledCommands).toBe(false);
+    expect(options?.lazyConnect).toBe(true);
   });
 });

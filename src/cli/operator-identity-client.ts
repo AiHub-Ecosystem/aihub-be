@@ -1,6 +1,10 @@
+import type { PrismaClientHolder } from '@/modules/persistence/persistence.module';
+
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorIdentityClient(databaseUrl: string) {
+export async function createOperatorIdentityClient(
+  databaseUrl: string,
+): Promise<PrismaClientHolder['prisma'] & { close(): Promise<void> }> {
   const [{ createIdentityTransactionRunner }, { createOperatorPrismaClient }] =
     await Promise.all([
       import(

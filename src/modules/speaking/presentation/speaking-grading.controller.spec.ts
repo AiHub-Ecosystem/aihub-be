@@ -38,6 +38,7 @@ import {
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { registerSpeakingJsonBodyCancellation } from '@/modules/speaking/public/fastify-speaking-json-body.hook';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { aiSpeakingFixture } from '../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
@@ -247,6 +248,7 @@ describe('Speaking grading HTTP flow', () => {
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     registerRequestLifecycle(app.getHttpAdapter().getInstance());
     registerSecurityHeaders(app.getHttpAdapter().getInstance());
+    registerSpeakingJsonBodyCancellation(app.getHttpAdapter().getInstance());
     app
       .getHttpAdapter()
       .getInstance()

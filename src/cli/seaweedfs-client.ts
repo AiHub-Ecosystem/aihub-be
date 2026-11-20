@@ -7,7 +7,9 @@ import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
  * The one SeaweedFS client every operator command builds: endpoint and region
  * from the process environment, credentials from the runtime secret provider.
  */
-export function createCliSeaweedFsClient() {
+export function createCliSeaweedFsClient(): ReturnType<
+  typeof createSeaweedFsS3Client
+> {
   return createSeaweedFsS3Client({
     workload: 'operator',
     endpoint: process.env['SEAWEEDFS_ENDPOINT_URL'],

@@ -3,6 +3,7 @@ import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { contractViolation } from '@/downstream/contract-violation';
+import { stripControlCharacters } from '@/downstream/model-text';
 
 import { fromProviderSpeakingTestType } from '@/contracts/speaking/v2/test-type';
 
@@ -93,7 +94,10 @@ function transcriptProjection(value: unknown): Record<string, unknown> {
   };
 }
 
-export function speakingV2Projection(body: unknown): Record<string, unknown> {
+export function speakingV2Projection(
+  rawBody: unknown,
+): Record<string, unknown> {
+  const body = stripControlCharacters(rawBody);
   if (
     !isRecord(body) ||
     body['status'] !== 'success' ||

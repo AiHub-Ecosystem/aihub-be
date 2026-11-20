@@ -26,7 +26,27 @@ const emailOutboxSnapshot = {
   currentKeyId: emailOutboxCurrentKeyId,
   keys: { [emailOutboxCurrentKeyId]: emailOutboxKey },
 };
-const bffClientSecret = 'customer-web-bff-client-secret';
+// 47 characters of the alphabet the loader accepts: 32 random bytes in base64url
+// are 43, and the fixture must stay above the minimum on purpose.
+const bffClientSecret = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+/** An Agent-rendered document that is valid apart from the Web Session bundle. */
+function agentDocument(webSession: Record<string, unknown>): string {
+  return JSON.stringify({
+    'ai-speaking': {
+      client_id: speakingClient,
+      secret_key: speakingSecret,
+    },
+    'ai-writing': { token: writingToken },
+    resend: { api_key: resendApiKey },
+    'user-access-jwt': {
+      private_key_pem: userAccessPrivateKey,
+      key_id: userAccessKeyId,
+    },
+    'email-outbox': emailOutboxAgent,
+    ...webSession,
+  });
+}
 
 function options(
   overrides: Partial<RuntimeSecretProviderOptions> = {},
@@ -311,13 +331,13 @@ describe('ConfiguredRuntimeSecretProvider', () => {
       options({
         values: {
           ...options().values,
-          AIHUB_WEB_SESSION_CLIENT_SECRET: 'local',
+          AIHUB_WEB_SESSION_CLIENT_SECRET: bffClientSecret,
         },
       }),
     );
 
     expect(provider.getSnapshot().webSession).toEqual({
-      clientSecret: 'local',
+      clientSecret: bffClientSecret,
     });
   });
 
@@ -340,23 +360,41 @@ describe('ConfiguredRuntimeSecretProvider', () => {
           options({
             source: 'agent-file',
             secretsFile: 'runtime-secrets.json',
-            readFile: () =>
-              JSON.stringify({
-                'ai-speaking': {
-                  client_id: speakingClient,
-                  secret_key: speakingSecret,
-                },
-                'ai-writing': { token: writingToken },
-                resend: { api_key: resendApiKey },
-                'user-access-jwt': {
-                  private_key_pem: userAccessPrivateKey,
-                  key_id: userAccessKeyId,
-                },
-                'email-outbox': emailOutboxAgent,
-              }),
+            readFile: () => agentDocument({}),
           }),
         ),
     ).toThrow('Web Session runtime secret bundle has an invalid shape');
+  });
+
+  it.each([
+    ['shorter than 32 bytes', 'too-short-bff-client-secret'],
+    ['outside the base64 alphabet', `${bffClientSecret.slice(0, 40)} secret`],
+  ])('refuses a local BFF client secret %s', (_case, weakSecret) => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            values: {
+              ...options().values,
+              AIHUB_WEB_SESSION_CLIENT_SECRET: weakSecret,
+            },
+          }),
+        ),
+    ).toThrow(RuntimeSecretConfigurationError);
+  });
+
+  it('refuses an Agent-rendered BFF client secret that cannot carry 32 random bytes', () => {
+    expect(
+      () =>
+        new ConfiguredRuntimeSecretProvider(
+          options({
+            source: 'agent-file',
+            secretsFile: 'runtime-secrets.json',
+            readFile: () =>
+              agentDocument({ 'web-session': { client_secret: 'short' } }),
+          }),
+        ),
+    ).toThrow(RuntimeSecretConfigurationError);
   });
 
   it('rejects a partial optional SeaweedFS bundle', () => {

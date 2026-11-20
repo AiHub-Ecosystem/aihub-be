@@ -127,6 +127,7 @@ export async function resetIdentityTables(pool: Pool): Promise<void> {
       email_daily_send_budgets,
       notification_events,
       auth_email_recipient_rate_limits,
+      auth_registration_attempt_counters,
       email_delivery_requests,
       user_mfa_recovery_codes,
       user_mfa_factors,

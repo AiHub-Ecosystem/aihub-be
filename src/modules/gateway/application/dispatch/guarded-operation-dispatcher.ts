@@ -13,6 +13,7 @@ import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
+import type { DispatchAttemptPolicy } from './dispatch-attempt-policy';
 import { requireTimeLeft } from './dispatch-deadline';
 import type { DispatchObserverPort } from './dispatch-observer.port';
 import type {
@@ -30,8 +31,8 @@ import type {
  * One dispatch and what it has observed so far: the evidence its outcome is
  * read from.
  */
-interface DispatchRun {
-  readonly operation: OperationId;
+interface DispatchRun<O extends OperationId = OperationId> {
+  readonly operation: O;
   readonly context: RequestContext;
   readonly reservation: SandboxReservation;
   attemptId?: string;
@@ -87,6 +88,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     private readonly sandbox: SandboxAdmission,
     private readonly observer: DispatchObserverPort,
     private readonly warn: (event: string) => void,
+    private readonly attemptsPolicy: DispatchAttemptPolicy,
   ) {}
 
   async dispatch<O extends OperationId>(
@@ -97,7 +99,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     const prepared = await this.transport.prepare(operation, input, context);
     const reservation = await this.sandbox.admit(context);
 
-    const run: DispatchRun = {
+    const run: DispatchRun<O> = {
       operation,
       context,
       reservation,
@@ -115,7 +117,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
 
   private async attempt<O extends OperationId>(
     prepared: PreparedDispatch<O>,
-    run: DispatchRun,
+    run: DispatchRun<O>,
   ): Promise<DispatchResult<ResponseFor<O>>> {
     const { context, operation } = run;
     requireTimeLeft(context);
@@ -152,7 +154,7 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
 
   private async call<O extends OperationId>(
     prepared: PreparedDispatch<O>,
-    run: DispatchRun,
+    run: DispatchRun<O>,
     window: CallWindow,
   ): Promise<DispatchResult<ResponseFor<O>>> {
     const { signal } = window;
@@ -170,12 +172,17 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
     run.callStarted = true;
     run.callInFlight = true;
     try {
-      return await prepared.send({
-        ...window,
-        onResponseReceived: (statusCode) => {
-          run.responseStatus = statusCode;
+      return await this.attemptsPolicy.execute(
+        run.operation,
+        run.context.requestId,
+        {
+          ...window,
+          onResponseReceived: (statusCode) => {
+            run.responseStatus = statusCode;
+          },
         },
-      });
+        (next) => prepared.send(next),
+      );
     } finally {
       run.callInFlight = false;
       signal.removeEventListener('abort', noteDeadlineAbort);

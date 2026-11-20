@@ -102,7 +102,7 @@ const credentials = parseBenchmarkCredentials(
 const host = 'api.benchmark.test';
 const baseUrl = 'http://aihub:3000';
 const stubUrl = 'http://benchmark-support:8080';
-const bffSecret = 'benchmark-web-session-secret';
+const bffSecret = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const refreshCookieName = '__Host-aihub_refresh';
 const speakingJson = {
   audio_url: 'https://s3.wispace.app/benchmark/audio.wav',

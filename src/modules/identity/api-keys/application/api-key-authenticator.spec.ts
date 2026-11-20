@@ -11,6 +11,7 @@ import type {
   ApiKeyRepositoryPort,
   AuthFailureCounterPort,
 } from './api-key-authenticator.port';
+import { hashApiKey } from './organization-api-key-generator';
 
 const VALID_KEY = `aihub_sk_${'A'.repeat(43)}`;
 
@@ -483,6 +484,7 @@ describe('ApiKeyAuthenticator', () => {
     expect(await rejectedRateLimitCount()).toBe(before + 1);
     const metrics = await getMetrics();
     expect(metrics).not.toContain(VALID_KEY);
+    expect(metrics).not.toContain(hashApiKey(VALID_KEY));
     expect(metrics).not.toContain('203.0.113.10');
   });
 

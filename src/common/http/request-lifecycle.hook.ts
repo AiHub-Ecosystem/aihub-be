@@ -1,9 +1,6 @@
-import { Transform } from 'node:stream';
-
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { timeoutError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import {
   type DisconnectableRequest,
@@ -18,7 +15,6 @@ const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
   ]),
 );
 const OPERATION_TIMEOUTS = Object.values(OPERATION_CATALOG);
-const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
 
 const TIMED_ROUTES = Object.values(PUBLIC_ROUTES).flatMap((route) =>
   'timeoutMs' in route
@@ -38,13 +34,6 @@ interface LifecycleRequest {
   readonly raw: DisconnectableRequest;
 }
 
-interface PayloadStream {
-  on(event: 'data', listener: (chunk: Uint8Array | string) => void): this;
-  once(event: 'close' | 'error', listener: () => void): this;
-  pipe(destination: NodeJS.WritableStream): NodeJS.WritableStream;
-  destroy(error?: Error): void;
-}
-
 export interface RequestLifecycleState {
   readonly receivedAt: Date;
   readonly signal: AbortSignal;
@@ -56,69 +45,6 @@ interface LifecycleHookableInstance {
 }
 
 const lifecycleByRequest = new WeakMap<object, RequestLifecycleState>();
-
-function isPayloadStream(value: unknown): value is PayloadStream {
-  return (
-    isRecord(value) &&
-    'on' in value &&
-    typeof value['on'] === 'function' &&
-    'once' in value &&
-    typeof value['once'] === 'function' &&
-    'pipe' in value &&
-    typeof value['pipe'] === 'function' &&
-    'destroy' in value &&
-    typeof value['destroy'] === 'function'
-  );
-}
-
-function byteLength(chunk: Uint8Array | string): number {
-  return typeof chunk === 'string'
-    ? Buffer.byteLength(chunk)
-    : chunk.byteLength;
-}
-
-function abortablePayload(
-  payload: PayloadStream,
-  signal: AbortSignal,
-): Transform {
-  let receivedEncodedLength = 0;
-  const guarded = new Transform({
-    transform(chunk: Uint8Array | string, _encoding, callback): void {
-      if (signal.aborted) {
-        callback(timeoutError());
-        return;
-      }
-
-      receivedEncodedLength += byteLength(chunk);
-      callback(null, chunk);
-    },
-  });
-
-  Object.defineProperty(guarded, 'receivedEncodedLength', {
-    enumerable: true,
-    get: () => receivedEncodedLength,
-  });
-
-  const onAbort = (): void => {
-    const error = timeoutError();
-    payload.destroy(error);
-    guarded.destroy(error);
-  };
-  const cleanup = (): void => {
-    signal.removeEventListener('abort', onAbort);
-  };
-
-  signal.addEventListener('abort', onAbort, { once: true });
-  guarded.once('close', cleanup);
-  guarded.once('error', cleanup);
-  payload.pipe(guarded);
-
-  if (signal.aborted) {
-    onAbort();
-  }
-
-  return guarded;
-}
 
 export function createRequestLifecycleState(
   rawRequest: DisconnectableRequest,
@@ -184,34 +110,6 @@ export function registerRequestLifecycle(
 
       lifecycleByRequest.set(request.raw, state);
       done();
-    },
-  ]);
-
-  Reflect.apply(instance.addHook.bind(instance), instance, [
-    'preParsing',
-    (
-      request: LifecycleRequest,
-      _reply: unknown,
-      payload: unknown,
-      done: (error?: Error | null, payload?: unknown) => void,
-    ): void => {
-      if (pathnameOf(request.url) !== JSON_PATH) {
-        done(null, payload);
-        return;
-      }
-
-      const lifecycle = getRequestLifecycle(request.raw);
-      if (lifecycle === undefined || !isPayloadStream(payload)) {
-        done(null, payload);
-        return;
-      }
-
-      if (lifecycle.signal.aborted) {
-        done(timeoutError());
-        return;
-      }
-
-      done(null, abortablePayload(payload, lifecycle.signal));
     },
   ]);
 

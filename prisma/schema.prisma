@@ -176,6 +176,21 @@ model AuthEmailRecipientRateLimit {
   @@map("auth_email_recipient_rate_limits")
 }
 
+/// Registration attempts per keyed address fingerprint, counted before the
+/// identity conflict is decided so ADR-0178 has evidence. Enforces no limit.
+/// @owner auth
+model AuthRegistrationAttemptCounter {
+  keyVersion      String   @map("key_version")
+  addressHmac     String   @map("address_hmac")
+  windowStartedAt DateTime @map("window_started_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  attemptCount    BigInt   @map("attempt_count")
+
+  @@id([keyVersion, addressHmac], map: "auth_registration_attempt_counters_pkey")
+  @@index([expiresAt], map: "auth_registration_attempt_counters_expires_idx")
+  @@map("auth_registration_attempt_counters")
+}
+
 /// One durable daily reservation count shared by every deployment on the Resend account.
 /// @owner auth
 model EmailDailySendBudget {
@@ -901,7 +916,7 @@ model UserMfaRecoveryCode {
 
 /// A browser session cookie's server-side record.
 ///
-/// `CHECK` constraints are owned by migration 0033.
+/// `CHECK` constraints are owned by migrations 0033 and 0069.
 /// @owner auth
 model WebSession {
   id            String      @id
@@ -911,6 +926,7 @@ model WebSession {
   expiresAt     DateTime    @map("expires_at") @db.Timestamptz(6)
   lastRenewedAt DateTime    @map("last_renewed_at") @db.Timestamptz(6)
   revokedAt     DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  proofKeyJkt   String?     @map("proof_key_jkt")
   userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onUpdate: NoAction)
 
   @@index([userAccountId], map: "web_sessions_user_account_id")

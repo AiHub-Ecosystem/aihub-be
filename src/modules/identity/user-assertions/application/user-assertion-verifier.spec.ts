@@ -20,6 +20,7 @@ import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from './user-assertion-crypto.port';
+import type { UserAssertionReplayMarkerPort } from './user-assertion-replay-marker.port';
 import { UserAssertionVerifier } from './user-assertion-verifier';
 import type { ResolvedUserIdentity } from './user-identity-resolver.port';
 
@@ -167,10 +168,14 @@ function verifier(
     publicKeysJwks: null,
   },
   runtimeScope: 'production' | 'sandbox' = 'production',
+  replayMarkers: UserAssertionReplayMarkerPort = {
+    reserve: async () => true,
+  },
 ) {
   const subject = new UserAssertionVerifier(
     provider,
     new TestUserAssertionCrypto(),
+    replayMarkers,
     () => NOW,
     runtimeScope,
   );
@@ -183,6 +188,77 @@ function verifier(
 }
 
 describe('UserAssertionVerifier', () => {
+  it('rejects a repeated assertion and reserves it through the clock-skew window', async () => {
+    const fixture = await rsaFixture();
+    const reservations: Parameters<
+      UserAssertionReplayMarkerPort['reserve']
+    >[0][] = [];
+    const replayMarkers: UserAssertionReplayMarkerPort = {
+      reserve: async (input) => {
+        if (reservations.some((reservation) => reservation.jti === input.jti)) {
+          return false;
+        }
+        reservations.push(input);
+        return true;
+      },
+    };
+    const subject = verifier(
+      new FakeKeyProvider(fixture.jwks),
+      config,
+      'production',
+      replayMarkers,
+    );
+    const signedAssertion = await token(fixture.privateKey, {
+      expiration: NOW + 100,
+      jti: 'single-use-1',
+    });
+    const input = {
+      signedAssertion,
+      organizationId: 'org_acme',
+    };
+
+    await subject.verify(input);
+
+    await expect(subject.verify(input)).rejects.toMatchObject({
+      code: 'INVALID_USER_IDENTITY',
+    });
+    expect(reservations).toEqual([
+      {
+        organizationId: 'org_acme',
+        environment: 'production',
+        jti: 'single-use-1',
+        ttlSeconds: 160,
+      },
+    ]);
+  });
+
+  it('fails closed when Redis cannot confirm an assertion reservation', async () => {
+    const fixture = await rsaFixture();
+    const subject = verifier(
+      new FakeKeyProvider(fixture.jwks),
+      config,
+      'production',
+      {
+        reserve: async () => {
+          throw new Error('redis timeout');
+        },
+      },
+    );
+    const signedAssertion = await token(fixture.privateKey, {
+      jti: 'redis-unavailable-1',
+    });
+
+    await expect(
+      subject.verify({
+        signedAssertion,
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      retryable: true,
+    });
+  });
+
   it('verifies a signed assertion and binds the result to the API-key organization', async () => {
     const fixture = await rsaFixture();
     const provider = new FakeKeyProvider(fixture.jwks);
@@ -538,6 +614,7 @@ describe('UserAssertionVerifier', () => {
     const subject = new UserAssertionVerifier(
       new FakeKeyProvider(fixture.jwks, fixture.jwks),
       crypto,
+      { reserve: async () => true },
       () => NOW,
     );
 

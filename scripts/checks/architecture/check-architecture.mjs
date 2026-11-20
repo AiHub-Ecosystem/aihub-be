@@ -1712,6 +1712,106 @@ export function collectSourceTextFailures(options) {
     }
   }
 
+  // #1345: a request-path Redis client states no offline queue, one retry, a
+  // command timeout and no reconnect replay in one place, `createRedisClient`.
+  // A client built by hand beside it carries whatever its author remembered;
+  // the two rate limiters did, and silently replayed a mutating EVAL after a
+  // reconnect. A constructor outside the factory says why on its line or the
+  // line above, with the same marker the other rules use.
+  //
+  // The import is read, not assumed: `import { Redis as R } from 'ioredis'`
+  // and `ioredis.Redis` construct the same client as `new Redis(`, so matching
+  // the bare word would leave the obvious way around the rule open. An empty
+  // marker is not a reason either.
+  const REDIS_CONSTRUCTOR_OWNER = join(
+    srcDirectory,
+    'common',
+    'redis',
+    'create-redis-client.ts',
+  );
+  // `[^\S\r\n]` keeps the reason on the marker's own line: `\s` would let the
+  // newline itself satisfy the gap and accept a bare `// arch-check:`.
+  const REDIS_MARKER = /arch-check:[^\S\r\n]*\S/;
+
+  for (const file of sourceFiles) {
+    if (file.endsWith('.spec.ts') || file === REDIS_CONSTRUCTOR_OWNER) {
+      continue;
+    }
+
+    const sourceFile = ts.createSourceFile(
+      file,
+      sourceText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    /** @type {Set<string>} local bindings of ioredis's Redis constructor */
+    const redisConstructors = new Set();
+    /** @type {Set<string>} local bindings of the ioredis namespace */
+    const ioredisNamespaces = new Set();
+    for (const statement of sourceFile.statements) {
+      if (
+        !ts.isImportDeclaration(statement) ||
+        !ts.isStringLiteral(statement.moduleSpecifier) ||
+        statement.moduleSpecifier.text !== 'ioredis'
+      ) {
+        continue;
+      }
+      const clause = statement.importClause;
+      if (clause === undefined || clause.isTypeOnly) {
+        continue;
+      }
+      if (clause.name !== undefined) {
+        redisConstructors.add(clause.name.text);
+      }
+      const bindings = clause.namedBindings;
+      if (bindings === undefined) {
+        continue;
+      }
+      if (ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          if ((element.propertyName ?? element.name).text === 'Redis') {
+            redisConstructors.add(element.name.text);
+          }
+        }
+      } else if (ts.isNamespaceImport(bindings)) {
+        ioredisNamespaces.add(bindings.name.text);
+      }
+    }
+    if (redisConstructors.size === 0 && ioredisNamespaces.size === 0) {
+      continue;
+    }
+
+    const lines = sourceText(file).split(/\r?\n/);
+
+    /** @param {import('typescript').Node} node */
+    const checkRedisConstructor = (node) => {
+      if (ts.isNewExpression(node)) {
+        const expression = node.expression;
+        const isRedisConstructor =
+          (ts.isIdentifier(expression) &&
+            redisConstructors.has(expression.text)) ||
+          (ts.isPropertyAccessExpression(expression) &&
+            ts.isIdentifier(expression.expression) &&
+            ioredisNamespaces.has(expression.expression.text) &&
+            expression.name.text === 'Redis');
+        if (isRedisConstructor) {
+          const line = sourceFile.getLineAndCharacterOfPosition(
+            node.getStart(sourceFile),
+          ).line;
+          const markedOn = `${lines[line - 1] ?? ''}\n${lines[line] ?? ''}`;
+          if (!REDIS_MARKER.test(markedOn)) {
+            fail(
+              `${relative(root, file)}:${line + 1} constructs a Redis client directly; call createRedisClient from '@/common/redis/create-redis-client', or mark the line with "${BODY_VALIDATION_MARKER} <reason>" (#1345)`,
+            );
+          }
+        }
+      }
+      ts.forEachChild(node, checkRedisConstructor);
+    };
+    checkRedisConstructor(sourceFile);
+  }
+
   if (failures.length > 0) {
     return { failures, stoppedEarly: true };
   }

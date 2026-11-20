@@ -1,8 +1,12 @@
+import type { PostgresApiKeyNearExpiryNotices } from '@/modules/identity/notifications/infrastructure/postgres-api-key-near-expiry-notices';
+
 import { createCliRuntimeSecretProvider } from './runtime-secret-provider';
 
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
-export async function createOperatorNotificationClient(databaseUrl: string) {
+export async function createOperatorNotificationClient(
+  databaseUrl: string,
+): Promise<PostgresApiKeyNearExpiryNotices & { close(): Promise<void> }> {
   const [
     { createIdentityTransactionRunner },
     { createOperatorPrismaClient },
