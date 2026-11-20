@@ -215,7 +215,7 @@ export class UserAssertionVerifier {
       // concurrent request may already have refreshed it.
       const canReload = !this.rotationReloadBlocked(
         input.organizationId,
-        nowSeconds,
+        this.now(),
       );
       const refreshed = await this.loadKeys(
         input.organizationId,
