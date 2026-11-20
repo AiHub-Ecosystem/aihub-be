@@ -10,6 +10,7 @@ import { LocalRegistrationService } from '@/modules/auth/local-credentials/appli
 import { LocalSessionService } from '@/modules/auth/local-credentials/application/local-session.service';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import { PasswordRecoveryService } from '@/modules/auth/local-credentials/application/password-recovery.service';
+import type { RegistrationAttemptCounterPort } from '@/modules/auth/local-credentials/application/registration-attempt-counter.port';
 import type { LocalAccountStatus } from '@/modules/auth/local-credentials/public/local-auth';
 import type { AuthMfaServicePort } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
 import type {
@@ -235,6 +236,13 @@ export function localAuth(
   const limiter = new FakeLimiter();
   const hasher = new FakeHasher();
   const clock = new FakeClock();
+  const registrationAttempts: { readonly email: string; readonly now: Date }[] =
+    [];
+  const registrationAttemptCounter: RegistrationAttemptCounterPort = {
+    async count(input) {
+      registrationAttempts.push(input);
+    },
+  };
   const mfa = new FakeMfaService();
   const securityEvents: AuthSecurityEvent[] = [];
   const securityEventRecorder: AuthSecurityEventRecorderPort = {
@@ -273,6 +281,7 @@ export function localAuth(
   };
   const registration = new LocalRegistrationService(
     credentials,
+    registrationAttemptCounter,
     verificationTokens,
     tokenIssuer,
     emailOutbox,
@@ -304,6 +313,7 @@ export function localAuth(
     sessions,
     state,
     userAccounts,
+    registrationAttempts,
     tokenIssuer,
     passwordResetTokenIssuer,
     passwordResetTokens,

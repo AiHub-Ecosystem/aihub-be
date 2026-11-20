@@ -1,6 +1,6 @@
+import { assertRetainedKeyVersionsCoverLiveWindows } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/runtime-secret-provider.port';
-import { assertRetainedKeyVersionsCoverLiveWindows } from './auth-email-recipient-limit';
 
 const NOW = new Date('2026-10-24T12:00:00.000Z');
 const KEY = Buffer.alloc(32, 7).toString('base64');
@@ -33,7 +33,7 @@ describe('assertRetainedKeyVersionsCoverLiveWindows', () => {
         NOW,
       ),
     ).rejects.toThrow(
-      /no longer retains key versions with live authentication-email recipient windows: v1 \(windows live until 2026-10-25T00:00:00.000Z\)/,
+      /no longer retains key versions with live authentication-email recipient or registration-attempt counter windows: v1 \(windows live until 2026-10-25T00:00:00.000Z\)/,
     );
   });
 

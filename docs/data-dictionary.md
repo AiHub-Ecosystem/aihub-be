@@ -12,6 +12,7 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 | AuthIdentity                       | auth        | 8       |
 | EmailDeliveryRequest               | auth        | 17      |
 | AuthEmailRecipientRateLimit        | auth        | 5       |
+| AuthRegistrationAttemptCounter     | auth        | 5       |
 | EmailDailySendBudget               | auth        | 5       |
 | EmailVerificationToken             | auth        | 12      |
 | IdempotencyRecord                  | idempotency | 12      |
@@ -149,6 +150,18 @@ Owner: `auth`
 | windowStartedAt | DateTime | @map("window_started_at") @db.Timestamptz(6) |
 | expiresAt       | DateTime | @map("expires_at") @db.Timestamptz(6)        |
 | requestCount    | Int      | @map("request_count")                        |
+
+## AuthRegistrationAttemptCounter
+
+Owner: `auth`
+
+| Column          | Type     | Attributes                                   |
+| --------------- | -------- | -------------------------------------------- |
+| keyVersion      | String   | @map("key_version")                          |
+| addressHmac     | String   | @map("address_hmac")                         |
+| windowStartedAt | DateTime | @map("window_started_at") @db.Timestamptz(6) |
+| expiresAt       | DateTime | @map("expires_at") @db.Timestamptz(6)        |
+| attemptCount    | BigInt   | @map("attempt_count")                        |
 
 ## EmailDailySendBudget
 

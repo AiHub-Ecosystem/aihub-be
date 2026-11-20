@@ -1,8 +1,8 @@
 import { getMetrics } from '@/common/observability/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
+import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';
 import { Logger } from '@nestjs/common';
-import { RetiredKeyVersionLiveError } from './auth-email-recipient-limit';
 import { missingQueuedEmailPayloadKeyVersions } from './outbox-store/email-outbox-key-retention';
 
 import {

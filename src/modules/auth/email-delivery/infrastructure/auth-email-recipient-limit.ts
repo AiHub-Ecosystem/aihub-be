@@ -1,7 +1,11 @@
-import { createHmac, hkdfSync } from 'node:crypto';
 import { internalError } from '@/common/errors/app-error';
 import { asDateOrIso } from '@/common/postgres/row-readers';
 
+import {
+  ADDRESS_COUNTER_WINDOW_MS,
+  AUTH_EMAIL_RECIPIENT_PURPOSE,
+  fingerprintAddresses,
+} from '@/modules/auth/shared/infrastructure/address-window-counter';
 import {
   type AuthSqlClient,
   authQueryRows,
@@ -15,12 +19,7 @@ import type { EmailOutboxRuntimeSecrets } from '@/modules/secrets/application/ru
  * counting the same recipient without storing it.
  */
 const AUTH_EMAIL_RECIPIENT_LIMIT = 9;
-const AUTH_EMAIL_RECIPIENT_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-interface AuthEmailRecipientFingerprint {
-  readonly keyVersion: string;
-  readonly addressHmac: string;
-}
+const AUTH_EMAIL_RECIPIENT_WINDOW_MS = ADDRESS_COUNTER_WINDOW_MS;
 
 interface AuthEmailRecipientLimitRow {
   readonly key_version: string;
@@ -30,113 +29,12 @@ interface AuthEmailRecipientLimitRow {
   readonly request_count: number;
 }
 
-function fingerprintEmailRecipients(
-  email: string,
-  secrets: EmailOutboxRuntimeSecrets | undefined,
-): readonly AuthEmailRecipientFingerprint[] {
-  if (secrets === undefined) {
-    throw internalError(
-      'authentication email recipient keyring is unavailable',
-    );
-  }
-  return Object.entries(secrets.keys)
-    .map(([keyVersion, encodedKey]) => {
-      const masterKey = Buffer.from(encodedKey, 'base64');
-      if (masterKey.length !== 32) {
-        throw internalError('authentication email recipient key is invalid');
-      }
-      const key = Buffer.from(
-        hkdfSync(
-          'sha256',
-          masterKey,
-          'aihub-auth-email-recipient-rate-limit-v1',
-          `recipient-address:${keyVersion}`,
-          32,
-        ),
-      );
-      return {
-        keyVersion,
-        addressHmac: createHmac('sha256', key)
-          .update(email, 'utf8')
-          .digest('hex'),
-      };
-    })
-    .sort((left, right) =>
-      `${left.keyVersion}:${left.addressHmac}`.localeCompare(
-        `${right.keyVersion}:${right.addressHmac}`,
-      ),
-    );
-}
-
 function counterDate(value: Date | string): Date {
   const date = asDateOrIso(value);
   if (date === undefined) {
     throw internalError('authentication email recipient counter is invalid');
   }
   return date;
-}
-
-export async function pruneExpiredAuthEmailRecipientLimits(
-  client: AuthSqlClient,
-  now: Date,
-): Promise<number> {
-  const rows = await authQueryRows<{ readonly key_version: string }>(
-    client,
-    `DELETE FROM auth_email_recipient_rate_limits
-     WHERE expires_at <= $1
-     RETURNING key_version`,
-    [now],
-  );
-  return rows.length;
-}
-
-/** A keyring that dropped a version its counters still depend on (#1130). */
-export class RetiredKeyVersionLiveError extends Error {
-  constructor(detail: string) {
-    super(
-      `email outbox keyring no longer retains key versions with live authentication-email recipient windows: ${detail}. Keep every retired version in the keyring until its windows expire, or wait for the expiry before pruning (ADR-0096, #1130).`,
-    );
-    this.name = 'RetiredKeyVersionLiveError';
-  }
-}
-
-/**
- * Boot gate for the ADR-0096 retention invariant: every counter window still
- * inside its 24 hours must fingerprint under a key version the keyring still
- * retains. Pruning a version whose windows are live makes them invisible to
- * the reservation — every address under the pruned version gets a fresh
- * window and the ceiling resets, the one consumer where early key removal
- * fails open (#1130). Refusing to boot with the versions named turns that
- * into a refusal the operator sees. A table that cannot be read is not a
- * verdict: the caller decides how to defer that case.
- */
-export async function assertRetainedKeyVersionsCoverLiveWindows(
-  client: AuthSqlClient,
-  secrets: EmailOutboxRuntimeSecrets | undefined,
-  now: Date,
-): Promise<void> {
-  const rows = await authQueryRows<{
-    readonly key_version: string;
-    readonly expires_at: Date | string;
-  }>(
-    client,
-    `SELECT key_version, max(expires_at) AS expires_at
-     FROM auth_email_recipient_rate_limits
-     WHERE expires_at > $1
-     GROUP BY key_version`,
-    [now],
-  );
-  const retained = new Set(Object.keys(secrets?.keys ?? {}));
-  const retired = rows.filter((row) => !retained.has(row.key_version));
-  if (retired.length > 0) {
-    const detail = retired
-      .map(
-        (row) =>
-          `${row.key_version} (windows live until ${counterDate(row.expires_at).toISOString()})`,
-      )
-      .join(', ');
-    throw new RetiredKeyVersionLiveError(detail);
-  }
 }
 
 /**
@@ -149,7 +47,11 @@ export async function reserveAuthenticationEmailRecipient(
   secrets: EmailOutboxRuntimeSecrets | undefined,
   input: { readonly email: string; readonly now: Date },
 ): Promise<boolean> {
-  const fingerprints = fingerprintEmailRecipients(input.email, secrets);
+  const fingerprints = fingerprintAddresses(
+    input.email,
+    secrets,
+    AUTH_EMAIL_RECIPIENT_PURPOSE,
+  );
   for (const fingerprint of fingerprints) {
     await authQueryRows(
       client,

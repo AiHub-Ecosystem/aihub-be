@@ -32,6 +32,7 @@ import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '@/modules/auth/local-credentials/application/password-hasher.port';
+import { REGISTRATION_ATTEMPT_COUNTER } from '@/modules/auth/local-credentials/application/registration-attempt-counter.port';
 import {
   AUTH_MFA_SERVICE,
   type AuthMfaServicePort,
@@ -416,6 +417,8 @@ export async function createLocalAuthTestContext(
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
+    .overrideProvider(REGISTRATION_ATTEMPT_COUNTER)
+    .useValue({ count: async () => undefined })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
     .useValue(userAccounts)
     .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
