@@ -1480,6 +1480,62 @@ export function probe(url: string): Redis {
 
     expect(output).not.toContain('constructs a Redis client directly');
   });
+
+  it('follows a renamed import of the same constructor', () => {
+    const output = runWithProbe(
+      `import { Redis as RedisClient } from 'ioredis';
+
+export function probe(url: string): RedisClient {
+  return new RedisClient(url, { lazyConnect: true });
+}
+`,
+    );
+
+    expect(output).toContain('constructs a Redis client directly');
+    expect(output).toContain('probe.ts:4');
+  });
+
+  it('follows the namespace form of the same constructor', () => {
+    const output = runWithProbe(
+      `import * as ioredis from 'ioredis';
+
+export function probe(url: string) {
+  return new ioredis.Redis(url, { lazyConnect: true });
+}
+`,
+    );
+
+    expect(output).toContain('constructs a Redis client directly');
+  });
+
+  it('does not accept a marker with no reason', () => {
+    const output = runWithProbe(
+      `import Redis from 'ioredis';
+
+export function probe(url: string): Redis {
+  // arch-check:
+  const redis = new Redis(url, { lazyConnect: true });
+  redis.on('error', () => undefined);
+  return redis;
+}
+`,
+    );
+
+    expect(output).toContain('constructs a Redis client directly');
+  });
+
+  it('ignores a type-only import of the same name', () => {
+    const output = runWithProbe(
+      `import type Redis from 'ioredis';
+
+export function probe(make: () => Redis): Redis {
+  return make();
+}
+`,
+    );
+
+    expect(output).not.toContain('constructs a Redis client directly');
+  });
 });
 
 describe('isRecord has one declaration', () => {
