@@ -2,17 +2,18 @@ import {
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
 } from '@/common/observability/metrics';
-import type {
-  OrganizationIdentityConfig,
-  PublicJsonWebKeySet,
-} from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import { shortenedTtl } from '@/modules/identity/shared/infrastructure/local-cache-policy';
 import type {
   JwksCacheEntry,
   JwksCachePort,
   JwksRefreshLock,
 } from '@/modules/identity/user-assertions/application/jwks-cache.port';
-import type { JwksKeyProviderPort } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import type {
+  JwksKeyProviderInput,
+  JwksKeyProviderPort,
+} from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
+import { identityProviderUnavailable } from '@/modules/identity/user-assertions/application/user-identity-errors';
 
 import {
   type DnsResolverFactory,
@@ -63,6 +64,7 @@ interface JwksResolutionContext {
   readonly cooldownKey: string;
   readonly cached?: JwksCacheEntry | undefined;
   readonly forceRefresh?: boolean | undefined;
+  readonly rejectOnRefreshFailure?: boolean | undefined;
   readonly now: number;
 }
 
@@ -102,11 +104,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     );
   }
 
-  async resolve(input: {
-    readonly organizationId: string;
-    readonly config: OrganizationIdentityConfig;
-    readonly forceRefresh?: boolean;
-  }): Promise<PublicJsonWebKeySet> {
+  async resolve(input: JwksKeyProviderInput): Promise<PublicJsonWebKeySet> {
     // 1. Static key-set case
     const staticKeys = resolveStaticKeySet(input.config);
     if (staticKeys !== undefined) return staticKeys;
@@ -127,6 +125,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       cooldownKey: JSON.stringify([input.organizationId, configVersion]),
       cached: snapshot.entry,
       forceRefresh: input.forceRefresh,
+      rejectOnRefreshFailure: input.rejectOnRefreshFailure,
       now,
     };
 
@@ -150,7 +149,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       coldFailureCooldown: this.coldFailureCooldown,
       cooldownKey: ctx.cooldownKey,
       now: ctx.now,
-      cached: ctx.cached,
+      cached: ctx.rejectOnRefreshFailure === true ? undefined : ctx.cached,
     });
     if (cooldown !== undefined) return cooldown;
 
@@ -159,7 +158,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       organizationId: ctx.organizationId,
       activeFlights: this.flights,
       reservations: this.refreshReservations,
-      cached: ctx.cached,
+      cached: ctx.rejectOnRefreshFailure === true ? undefined : ctx.cached,
       now: ctx.now,
     });
     if (capacity !== undefined) return capacity;
@@ -217,20 +216,10 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     try {
       const lock = await this.acquireRefreshLock(organizationId);
       if (!lock.available) {
-        return this.handleUnavailableRefreshLock(
-          organizationId,
-          ctx.cached,
-          ctx.now,
-        );
+        return this.handleUnavailableRefreshLock(ctx);
       }
       if (!lock.acquired) {
-        return await this.handleUnacquiredRefreshLock(
-          organizationId,
-          ctx.configVersion,
-          ctx.cacheGeneration,
-          ctx.flightKey,
-          ctx.cached,
-        );
+        return await this.handleUnacquiredRefreshLock(ctx);
       }
       return undefined;
     } finally {
@@ -239,38 +228,48 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
   }
 
   private handleUnavailableRefreshLock(
-    organizationId: string,
-    cached: JwksCacheEntry | undefined,
-    now: number,
+    ctx: JwksResolutionContext,
   ): PublicJsonWebKeySet | undefined {
-    if (this.flights.has(organizationId)) {
+    if (this.flights.has(ctx.organizationId)) {
       return undefined;
     }
-    if (remainingCooldown(this.localRefreshCooldown, organizationId, now) > 0) {
-      return cached?.jwks ?? { keys: [] };
+    if (
+      remainingCooldown(
+        this.localRefreshCooldown,
+        ctx.organizationId,
+        ctx.now,
+      ) > 0
+    ) {
+      if (ctx.rejectOnRefreshFailure === true) {
+        throw identityProviderUnavailable();
+      }
+      return ctx.cached?.jwks ?? { keys: [] };
     }
     setCooldown(
       this.localRefreshCooldown,
-      organizationId,
-      now + JWKS_REFRESH_COOLDOWN_MS,
+      ctx.organizationId,
+      ctx.now + JWKS_REFRESH_COOLDOWN_MS,
     );
     return undefined;
   }
 
   private async handleUnacquiredRefreshLock(
-    organizationId: string,
-    configVersion: string,
-    cacheGeneration: string,
-    flightKey: string,
-    cached: JwksCacheEntry | undefined,
+    ctx: JwksResolutionContext,
   ): Promise<PublicJsonWebKeySet> {
-    const localFlight = this.flights.get(organizationId);
-    if (localFlight?.key === flightKey) {
+    const localFlight = this.flights.get(ctx.organizationId);
+    if (localFlight?.key === ctx.flightKey) {
       return localFlight.promise;
     }
-    const reread = await this.cache.getJwks(organizationId, configVersion);
-    return reread.generation === cacheGeneration
-      ? (reread.entry?.jwks ?? cached?.jwks ?? { keys: [] })
+    if (ctx.rejectOnRefreshFailure === true) {
+      // A peer holds the lock; the cached keys are the ones that just failed.
+      throw identityProviderUnavailable();
+    }
+    const reread = await this.cache.getJwks(
+      ctx.organizationId,
+      ctx.configVersion,
+    );
+    return reread.generation === ctx.cacheGeneration
+      ? (reread.entry?.jwks ?? ctx.cached?.jwks ?? { keys: [] })
       : { keys: [] };
   }
 
@@ -293,7 +292,11 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
       return jwks;
     } catch (error) {
       this.recordFetchFailure(error, ctx.cooldownKey, ctx.cached, ctx.now);
-      return translateJwksFetchError(error, ctx.cached, ctx.now);
+      return translateJwksFetchError(
+        error,
+        ctx.rejectOnRefreshFailure === true ? undefined : ctx.cached,
+        ctx.now,
+      );
     }
   }
 

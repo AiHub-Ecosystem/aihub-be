@@ -22,6 +22,7 @@ import type {
 } from './user-assertion-crypto.port';
 import type { UserAssertionReplayMarkerPort } from './user-assertion-replay-marker.port';
 import { UserAssertionVerifier } from './user-assertion-verifier';
+import { identityProviderUnavailable } from './user-identity-errors';
 import type { ResolvedUserIdentity } from './user-identity-resolver.port';
 
 const NOW = 1_700_000_000;
@@ -501,6 +502,100 @@ describe('UserAssertionVerifier', () => {
       }),
     ).resolves.toMatchObject({ userId: 'user_123' });
     expect(calls).toEqual([false, true, false, false]);
+  });
+
+  it('keeps a failed rotation reload retryable and reloads again once the provider recovers', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    let down = true;
+    const calls: boolean[] = [];
+    const provider: JwksKeyProviderPort = {
+      resolve: (input) => {
+        const forced = input.forceRefresh === true;
+        calls.push(forced);
+        if (forced && input.rejectOnRefreshFailure === true && down) {
+          return Promise.reject(identityProviderUnavailable());
+        }
+        return Promise.resolve(forced ? newFixture.jwks : oldFixture.jwks);
+      },
+      validateRemote: () => Promise.resolve({ keys: [] }),
+    };
+    const subject = verifier(provider);
+
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-reload-outage',
+        }),
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      retryable: true,
+    });
+
+    // The failed reload must not hold the cooldown: the next request reloads
+    // and accepts the rotated key.
+    down = false;
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-reload-recovered',
+        }),
+        organizationId: 'org_acme',
+      }),
+    ).resolves.toMatchObject({ userId: 'user_123' });
+    expect(calls).toEqual([false, true, false, true]);
+  });
+
+  it('allows an untracked Organization its first rotation reload when every cooldown is live', async () => {
+    const oldFixture = await rsaFixture('shared');
+    const newFixture = await rsaFixture('shared');
+    const provider = new FakeKeyProvider(oldFixture.jwks, newFixture.jwks);
+    const subject = verifier(provider);
+    const tampered = tamperedSignature(
+      await token(oldFixture.privateKey, {
+        kid: 'shared',
+        jti: 'jti-fill',
+      }),
+    );
+
+    for (const index of Array.from({ length: 256 }, (_unused, i) => i)) {
+      await expect(
+        subject.verify({
+          signedAssertion: tampered,
+          organizationId: 'org_fill_' + index,
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    }
+
+    provider.calls.length = 0;
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-overflow-first',
+        }),
+        organizationId: 'org_late',
+      }),
+    ).resolves.toMatchObject({ userId: 'user_123' });
+    expect(provider.calls).toEqual([false, true]);
+
+    // The overflow admission is one per cooldown window, so the next untracked
+    // Organization re-reads the cache without forcing another fetch.
+    provider.calls.length = 0;
+    await expect(
+      subject.verify({
+        signedAssertion: await token(newFixture.privateKey, {
+          kid: 'shared',
+          jti: 'jti-overflow-second',
+        }),
+        organizationId: 'org_later',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_USER_IDENTITY' });
+    expect(provider.calls).toEqual([false, false]);
   });
 
   it('keeps live cooldowns when the rotation-reload map is full', async () => {

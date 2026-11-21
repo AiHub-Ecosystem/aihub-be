@@ -862,6 +862,32 @@ describe('JwksKeyProvider', () => {
     ).resolves.toEqual(jwks);
   });
 
+  it('rejects a strict forced refresh instead of serving stale keys', async () => {
+    const cache = new FakeCache();
+    cache.entry = { jwks, freshUntil: 1_000, staleUntil: 3_000 };
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => Promise.reject(new Error('provider down')),
+      publicLookup(),
+      () => 2_000,
+    );
+    const strict = {
+      organizationId: 'org_acme',
+      config: remoteConfig,
+      forceRefresh: true,
+      rejectOnRefreshFailure: true,
+    };
+
+    await expect(provider.resolve(strict)).rejects.toBeInstanceOf(AppError);
+    await expect(provider.resolve(strict)).rejects.toMatchObject({
+      retryable: true,
+    });
+    // The ordinary path still serves the stale keys.
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+    ).resolves.toEqual(jwks);
+  });
+
   it('returns stale keys before the background refresh finishes and backs off after failure', async () => {
     const cache = new FakeCache();
     const stale = { keys: [{ ...jwks.keys[0], kid: 'old' }] };
