@@ -37,7 +37,11 @@ describe('SpeakingAudioUploadSweep', () => {
 
     await expect(
       sweep.run({ dryRun: false, now: new Date('2026-10-03T00:00:00.000Z') }),
-    ).resolves.toMatchObject({ deleted: 1, failed: 0 });
+    ).resolves.toMatchObject({
+      deleted: 1,
+      failed: 0,
+      ceilingExceeded: false,
+    });
     expect(storage.deleteObject).toHaveBeenCalledTimes(2);
     expect(storage.deleteObject).toHaveBeenCalledWith({
       environment: 'sandbox',
@@ -74,7 +78,38 @@ describe('SpeakingAudioUploadSweep', () => {
 
     await expect(
       sweep.run({ dryRun: false, now: new Date('2026-10-03T00:00:00.000Z') }),
-    ).resolves.toMatchObject({ deleted: 0, failed: 1 });
+    ).resolves.toMatchObject({
+      deleted: 0,
+      failed: 1,
+      ceilingExceeded: false,
+    });
+    expect(repository.removeCleanupCandidate).not.toHaveBeenCalled();
+  });
+
+  it('deletes nothing and reports the ceiling when the run lists more than it may delete', async () => {
+    const candidates = Array.from({ length: 2_001 }, (_, index) => ({
+      ...intent,
+      assetId: `aud_01J0000000000000000000${String(index).padStart(5, '0')}`,
+    }));
+    const repository = {
+      listCleanupCandidates: jest
+        .fn()
+        .mockResolvedValueOnce(candidates)
+        .mockResolvedValue([]),
+      removeCleanupCandidate: jest.fn().mockResolvedValue(true),
+    };
+    const storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
+    const sweep = new SpeakingAudioUploadSweep(repository, storage);
+
+    await expect(
+      sweep.run({ dryRun: false, now: new Date('2026-10-03T00:00:00.000Z') }),
+    ).resolves.toMatchObject({
+      eligible: 2_001,
+      deleted: 0,
+      failed: 0,
+      ceilingExceeded: true,
+    });
+    expect(storage.deleteObject).not.toHaveBeenCalled();
     expect(repository.removeCleanupCandidate).not.toHaveBeenCalled();
   });
 });

@@ -161,6 +161,7 @@ describe('Speaking Audio upload cleanup command', () => {
       deleted: 1,
       failed: 1,
       dryRun: false,
+      ceilingExceeded: false,
     });
     expect(storage.deleted).toEqual([
       speakingAudioStagingObjectKey(expired.organizationId, expired.assetId),
@@ -177,6 +178,7 @@ describe('Speaking Audio upload cleanup command', () => {
         deleted: 1,
         failed: 1,
         dryRun: false,
+        ceilingExceeded: false,
         cutoff_source: 'process',
       }),
     ]);

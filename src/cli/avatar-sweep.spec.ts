@@ -161,6 +161,7 @@ describe('runAvatarSweepCommand', () => {
       deleted: 1,
       failed: 0,
       dryRun: false,
+      ceilingExceeded: false,
       stagingScanned: 0,
       stagingUnrecognised: 0,
       stagingEligible: 0,
