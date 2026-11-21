@@ -101,6 +101,7 @@ export const GATE_COMMANDS = {
   'test:capacity-benchmark': 'test:capacity-benchmark',
   'test:check-changed': 'test:check-changed',
   'test:secret-scan': 'test:secret-scan',
+  'test:affected-jobs': 'test:affected-jobs',
   'test:check-app-errors': 'test:check-app-errors',
   'test:commit-message': 'test:commit-message',
   'test:format-check': 'test:format-check',
@@ -526,6 +527,11 @@ function classifyPathGates(p) {
   // the decision and the workflow wiring.
   if (path.includes('secret-scan-plan')) {
     return ['lint', 'test:secret-scan'];
+  }
+  // #1796: the affected-job plan the CI lanes read, and the spec that pins both
+  // the mapping and the workflow wiring.
+  if (path.includes('affected-jobs')) {
+    return ['lint', 'test:affected-jobs'];
   }
   // #1789: the generated-artifact drift check and its spec select each other.
   // The check itself runs only in CI's static job - regenerating rewrites the

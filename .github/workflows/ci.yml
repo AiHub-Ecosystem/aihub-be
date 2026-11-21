@@ -118,10 +118,48 @@ jobs:
               ;;
           esac
 
+  # #1796: the changed-path detector every lane reads. It fails open: a range it
+  # cannot resolve, or a path no rule claims, emits `true` for every job and says
+  # why in the log. A lane skips only when its output is exactly `false`.
+  affected-jobs:
+    name: Affected jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      static: ${{ steps.plan.outputs.static }}
+      test: ${{ steps.plan.outputs.test }}
+      audit: ${{ steps.plan.outputs.audit }}
+      database: ${{ steps.plan.outputs.database }}
+      tenant-isolation: ${{ steps.plan.outputs.tenant-isolation }}
+      coverage: ${{ steps.plan.outputs.coverage }}
+      build: ${{ steps.plan.outputs.build }}
+      image: ${{ steps.plan.outputs.image }}
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The diff needs the base commit a shallow clone would not have.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Plan the affected jobs
+        id: plan
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/push/affected-jobs.mjs
+
   static:
     name: Static checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    # #1796: only an exact `false` skips a lane; a missing output leaves it running.
+    if: ${{ needs.affected-jobs.outputs.static != 'false' }}
     permissions:
       contents: read
       actions: read
@@ -305,6 +343,8 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    if: ${{ needs.affected-jobs.outputs.test != 'false' }}
     permissions:
       contents: read
       actions: read
@@ -574,6 +614,8 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    if: ${{ needs.affected-jobs.outputs.build != 'false' }}
 
     steps:
       - name: Check out repository
@@ -709,6 +751,8 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    if: ${{ needs.affected-jobs.outputs.audit != 'false' }}
 
     steps:
       - name: Check out repository
@@ -741,6 +785,8 @@ jobs:
     name: Database lane
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    if: ${{ needs.affected-jobs.outputs.database != 'false' }}
     env:
       REDIS_URL: redis://localhost:6379/14
       AIHUB_PGBOUNCER_TEST_URL: postgres://aihub:change-me@localhost:6432/aihub_db_lane
@@ -857,6 +903,8 @@ jobs:
     name: Tenant isolation
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: affected-jobs
+    if: ${{ needs.affected-jobs.outputs.tenant-isolation != 'false' }}
     env:
       DB_LANE_ADMIN_URL: postgres://aihub:change-me@localhost:5432/aihub
       DB_LANE_DATABASE_NAME: aihub_tenant_isolation_lane
@@ -931,8 +979,15 @@ jobs:
   # lane runs them.
   coverage:
     name: Merged coverage
-    if: ${{ !cancelled() }}
+    # #1796: the merge has nothing to read when a lane it merges was skipped.
+    if: >-
+      !cancelled() &&
+      needs.affected-jobs.outputs.coverage != 'false' &&
+      needs.test.result == 'success' &&
+      needs.database.result == 'success' &&
+      needs.tenant-isolation.result == 'success'
     needs:
+      - affected-jobs
       - test
       - database
       - tenant-isolation
@@ -1089,9 +1144,12 @@ jobs:
 
   image:
     name: Image boot
-    needs: resolve-active-release
+    needs:
+      - affected-jobs
+      - resolve-active-release
     if: >-
       always() &&
+      needs.affected-jobs.outputs.image != 'false' &&
       (github.event_name != 'push' || github.ref != 'refs/heads/main' ||
       needs.resolve-active-release.result == 'success')
     runs-on: ubuntu-latest
@@ -1608,6 +1666,7 @@ jobs:
     name: CI
     if: ${{ always() }}
     needs:
+      - affected-jobs
       - secret-scan
       - static
       - test
@@ -1629,6 +1688,15 @@ jobs:
     steps:
       - name: Require all lanes
         env:
+          AFFECTED_JOBS_RESULT: ${{ needs.affected-jobs.result }}
+          AFFECTED_STATIC: ${{ needs.affected-jobs.outputs.static }}
+          AFFECTED_TEST: ${{ needs.affected-jobs.outputs.test }}
+          AFFECTED_BUILD: ${{ needs.affected-jobs.outputs.build }}
+          AFFECTED_AUDIT: ${{ needs.affected-jobs.outputs.audit }}
+          AFFECTED_DATABASE: ${{ needs.affected-jobs.outputs.database }}
+          AFFECTED_TENANT_ISOLATION: ${{ needs.affected-jobs.outputs.tenant-isolation }}
+          AFFECTED_COVERAGE: ${{ needs.affected-jobs.outputs.coverage }}
+          AFFECTED_IMAGE: ${{ needs.affected-jobs.outputs.image }}
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
@@ -1649,9 +1717,26 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
         run: |
+          # #1796: a lane the detector switched off reports `skipped`, and that
+          # passes the gate - only `failure` or `cancelled` fails it. The lanes
+          # below are not detector-driven, so they are still required to run.
+          require_lane() {
+            if [ "$1" = success ]; then return 0; fi
+            if [ "$1" = skipped ] && [ "$2" = false ]; then return 0; fi
+            echo "lane $3 finished $1 (detector asked for it: $2)"
+            return 1
+          }
+
+          test "$AFFECTED_JOBS_RESULT" = success
           test "$SECRET_SCAN_RESULT" = success
-          test "$STATIC_RESULT" = success
-          test "$TEST_RESULT" = success
+          require_lane "$STATIC_RESULT" "$AFFECTED_STATIC" static
+          require_lane "$TEST_RESULT" "$AFFECTED_TEST" test
+          require_lane "$BUILD_RESULT" "$AFFECTED_BUILD" build
+          require_lane "$AUDIT_RESULT" "$AFFECTED_AUDIT" audit
+          require_lane "$DATABASE_RESULT" "$AFFECTED_DATABASE" database
+          require_lane "$TENANT_ISOLATION_RESULT" "$AFFECTED_TENANT_ISOLATION" tenant-isolation
+          require_lane "$COVERAGE_RESULT" "$AFFECTED_COVERAGE" coverage
+          require_lane "$IMAGE_RESULT" "$AFFECTED_IMAGE" image
           if [ "$RUN_UNIT_REPEATABILITY" = true ]; then
             test "$UNIT_REPEATABILITY_RESULT" = success
           else
@@ -1659,13 +1744,7 @@ jobs:
           fi
           test "$SHELL_SPECS_RESULT" = success
           test "$DEV_RESTART_BUDGET_RESULT" = success
-          test "$BUILD_RESULT" = success
-          test "$AUDIT_RESULT" = success
           test "$CUSTOMER_WEB_CONTRACT_RESULT" = success
-          test "$DATABASE_RESULT" = success
-          test "$TENANT_ISOLATION_RESULT" = success
-          test "$COVERAGE_RESULT" = success
-          test "$IMAGE_RESULT" = success
           if [ "$EVENT_NAME" = push ] && [ "$REF" = refs/heads/main ]; then
             test "$PUBLISH_IMAGE_RESULT" = success
           else
