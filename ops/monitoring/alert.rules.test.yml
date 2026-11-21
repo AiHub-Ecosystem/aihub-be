@@ -668,6 +668,32 @@ tests:
         alertname: AIHUBRedisProtectionUnavailable
         exp_alerts: []
 
+  # #1997: a process that loses the subscription past its retry budget warns;
+  # a healthy process stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aihub_token_revocation_subscriber_up{job="aihub-production-app",instance="prod"}'
+        values: "1 0 0x20"
+      - series: 'aihub_token_revocation_subscriber_up{job="aihub-sandbox-app",instance="sandbox"}'
+        values: "1x22"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AIHUBTokenRevocationSubscriberDown
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: AIHUBTokenRevocationSubscriberDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: aihub-operations
+              service: aihub
+              job: aihub-production-app
+              instance: prod
+            exp_annotations:
+              summary: "An AIHUB process stopped receiving token-revocation broadcasts"
+              description: "aihub-production-app instance prod has not held the revocation subscription for ten minutes, past its five-attempt retry budget. Revocation decisions still use the authoritative store."
+              runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#token-revocation-subscriber
+
   # #237: the shared PostgreSQL alert fires at 80% of max_connections and clears below it.
   - interval: 1m
     input_series:

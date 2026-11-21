@@ -129,6 +129,21 @@ groups:
           description: "{{ $labels.job }} could not complete a Redis operation for {{ $labels.seam }} in the last five minutes."
           runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#redis
 
+      # #1997: a subscriber that used its five-attempt retry budget stays down
+      # until the process restarts, so a sustained 0 is a state, not a blip.
+      # Revocation decisions keep using the authoritative store, so this warns.
+      - alert: AIHUBTokenRevocationSubscriberDown
+        expr: aihub_token_revocation_subscriber_up{job=~"aihub-(production|sandbox)-app"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          owner: aihub-operations
+          service: aihub
+        annotations:
+          summary: "An AIHUB process stopped receiving token-revocation broadcasts"
+          description: "{{ $labels.job }} instance {{ $labels.instance }} has not held the revocation subscription for ten minutes, past its five-attempt retry budget. Revocation decisions still use the authoritative store."
+          runbook_url: https://github.com/AiHub-Ecosystem/aihub-be/blob/main/docs/operations/aihub-observability.md#token-revocation-subscriber
+
   - name: aihub-downstream
     rules:
       - alert: AIHUBDownstreamCircuitBreakerOpen
@@ -247,7 +262,7 @@ groups:
       - record: aihub:alert_rules_fingerprint
         expr: vector(1)
         labels:
-          rules_sha256: "3272797dbeeb36d65b1bb9177dc30cd86734dcb759398426ae8f91b14eb9a19b"
+          rules_sha256: "a55149ed80df2d980c6e3e5072e4c09d51ac6f2558f9848b2749e3ab5ac87aac"
 
   - name: aihub-email-outbox
     rules:
