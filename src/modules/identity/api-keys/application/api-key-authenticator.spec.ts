@@ -1,6 +1,7 @@
 import { AppError } from '@/common/errors/app-error';
 import { getMetrics } from '@/common/observability/metrics';
 import {
+  API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT,
   AUTH_FAILURE_LIMIT,
   ApiKeyAuthenticator,
   isApiKeyFormat,
@@ -50,6 +51,7 @@ const activeRecord: ApiKeyRecord = {
 
 class FakeRepository implements ApiKeyRepositoryPort {
   calls = 0;
+  touchCalls = 0;
 
   constructor(public record: ApiKeyRecord | null) {}
 
@@ -63,6 +65,7 @@ class FakeRepository implements ApiKeyRepositoryPort {
     _apiKeyId: string,
     _usedAt: Date,
   ): Promise<void> {
+    this.touchCalls += 1;
     return Promise.resolve();
   }
 }
@@ -130,7 +133,10 @@ class FakeFailureCounter implements AuthFailureCounterPort {
   }
 }
 
-function createAuthenticator(record: ApiKeyRecord | null = activeRecord): {
+function createAuthenticator(
+  record: ApiKeyRecord | null = activeRecord,
+  now: () => Date = () => new Date(),
+): {
   authenticator: ApiKeyAuthenticator;
   repository: FakeRepository;
   cache: FakeCache;
@@ -147,7 +153,7 @@ function createAuthenticator(record: ApiKeyRecord | null = activeRecord): {
       repository,
       cache,
       failures,
-      undefined,
+      now,
       (apiKeyId) => environmentRefusals.push(apiKeyId),
     ),
     repository,
@@ -190,6 +196,91 @@ describe('ApiKeyAuthenticator', () => {
     expect(repository.calls).toBe(1);
     expect(cache.setCalls).toBe(1);
     expect(await rejectedAuthCount()).toBe(before);
+  });
+
+  it('dispatches last-used touches once per minute, then resumes after the window', async () => {
+    let now = new Date('2026-11-19T12:00:00.000Z');
+    const { authenticator, repository } = createAuthenticator(
+      activeRecord,
+      () => now,
+    );
+    const credentials = {
+      value: VALID_KEY,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    };
+
+    await authenticator.authenticate(credentials);
+    now = new Date(now.getTime() + 59_999);
+    await authenticator.authenticate(credentials);
+    expect(repository.touchCalls).toBe(1);
+
+    now = new Date(now.getTime() + 1);
+    await authenticator.authenticate(credentials);
+    expect(repository.touchCalls).toBe(2);
+  });
+
+  it('does not evict a live window at capacity; admits overflow after expiry', async () => {
+    let now = new Date('2026-11-19T12:00:00.000Z');
+    const { authenticator, repository, cache } = createAuthenticator(
+      activeRecord,
+      () => now,
+    );
+
+    for (
+      let index = 0;
+      index < API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT;
+      index += 1
+    ) {
+      repository.record = { ...activeRecord, apiKeyId: `ak_${index}` };
+      cache.value = undefined;
+      await authenticator.authenticate({
+        value: `aihub_sk_${String(index).padStart(43, 'A')}`,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      });
+    }
+    expect(repository.touchCalls).toBe(API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT);
+
+    repository.record = { ...activeRecord, apiKeyId: 'ak_overflow' };
+    cache.value = undefined;
+    await authenticator.authenticate({
+      value: `aihub_sk_${'A'.repeat(42)}1`,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    });
+    expect(repository.touchCalls).toBe(API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT);
+
+    now = new Date(now.getTime() + 59_999);
+    repository.record = { ...activeRecord, apiKeyId: 'ak_0' };
+    cache.value = repository.record;
+    await authenticator.authenticate({
+      value: `aihub_sk_${'A'.repeat(42)}0`,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    });
+    expect(repository.touchCalls).toBe(API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT);
+
+    now = new Date(now.getTime() + 1);
+    await authenticator.authenticate({
+      value: `aihub_sk_${'A'.repeat(42)}0`,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    });
+    expect(repository.touchCalls).toBe(
+      API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT + 1,
+    );
+
+    repository.record = { ...activeRecord, apiKeyId: 'ak_overflow' };
+    cache.value = repository.record;
+    await authenticator.authenticate({
+      value: `aihub_sk_${'A'.repeat(42)}1`,
+      environment: 'production',
+      clientIp: '203.0.113.10',
+    });
+    expect(repository.touchCalls).toBe(
+      API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT + 2,
+    );
   });
 
   it('rejects a missing or malformed key without touching the database', async () => {

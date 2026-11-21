@@ -1,7 +1,8 @@
-import type {
-  ApiKeyRecord,
-  ApiKeyRepositoryPort,
-  DurableApiKeyStatus,
+import {
+  API_KEY_LAST_USED_THROTTLE_MS,
+  type ApiKeyRecord,
+  type ApiKeyRepositoryPort,
+  type DurableApiKeyStatus,
 } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
@@ -46,13 +47,6 @@ export const API_KEY_LOOKUP_SQL = `
   WHERE api_key.key_hash = $1
   LIMIT 1
 `;
-
-/**
- * Last-used telemetry is best-effort, so it is written at most once per window.
- * The cutoff is the caller's own instant less this window, which is what the
- * statement compared against before.
- */
-const LAST_USED_THROTTLE_MS = 60_000;
 
 /**
  * The row a lookup returns is whatever PostgreSQL and the driver produced, so
@@ -157,7 +151,9 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
     usedAt: Date,
   ): Promise<void> {
     try {
-      const throttleCutoff = new Date(usedAt.getTime() - LAST_USED_THROTTLE_MS);
+      const throttleCutoff = new Date(
+        usedAt.getTime() - API_KEY_LAST_USED_THROTTLE_MS,
+      );
       await identityTransaction(
         this.client,
         organizationId,
@@ -168,7 +164,7 @@ export class PostgresApiKeyRepository implements ApiKeyRepositoryPort {
               organizationId,
               OR: [
                 { lastUsedAt: null },
-                { lastUsedAt: { lt: throttleCutoff } },
+                { lastUsedAt: { lte: throttleCutoff } },
               ],
             },
             data: { lastUsedAt: usedAt },
