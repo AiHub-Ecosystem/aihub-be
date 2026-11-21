@@ -1,3 +1,4 @@
+import { isRecord } from '@/common/is-record';
 import { parseSpeakingV2QuestionResult } from '@/downstream/speaking/speaking-v2-question-response.adapter';
 import { fixtureJson } from '../../../../../test/support/json-fixtures';
 import { type SpeakingGradingJobRow, mapJob } from './speaking-grading-job-row';
@@ -34,20 +35,38 @@ function row(result: unknown): SpeakingGradingJobRow {
 }
 
 describe('stored Speaking grading job results', () => {
-  it('reads a legacy result without changing it', () => {
-    const legacy = parseSpeakingV2QuestionResult(
-      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
-    );
+  it('reads a pre-error_priority result with an empty list', () => {
+    const current = resultWithPriorities([]);
+    const legacy: Record<string, unknown> = { ...current };
+    delete legacy['error_priority'];
 
-    expect(mapJob(row(legacy))?.result).toEqual(legacy);
+    expect(mapJob(row(legacy))?.result?.error_priority).toEqual([]);
   });
 
-  it('ignores error_priority written by a newer worker', () => {
-    const legacy = parseSpeakingV2QuestionResult(
-      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
-    );
-    const future = { ...legacy, error_priority: [{ invalid: true }] };
+  it('keeps priorities in a current stored result', () => {
+    const priorities = prioritySample('question_result');
+    const result = resultWithPriorities(priorities);
 
-    expect(mapJob(row(future))?.result).toEqual(legacy);
+    expect(mapJob(row(result))?.result?.error_priority).toHaveLength(1);
   });
 });
+
+function prioritySample(resultType: string): unknown[] {
+  const sample = fixtureJson(
+    'ai-speaking',
+    'grading-v2-error-priority.provider-sample.json',
+  );
+  if (!isRecord(sample) || !Array.isArray(sample[resultType])) {
+    throw new Error(`provider priority sample has no ${resultType}`);
+  }
+  return sample[resultType];
+}
+
+function resultWithPriorities(value: unknown) {
+  const body = fixtureJson('ai-speaking', 'grading-v2-question-post.200.json');
+  if (!isRecord(body) || !isRecord(body['data'])) {
+    throw new Error('provider fixture has no data object');
+  }
+  body['data']['error_priority'] = value;
+  return parseSpeakingV2QuestionResult(body);
+}

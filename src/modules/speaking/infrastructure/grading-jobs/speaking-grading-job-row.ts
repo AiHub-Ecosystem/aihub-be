@@ -14,10 +14,12 @@ import { Value } from '@sinclair/typebox/value';
 
 import { jobColumns } from './speaking-grading-job-columns';
 
-const CompatibleSpeakingV2QuestionResultSchema = Type.Object(
+const StoredSpeakingV2QuestionResultSchema = Type.Object(
   {
     ...SpeakingV2QuestionResultSchema.properties,
-    error_priority: Type.Optional(Type.Unknown()),
+    error_priority: Type.Optional(
+      SpeakingV2QuestionResultSchema.properties.error_priority,
+    ),
   },
   { additionalProperties: false },
 );
@@ -181,15 +183,17 @@ export function mapJob(
 
   let result: SpeakingGradingJob['result'];
   if (row.result !== null) {
-    if (!Value.Check(CompatibleSpeakingV2QuestionResultSchema, row.result)) {
+    if (!Value.Check(StoredSpeakingV2QuestionResultSchema, row.result)) {
       return invalidStoredJob();
     }
-    const compatibleResult = Value.Parse(
-      CompatibleSpeakingV2QuestionResultSchema,
+    const storedResult = Value.Parse(
+      StoredSpeakingV2QuestionResultSchema,
       row.result,
     );
-    delete compatibleResult['error_priority'];
-    result = Value.Parse(SpeakingV2QuestionResultSchema, compatibleResult);
+    result = {
+      ...storedResult,
+      error_priority: storedResult.error_priority ?? [],
+    };
   }
 
   let error: SpeakingGradingJobError | undefined;

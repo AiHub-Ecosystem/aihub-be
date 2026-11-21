@@ -1,6 +1,7 @@
 # ADR-0138: Batch AI-service breaking changes into Public API v2
 
 - Status: Proposed; amended by [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md) — design agreed by the AIHUB owner on 2026-11-01; `/v2` was released ahead of the evidence below, which is tracked in #1450.
+- Amended by: [ADR-0180](0180-speaking-priority-errors-in-v2.md) — Speaking v2 publishes provider-ranked priority errors.
 - Date: 2026-10-31
 - Writing's schema, routes, timeout and enablement gate: [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md)
 - Amended: 2026-11-01 — the first `/v2` carries Speaking only and ships with `/v1`'s ADR-0127 sunset; Writing v3 joins `/v2` later as an additive change (decisions 1, 2, 4, 6, 8 and 10)

@@ -464,7 +464,11 @@ function speakingResult(): SpeakingV2QuestionResult {
     readonly data: SpeakingV2QuestionResult;
   };
   const result = parsed.data;
-  return { ...result, meta: { ...result.meta, response_id: 'resp_123' } };
+  return {
+    ...result,
+    error_priority: [],
+    meta: { ...result.meta, response_id: 'resp_123' },
+  };
 }
 
 export function seededJob(

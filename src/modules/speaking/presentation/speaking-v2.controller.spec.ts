@@ -35,6 +35,14 @@ const PROVIDER_AUTH = {
   'x-secret-key': 'speaking-secret',
 };
 
+function currentSpeakingV2Fixture(name: string): Record<string, unknown> {
+  const body = aiSpeakingFixture(name);
+  const data = body['data'];
+  if (!isRecord(data)) throw new Error(`Fixture ${name} has no data object`);
+  data['error_priority'] = [];
+  return body;
+}
+
 const LOCAL_OWNER: SpeakingV2ResultOwner = {
   organizationId: 'local-development',
   environment: 'development',
@@ -183,37 +191,37 @@ describe('Speaking v2 HTTP flow', () => {
       'POST',
       '/api/v2/speaking/questions/grading',
       200,
-      aiSpeakingFixture('grading-v2-question-post.200.json'),
+      currentSpeakingV2Fixture('grading-v2-question-post.200.json'),
     );
     provider(
       'POST',
       '/api/v2/speaking/parts/grading',
       200,
-      aiSpeakingFixture('grading-v2-part-post.200.json'),
+      currentSpeakingV2Fixture('grading-v2-part-post.200.json'),
     );
     provider(
       'POST',
       '/api/v2/speaking/tests/grading',
       200,
-      aiSpeakingFixture('grading-v2-test-post.200.json'),
+      currentSpeakingV2Fixture('grading-v2-test-post.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/responses/resp-1',
       200,
-      aiSpeakingFixture('grading-v2-question-get.200.json'),
+      currentSpeakingV2Fixture('grading-v2-question-get.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/parts/part-1',
       200,
-      aiSpeakingFixture('grading-v2-part-get.200.json'),
+      currentSpeakingV2Fixture('grading-v2-part-get.200.json'),
     );
     provider(
       'GET',
       '/api/v2/speaking/tests/test-1',
       200,
-      aiSpeakingFixture('grading-v2-test-get.200.json'),
+      currentSpeakingV2Fixture('grading-v2-test-get.200.json'),
     );
     provider(
       'GET',
