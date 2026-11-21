@@ -159,7 +159,7 @@
     "@nestjs/cli": "^12.0.12",
     "@nestjs/testing": "^12.4.0",
     "@seriousme/openapi-schema-validator": "^2.11.0",
-    "@stryker-mutator/core": "8.4.0",
+    "@stryker-mutator/core": "10.1.1",
     "@stryker-mutator/jest-runner": "8.4.0",
     "@stryker-mutator/typescript-checker": "8.4.0",
     "@swc/cli": "^0.8.2",
