@@ -9,6 +9,14 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.12.0] - 2026-11-21
+
+### Added
+
+- Speaking `/v2` Question, Part, and Test results include up to three provider-
+  ranked `error_priority` entries with rank, group, code, English and
+  Vietnamese names, and a Vietnamese reason.
+
 ## [2.11.0] - 2026-11-19
 
 ### Changed
