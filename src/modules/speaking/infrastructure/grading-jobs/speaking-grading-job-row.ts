@@ -9,9 +9,18 @@ import type {
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import type { SpeakingAudioEnvironment } from '@/modules/speaking/domain/speaking-audio-asset';
 import type { Prisma, PrismaClient } from '@prisma-client/client';
+import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { jobColumns } from './speaking-grading-job-columns';
+
+const CompatibleSpeakingV2QuestionResultSchema = Type.Object(
+  {
+    ...SpeakingV2QuestionResultSchema.properties,
+    error_priority: Type.Optional(Type.Unknown()),
+  },
+  { additionalProperties: false },
+);
 
 export interface SpeakingGradingJobRow {
   readonly jobId: string;
@@ -172,10 +181,15 @@ export function mapJob(
 
   let result: SpeakingGradingJob['result'];
   if (row.result !== null) {
-    if (!Value.Check(SpeakingV2QuestionResultSchema, row.result)) {
+    if (!Value.Check(CompatibleSpeakingV2QuestionResultSchema, row.result)) {
       return invalidStoredJob();
     }
-    result = Value.Parse(SpeakingV2QuestionResultSchema, row.result);
+    const compatibleResult = Value.Parse(
+      CompatibleSpeakingV2QuestionResultSchema,
+      row.result,
+    );
+    delete compatibleResult['error_priority'];
+    result = Value.Parse(SpeakingV2QuestionResultSchema, compatibleResult);
   }
 
   let error: SpeakingGradingJobError | undefined;
