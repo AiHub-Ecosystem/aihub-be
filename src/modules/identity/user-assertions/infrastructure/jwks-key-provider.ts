@@ -3,7 +3,10 @@ import {
   recordJwksRefreshFailure,
 } from '@/common/observability/metrics';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
-import { shortenedTtl } from '@/modules/identity/shared/infrastructure/local-cache-policy';
+import {
+  putBounded,
+  shortenedTtl,
+} from '@/modules/identity/shared/infrastructure/local-cache-policy';
 import type {
   JwksCacheEntry,
   JwksCachePort,
@@ -28,6 +31,7 @@ import {
   JWKS_COLD_FAILURE_TTL_MS,
   JWKS_MAX_CONCURRENT_ORGANIZATIONS,
   JwksCapacityError,
+  MAX_LOCAL_JWKS_COOLDOWNS,
   checkJwksCapacity,
   checkJwksCooldown,
   remainingCooldown,
@@ -77,6 +81,7 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     Promise<JwksRefreshLock>
   >();
   private readonly refreshReservations = new Map<string, string>();
+  private readonly unpersistedFetches = new Map<string, JwksCacheEntry>();
   private readonly flights = new Map<
     string,
     {
@@ -116,14 +121,21 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     );
     const now = this.now();
     const jwksUrl = input.config.jwksUrl ?? '';
+    const flightKey = JSON.stringify([
+      configVersion,
+      snapshot.generation,
+      jwksUrl,
+    ]);
     const ctx: JwksResolutionContext = {
       organizationId: input.organizationId,
       configVersion,
       cacheGeneration: snapshot.generation,
       jwksUrl,
-      flightKey: JSON.stringify([configVersion, snapshot.generation, jwksUrl]),
+      flightKey,
       cooldownKey: JSON.stringify([input.organizationId, configVersion]),
-      cached: snapshot.entry,
+      // A keyset the cache refused to store still outranks the older entry:
+      // it came from the IdP after that entry did.
+      cached: this.unpersistedFetches.get(flightKey) ?? snapshot.entry,
       forceRefresh: input.forceRefresh,
       rejectOnRefreshFailure: input.rejectOnRefreshFailure,
       now,
@@ -282,13 +294,23 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
         ctx.jwksUrl,
         ctx.flightKey,
       );
-      await this.cacheFetchedJwks(
+      const unpersisted = await this.cacheFetchedJwks(
         ctx.organizationId,
         ctx.configVersion,
         ctx.cacheGeneration,
         ctx.cooldownKey,
         jwks,
       );
+      if (unpersisted === undefined) {
+        this.unpersistedFetches.delete(ctx.flightKey);
+      } else {
+        putBounded(
+          this.unpersistedFetches,
+          ctx.flightKey,
+          unpersisted,
+          MAX_LOCAL_JWKS_COOLDOWNS,
+        );
+      }
       return jwks;
     } catch (error) {
       this.recordFetchFailure(error, ctx.cooldownKey, ctx.cached, ctx.now);
@@ -306,18 +328,21 @@ export class JwksKeyProvider implements JwksKeyProviderPort {
     cacheGeneration: string,
     cooldownKey: string,
     jwks: PublicJsonWebKeySet,
-  ): Promise<void> {
+  ): Promise<JwksCacheEntry | undefined> {
     const refreshedAt = this.now();
     const entry: JwksCacheEntry = {
       jwks,
       freshUntil: refreshedAt + shortenedTtl(JWKS_FRESH_TTL_MS),
       staleUntil: refreshedAt + shortenedTtl(JWKS_STALE_TTL_MS),
     };
-    await this.cache
+    const persisted = await this.cache
       .setJwks(organizationId, configVersion, cacheGeneration, entry)
-      .catch(() => undefined);
+      .then(() => true)
+      .catch(() => false);
     this.refreshFailureCooldown.delete(cooldownKey);
     this.coldFailureCooldown.delete(cooldownKey);
+    // The caller keeps it in memory so later requests can still verify.
+    return persisted ? undefined : entry;
   }
 
   private recordFetchFailure(
