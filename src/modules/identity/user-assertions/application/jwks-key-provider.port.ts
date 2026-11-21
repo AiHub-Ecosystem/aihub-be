@@ -7,6 +7,11 @@ export interface JwksKeyProviderInput {
   readonly organizationId: string;
   readonly config: OrganizationIdentityConfig;
   readonly forceRefresh?: boolean;
+  /**
+   * A forced reload must not fall back to cached keys. The caller has already
+   * seen the cached key fail, so stale keys only turn an outage into a 401.
+   */
+  readonly rejectOnRefreshFailure?: boolean;
 }
 
 export interface JwksKeyProviderPort {
