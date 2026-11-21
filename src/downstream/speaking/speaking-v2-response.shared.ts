@@ -94,6 +94,25 @@ function transcriptProjection(value: unknown): Record<string, unknown> {
   };
 }
 
+function errorPriorityProjection(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    throw contractViolation('missing Speaking v2 error_priority');
+  }
+  return value.map((entry: unknown) => {
+    if (!isRecord(entry)) {
+      throw contractViolation('invalid Speaking v2 error_priority entry');
+    }
+    return {
+      rank: entry['rank'],
+      group: entry['group'],
+      code: entry['code'],
+      name_en: entry['name_en'],
+      name_vi: entry['name_vi'],
+      reason_vi: entry['reason_vi'],
+    };
+  });
+}
+
 export function speakingV2Projection(
   rawBody: unknown,
 ): Record<string, unknown> {
@@ -129,6 +148,7 @@ export function speakingV2Projection(
   const feedback = source['overall_feedback'];
   const data: Record<string, unknown> = {
     scores: source['scores'],
+    error_priority: errorPriorityProjection(source['error_priority']),
     overall_feedback: {
       overview_vi: feedback['overview_vi'],
       details: feedback['details'],

@@ -1,0 +1,33 @@
+{
+  "question_result": [
+    {
+      "rank": 1,
+      "group": "grammatical_range_accuracy",
+      "code": "GRA04",
+      "name_en": "[redacted]",
+      "name_vi": "[redacted]",
+      "reason_vi": "[redacted]"
+    }
+  ],
+  "part_result": [
+    {
+      "rank": 1,
+      "group": "grammatical_range_accuracy",
+      "code": "GRA04",
+      "name_en": "[redacted]",
+      "name_vi": "[redacted]",
+      "reason_vi": "[redacted]"
+    }
+  ],
+  "test_result": [
+    {
+      "rank": 1,
+      "group": "grammatical_range_accuracy",
+      "code": "GRA04",
+      "name_en": "[redacted]",
+      "name_vi": "[redacted]",
+      "reason_vi": "[redacted]"
+    }
+  ],
+  "live_no_speech_question_result": []
+}

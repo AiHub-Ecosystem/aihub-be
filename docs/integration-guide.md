@@ -1156,6 +1156,14 @@ has `data.transcript` with `text`, `stats.word_count`,
 `stats.speaking_seconds`, and `tokens` containing `index`, `text`, `start_ms`,
 and `end_ms` (either timing can be `null`). Where the AI service has no value, the field is `null`: `data.meta.test_id` when the request named no test; on a question result `data.meta.part_result_id` when it named no Part, and `data.transcript.stats.word_count` and `speaking_seconds` for a recording without speech. On a Part or Test result, `data.meta.total_speaking_seconds` is `null` when the graded recordings held no speech. In `data.criteria.*.diagnostics`, a finding's `error_codes`, `explain_vi`, `improvement` and `improvement_vi` can be `null`.
 
+Every Speaking v2 result also has `data.error_priority`, an ordered list of up
+to three provider-ranked entries. Each entry contains `rank`, `group`, `code`,
+`name_en`, `name_vi`, and `reason_vi`. An empty list from the provider means it
+reported no priority errors. A legacy asynchronous result persisted before the
+field existed is also returned with an empty list for compatibility; in that
+case, priority data is unavailable. Treat `group` and `code` as open-ended
+strings so new provider values remain usable.
+
 Compared with `/v1`, v2 does not return `scorability`, `relevance`,
 `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
 `strong_point_vi`, `action_plan_vi`, or the `/v1` `pronunciation_detail`

@@ -44,14 +44,17 @@ const job: SpeakingGradingJob = {
   status: 'queued',
   createdAt: NOW,
 };
-const questionResult = (
-  JSON.parse(
-    readFileSync(
-      'test/fixtures/ai-speaking/grading-v2-question-post.200.json',
-      'utf8',
-    ),
-  ) as { readonly data: SpeakingV2QuestionResult }
-).data;
+const questionResult = {
+  ...(
+    JSON.parse(
+      readFileSync(
+        'test/fixtures/ai-speaking/grading-v2-question-post.200.json',
+        'utf8',
+      ),
+    ) as { readonly data: SpeakingV2QuestionResult }
+  ).data,
+  error_priority: [],
+};
 const asset: SpeakingAudioAsset = {
   assetId: job.audioAssetId,
   organizationId: job.organizationId,

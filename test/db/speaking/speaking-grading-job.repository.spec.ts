@@ -75,6 +75,7 @@ const RESULT: SpeakingV2QuestionResult = {
     is_provisional: true,
   },
   overall_feedback: { overview_vi: '', details: [] },
+  error_priority: [],
   criteria: {
     fluency_coherence: {
       summary: {

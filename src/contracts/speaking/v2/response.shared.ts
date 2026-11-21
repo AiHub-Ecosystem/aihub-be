@@ -32,6 +32,21 @@ export const SpeakingV2FeedbackSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SpeakingV2ErrorPrioritySchema = Type.Array(
+  Type.Object(
+    {
+      rank: Type.Integer({ minimum: 1, maximum: 3 }),
+      group: ModelText(),
+      code: ModelText(),
+      name_en: ModelText(),
+      name_vi: ModelText(),
+      reason_vi: ModelText(),
+    },
+    { additionalProperties: false },
+  ),
+  { maxItems: 3 },
+);
+
 // A word the provider could not align to the audio has no timing.
 const SpeakingV2TimingMsSchema = Type.Union([
   Type.Number({ minimum: 0 }),

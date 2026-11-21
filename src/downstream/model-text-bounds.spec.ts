@@ -84,9 +84,17 @@ function bodyWith(fixture: string, path: Path, value: string): unknown {
   } else {
     throw new Error('the fixture has no field to replace');
   }
-  return fixture === 'ai-writing/grade-v3-task1.response.json' && isRecord(body)
-    ? withWritingErrorPriorityCapture(body, 1)
-    : body;
+  if (fixture === 'ai-writing/grade-v3-task1.response.json' && isRecord(body)) {
+    return withWritingErrorPriorityCapture(body, 1);
+  }
+  if (
+    fixture === 'ai-speaking/grading-v2-question-post.200.json' &&
+    isRecord(body) &&
+    isRecord(body['data'])
+  ) {
+    body['data']['error_priority'] = [];
+  }
+  return body;
 }
 
 function refusal(action: () => unknown): AppError {
