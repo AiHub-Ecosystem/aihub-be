@@ -221,68 +221,59 @@ export class SubmitSpeakingGradingJob {
       createdAt: now,
     };
     let decision: Awaited<ReturnType<typeof admitGradedRequest>> | undefined;
-    let sandboxReserved = false;
-    try {
-      const admission = await this.repository.createWithAdmission({
-        job,
-        monthlyQuota: environment === 'sandbox' ? null : quota,
-        admit: async (monthlyRequestQuota) => {
-          const admissionDecision = await admitGradedRequest(this.admission, {
-            ...admissionInput,
-            monthlyRequestQuota,
+    const admission = await this.repository.createWithAdmission({
+      job,
+      monthlyQuota: environment === 'sandbox' ? null : quota,
+      admit: async (monthlyRequestQuota) => {
+        const admissionDecision = await admitGradedRequest(this.admission, {
+          ...admissionInput,
+          monthlyRequestQuota,
+        });
+        decision = admissionDecision;
+        if (admissionDecision.stage !== 'admitted') {
+          if (admissionDecision.stage === 'rate_limit') {
+            recordRejected('rate_limit');
+          }
+          if (admissionDecision.stage === 'quota') recordRejected('quota');
+          return { admitted: false };
+        }
+        quotaUnverified = admissionDecision.quotaUnverified === true;
+
+        if (environment !== 'sandbox') return { admitted: true };
+        let reserved: boolean;
+        try {
+          reserved = await this.sandboxBudget.reserve({
+            organizationId: owner.organizationId,
+            requestId: jobId,
           });
-          decision = admissionDecision;
-          if (admissionDecision.stage !== 'admitted') {
-            if (admissionDecision.stage === 'rate_limit') {
-              recordRejected('rate_limit');
-            }
-            if (admissionDecision.stage === 'quota') recordRejected('quota');
-            return false;
-          }
-          quotaUnverified = admissionDecision.quotaUnverified === true;
+        } catch (cause) {
+          throw sandboxBudgetUnavailable(cause);
+        }
+        if (!reserved) {
+          recordRejected('quota');
+          decision = { stage: 'quota', quota: 0 };
+          return { admitted: false };
+        }
+        // The repository gives this back on every path where the job row does
+        // not commit, including a rollback after the callback returned.
+        return {
+          admitted: true,
+          release: () =>
+            this.sandboxBudget
+              .release(owner.organizationId, jobId)
+              .catch(() => undefined),
+        };
+      },
+    });
 
-          if (environment === 'sandbox') {
-            let admitted: boolean;
-            try {
-              admitted = await this.sandboxBudget.reserve({
-                organizationId: owner.organizationId,
-                requestId: jobId,
-              });
-            } catch (cause) {
-              throw sandboxBudgetUnavailable(cause);
-            }
-            if (!admitted) {
-              recordRejected('quota');
-              decision = { stage: 'quota', quota: 0 };
-              return false;
-            }
-            sandboxReserved = true;
-          }
-          return true;
-        },
-      });
-
-      if (admission.created === false) {
-        if (sandboxReserved) {
-          await this.sandboxBudget
-            .release(owner.organizationId, jobId)
-            .catch(() => undefined);
-        }
-        if (admission.existingJobId !== jobId) {
-          return { job_id: admission.existingJobId, status: 'queued' };
-        }
-        if (decision === undefined || decision.stage === 'admitted') {
-          throw internalError('Speaking grading job admission is unavailable');
-        }
-        throw gradedAdmissionRefusal(decision, owner.organizationId, this.now);
+    if (admission.created === false) {
+      if (admission.existingJobId !== jobId) {
+        return { job_id: admission.existingJobId, status: 'queued' };
       }
-    } catch (error) {
-      if (sandboxReserved) {
-        await this.sandboxBudget
-          .release(owner.organizationId, jobId)
-          .catch(() => undefined);
+      if (decision === undefined || decision.stage === 'admitted') {
+        throw internalError('Speaking grading job admission is unavailable');
       }
-      throw error;
+      throw gradedAdmissionRefusal(decision, owner.organizationId, this.now);
     }
     await this.queue.enqueue({ jobId, environment }).catch(() => undefined);
     return { job_id: jobId, status: 'queued' };

@@ -358,8 +358,9 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: duringMetering,
         monthlyQuota: 1,
-        admit: async (monthlyQuota) =>
-          monthlyQuota !== null && monthlyQuota > 0,
+        admit: async (monthlyQuota) => ({
+          admitted: monthlyQuota !== null && monthlyQuota > 0,
+        }),
       }),
     ).resolves.toEqual({
       created: false,
@@ -375,8 +376,9 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: afterMetering,
         monthlyQuota: 1,
-        admit: async (monthlyQuota) =>
-          monthlyQuota !== null && monthlyQuota > 0,
+        admit: async (monthlyQuota) => ({
+          admitted: monthlyQuota !== null && monthlyQuota > 0,
+        }),
       }),
     ).resolves.toEqual({ created: true });
   });
@@ -428,8 +430,9 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         repository.createWithAdmission({
           job,
           monthlyQuota: 1,
-          admit: async (monthlyQuota) =>
-            monthlyQuota !== null && monthlyQuota > 0,
+          admit: async (monthlyQuota) => ({
+            admitted: monthlyQuota !== null && monthlyQuota > 0,
+          }),
         }),
       ),
     );
@@ -451,7 +454,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const first = await repository.createWithAdmission({
       job: firstJob,
       monthlyQuota: 10,
-      admit: async () => true,
+      admit: async () => ({ admitted: true }),
     });
     expect(first).toEqual({ created: true });
 
@@ -459,7 +462,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const second = await repository.createWithAdmission({
       job: duplicateJob,
       monthlyQuota: 10,
-      admit: async () => true,
+      admit: async () => ({ admitted: true }),
     });
     expect(second).toEqual({ created: false, existingJobId: firstJob.jobId });
 
@@ -470,6 +473,135 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         idempotencyKey,
       }),
     ).resolves.toMatchObject({ jobId: firstJob.jobId });
+  });
+
+  it('gives an admitted reservation back when the job insert aborts', async () => {
+    const organizationId = 'org_' + ulid();
+    const release = jest.fn(async () => undefined);
+    // `part` outside 1..3 fails the table's CHECK constraint on insert.
+    const job = makeJob({
+      organizationId,
+      request: { part: 9, questionId: 'question-1' },
+    });
+
+    await expect(
+      repository.createWithAdmission({
+        job,
+        monthlyQuota: 5,
+        admit: async () => ({ admitted: true, release }),
+      }),
+    ).rejects.toMatchObject({ code: 'DATABASE_UNAVAILABLE' });
+
+    expect(release).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.countInFlight({
+        organizationId,
+        environment: 'production',
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('gives a Sandbox reservation back when the job insert aborts', async () => {
+    const organizationId = 'org_' + ulid();
+    const release = jest.fn(async () => undefined);
+    const job = makeJob({
+      organizationId,
+      environment: 'sandbox',
+      request: { part: 9, questionId: 'question-1' },
+    });
+
+    await expect(
+      repository.createWithAdmission({
+        job,
+        monthlyQuota: null,
+        admit: async () => ({ admitted: true, release }),
+      }),
+    ).rejects.toMatchObject({ code: 'DATABASE_UNAVAILABLE' });
+
+    expect(release).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('compensates a spend that lands after the transaction deadline fired', async () => {
+    const organizationId = 'org_' + ulid();
+    let signalReleased = () => {};
+    const released = new Promise<void>((resolve) => {
+      signalReleased = resolve;
+    });
+    const release = jest.fn(async () => {
+      signalReleased();
+    });
+    const job = makeJob({ organizationId });
+
+    const submission = repository.createWithAdmission({
+      job,
+      monthlyQuota: 5,
+      admit: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 6_000)); // real-timer-ok: only elapsed time fires the 5s transaction deadline
+        return { admitted: true, release };
+      },
+    });
+
+    await expect(submission).rejects.toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+    });
+
+    // The callback outlives the transaction, so the spend lands afterwards.
+    await released;
+    expect(release).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.countInFlight({
+        organizationId,
+        environment: 'production',
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  }, 20_000);
+
+  it('releases the losing admission when a concurrent duplicate key wins the insert', async () => {
+    const organizationId = 'org_' + ulid();
+    const idempotencyKey = 'key_' + ulid();
+    const releases: string[] = [];
+    const submit = async (label: string) => {
+      const job = makeJob({ organizationId, idempotencyKey });
+      return {
+        label,
+        outcome: await repository.createWithAdmission({
+          job,
+          monthlyQuota: 10,
+          admit: async () => ({
+            admitted: true,
+            release: async () => {
+              releases.push(label);
+            },
+          }),
+        }),
+      };
+    };
+
+    const results = await Promise.all([submit('first'), submit('second')]);
+
+    expect(results.filter((result) => result.outcome.created)).toHaveLength(1);
+    expect(releases).toHaveLength(1);
+    const refused = results.find((result) => !result.outcome.created);
+    expect(refused?.outcome.created).toBe(false);
+    if (refused?.outcome.created !== false) {
+      throw new Error('expected one submission to lose the insert');
+    }
+    expect(refused.outcome.existingJobId).toMatch(/^sgj_/);
+    await expect(
+      repository.countInFlight({
+        organizationId,
+        environment: 'production',
+      }),
+    ).resolves.toBe(1);
   });
 
   it('creates a new job when the idempotency key binding is past 24 hours', async () => {
@@ -485,7 +617,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const first = await repository.createWithAdmission({
       job: firstJob,
       monthlyQuota: 10,
-      admit: async () => true,
+      admit: async () => ({ admitted: true }),
     });
     expect(first).toEqual({ created: true });
 
@@ -498,7 +630,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const second = await repository.createWithAdmission({
       job: secondJob,
       monthlyQuota: 10,
-      admit: async () => true,
+      admit: async () => ({ admitted: true }),
     });
     expect(second).toEqual({ created: true });
 

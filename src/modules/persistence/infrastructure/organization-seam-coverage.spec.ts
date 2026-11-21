@@ -281,7 +281,7 @@ const groups: readonly Group[] = [
         new PostgresSpeakingGradingJobRepository(client).createWithAdmission({
           job: gradingJob,
           monthlyQuota: 5,
-          admit: async () => true,
+          admit: async () => ({ admitted: true }),
         }),
       findOwned: (client) =>
         new PostgresSpeakingGradingJobRepository(client).findOwned(

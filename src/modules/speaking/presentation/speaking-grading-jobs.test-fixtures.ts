@@ -71,7 +71,9 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
   async createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
     readonly monthlyQuota: number | null;
-    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+    readonly admit: Parameters<
+      SpeakingGradingJobRepositoryPort['createWithAdmission']
+    >[0]['admit'];
   }): Promise<SpeakingGradingJobCreationOutcome> {
     const unexpiredSince = new Date(
       input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
@@ -100,10 +102,16 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
       input.monthlyQuota === null
         ? null
         : Math.max(0, input.monthlyQuota - inFlight);
-    if (!(await input.admit(monthlyQuota))) {
+    const admission = await input.admit(monthlyQuota);
+    if (!admission.admitted) {
       return { created: false, existingJobId: input.job.jobId };
     }
-    await this.create(input.job);
+    try {
+      await this.create(input.job);
+    } catch (error) {
+      await admission.release?.().catch(() => undefined);
+      throw error;
+    }
     return { created: true };
   }
 

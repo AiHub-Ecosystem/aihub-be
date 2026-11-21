@@ -1,5 +1,5 @@
 import { internalError } from '@/common/errors/app-error';
-import { isRecord } from '@/common/is-record';
+import { findPostgresErrorLink } from '@/common/postgres/postgres-error-chain';
 import { SpeakingV2QuestionResultSchema } from '@/contracts/speaking/v2/question-result';
 import type { SpeakingV2TestType } from '@/contracts/speaking/v2/response.shared';
 import type {
@@ -115,7 +115,11 @@ export async function clearExpiredKeyedJobs(
 }
 
 export function isKeyUniquenessViolation(error: unknown): boolean {
-  return isRecord(error) && 'code' in error && error['code'] === '23505';
+  // Prisma reports a raw statement's constraint failure as P2010 and keeps the
+  // SQLSTATE on the wrapped driver error, so reading `code` alone never matched.
+  return (
+    findPostgresErrorLink(error, (link) => link.code === '23505') !== undefined
+  );
 }
 
 function invalidStoredJob(): never {
