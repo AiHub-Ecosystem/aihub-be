@@ -15,6 +15,7 @@ import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';
 import { GRADED_ADMISSION } from '@/modules/gateway/application/graded-admission.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import { LOCAL_DEVELOPMENT_ORGANIZATION_ID } from '@/modules/identity/shared/presentation/request-environment';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { METERING_FINALIZER } from '@/modules/metering/public/metering-finalizer';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
@@ -44,7 +45,7 @@ function currentSpeakingV2Fixture(name: string): Record<string, unknown> {
 }
 
 const LOCAL_OWNER: SpeakingV2ResultOwner = {
-  organizationId: 'local-development',
+  organizationId: LOCAL_DEVELOPMENT_ORGANIZATION_ID,
   environment: 'development',
   endUserId: 'local-development',
 };

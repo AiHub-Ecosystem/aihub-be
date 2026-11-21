@@ -60,7 +60,7 @@ describe('DownstreamHttpClient', () => {
     expect(response.body).toEqual(responseBody);
   });
 
-  it('forwards trusted identity headers and lets them override configured values', async () => {
+  it('forwards trusted identity headers beside configured credentials', async () => {
     const responseBody = { ok: true };
     mockAgent
       .get('https://ai-speaking.test')
@@ -81,7 +81,7 @@ describe('DownstreamHttpClient', () => {
     const client = new DownstreamHttpClient(
       { 'ai-speaking': 'https://ai-speaking.test' },
       mockAgent,
-      { 'ai-speaking': { 'x-aihub-organization-id': 'org_stale' } },
+      { 'ai-speaking': { 'x-secret-key': 'configured-secret' } },
     );
     const response = await client.request(
       {
@@ -106,6 +106,49 @@ describe('DownstreamHttpClient', () => {
     expect(response.body).toEqual(responseBody);
   });
 
+  it('keeps the configured credential when an adapter supplies a header with its name', async () => {
+    const responseBody = { ok: true };
+    const client = new DownstreamHttpClient(
+      { 'ai-speaking': 'https://ai-speaking.test' },
+      mockAgent,
+      { 'ai-speaking': { 'x-secret-key': 'configured-secret' } },
+    );
+
+    mockAgent
+      .get('https://ai-speaking.test')
+      .intercept({
+        method: 'POST',
+        path: '/api/v1/speaking/grading-json',
+        body: JSON.stringify({ user_id: 'student-1' }),
+        headers: {
+          'x-secret-key': 'configured-secret',
+          'x-request-id': 'req_credential_precedence',
+          'x-request-deadline': '5000',
+        },
+      })
+      .reply(200, responseBody);
+
+    await expect(
+      client.request(
+        {
+          method: 'POST',
+          path: '/api/v1/speaking/grading-json',
+          // The adapter is not trusted with the per-service credential: this
+          // value must not reach the wire (#1866).
+          headers: {
+            'x-secret-key': 'adapter-supplied-secret',
+          } as never,
+          body: { user_id: 'student-1' },
+        },
+        {
+          downstream: 'ai-speaking',
+          requestId: 'req_credential_precedence',
+          deadlineMs: 5000,
+          signal: AbortSignal.timeout(1000),
+        },
+      ),
+    ).resolves.toMatchObject({ status: 200 });
+  });
   it('sends a bodyless retrieval to its templated path with trusted identity', async () => {
     const path = resolvePathParameters(
       '/api/v2/speaking/responses/{response_id}',

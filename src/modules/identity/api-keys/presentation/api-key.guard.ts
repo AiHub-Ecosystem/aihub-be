@@ -32,6 +32,7 @@ import { isAiServiceScope } from '@/modules/identity/domain/api-key';
 import { SANDBOX_API_KEY_RATE_LIMIT_RPM } from '@/modules/identity/shared/application/sandbox-api-key-rate-limit';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
+  LOCAL_DEVELOPMENT_ORGANIZATION_ID,
   type RequestEnvironmentConfig,
   isLocalAuthBypassEnabled,
   resolveAihubEnvironment,
@@ -81,7 +82,7 @@ function localDevelopmentIdentity(
   environment: string,
 ): AuthenticatedApiKey {
   return {
-    organizationId: 'local-development',
+    organizationId: LOCAL_DEVELOPMENT_ORGANIZATION_ID,
     apiKeyId: 'local-development',
     environment,
     scopes: [operation.requiredScope],

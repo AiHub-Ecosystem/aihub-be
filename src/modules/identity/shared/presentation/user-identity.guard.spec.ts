@@ -3,7 +3,10 @@ import type { ExecutionContext } from '@nestjs/common';
 import { getMetrics } from '@/common/observability/metrics';
 import type { AuthenticatedApiKey } from '@/modules/identity/api-keys/application/api-key-authenticator.port';
 import type { UserIdentityResolverPort } from '@/modules/identity/user-assertions/application/user-identity-resolver.port';
-import type { RequestEnvironmentConfig } from './request-environment';
+import {
+  LOCAL_DEVELOPMENT_ORGANIZATION_ID,
+  type RequestEnvironmentConfig,
+} from './request-environment';
 import { UserIdentityGuard } from './user-identity.guard';
 
 const authenticated: AuthenticatedApiKey = {
@@ -82,7 +85,10 @@ describe('UserIdentityGuard', () => {
   it('uses the synthetic actor only for the local development bypass', async () => {
     const request: Record<string, unknown> = {
       headers: {},
-      aihubAuth: { ...authenticated, organizationId: 'local-development' },
+      aihubAuth: {
+        ...authenticated,
+        organizationId: LOCAL_DEVELOPMENT_ORGANIZATION_ID,
+      },
     };
 
     await expect(
@@ -98,7 +104,7 @@ describe('UserIdentityGuard', () => {
     ).resolves.toBe(true);
     expect(request['aihubIdentity']).toEqual({
       userId: 'local-development',
-      organizationId: 'local-development',
+      organizationId: LOCAL_DEVELOPMENT_ORGANIZATION_ID,
       scopes: [],
       mode: 'declared_id',
     });

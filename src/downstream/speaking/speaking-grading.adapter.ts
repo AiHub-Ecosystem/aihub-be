@@ -3,6 +3,9 @@ import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { isRecord } from '@/common/is-record';
 import type { RequestContext } from '@/common/request-context/request-context';
+import { Value } from '@sinclair/typebox/value';
+
+import { OrganizationIdSchema } from '@/contracts/organization/organization-id';
 import type {
   SpeakingGradeInput,
   SpeakingGradeResponse,
@@ -14,6 +17,10 @@ import type {
   DownstreamMultipartBody,
   DownstreamRequest,
 } from '@/downstream/downstream.types';
+import {
+  invalidDeclaredUserId,
+  isEndUserId,
+} from '@/modules/identity/public/end-user-id';
 import { parseSpeakingGradeResponse } from './speaking-grading-response.adapter';
 
 const SPEAKING_IDENTITY_CONTEXT_ERROR_CODE = 'INTERNAL_ERROR';
@@ -23,6 +30,9 @@ export function requiredSpeakingUserId(context: RequestContext): string {
   if (userId === undefined || userId.trim().length === 0) {
     throw userIdentityRequired();
   }
+  if (!isEndUserId(userId)) {
+    throw invalidDeclaredUserId();
+  }
   return userId;
 }
 
@@ -30,7 +40,10 @@ export function requiredSpeakingIdentityHeaders(
   context: RequestContext,
 ): DownstreamIdentityHeaders {
   const organizationId = context.organizationId;
-  if (organizationId === undefined || organizationId.trim().length === 0) {
+  if (
+    organizationId === undefined ||
+    !Value.Check(OrganizationIdSchema, organizationId)
+  ) {
     throw new AppError({
       code: SPEAKING_IDENTITY_CONTEXT_ERROR_CODE,
       message: 'Speaking identity context is incomplete',

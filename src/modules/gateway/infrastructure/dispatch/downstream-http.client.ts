@@ -281,7 +281,6 @@ export class DownstreamHttpClient {
           path: `${url.pathname}${url.search}`,
           method: request.method,
           headers: {
-            ...this.configuredHeaders[downstream],
             ...request.headers,
             ...(options.authorization === undefined
               ? {}
@@ -291,6 +290,9 @@ export class DownstreamHttpClient {
               : { 'content-type': request.contentType ?? 'application/json' }),
             'x-request-id': options.requestId,
             'x-request-deadline': String(options.deadlineMs),
+            // Configured credentials are applied last: an adapter cannot
+            // replace the per-service credential header AIHUB owns (#1866).
+            ...this.configuredHeaders[downstream],
           },
           signal: options.signal,
           headersTimeout: options.deadlineMs,

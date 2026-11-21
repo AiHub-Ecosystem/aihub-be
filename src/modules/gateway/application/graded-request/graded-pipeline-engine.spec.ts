@@ -218,6 +218,32 @@ describe('GradedPipelineEngine', () => {
     expect(count).not.toHaveBeenCalled();
   });
 
+  // ADR-0053: the End-User ID is checked at the dispatch boundary too, so a
+  // value the identity guard never saw cannot reach a provider (#1866).
+  it.each([
+    ['a control character', 'user\u0001id'],
+    ['a space', 'user id'],
+    ['an over-length value', 'u'.repeat(257)],
+  ])('refuses %s before admission', async (_name, userId) => {
+    const consume = jest.fn();
+    const acquire = jest.fn();
+    const execute = jest.fn();
+    const { engine } = engineWith({
+      admission: { consume },
+      concurrency: { acquire },
+      orchestrator: { execute } as unknown as GradingOrchestratorPort,
+    });
+    const context = pipelineContext({
+      identity: { ...pipelineContext().identity, userId },
+    });
+
+    await expect(engine.execute(context)).rejects.toMatchObject({
+      code: 'INVALID_USER_IDENTITY',
+    });
+    expect(consume).not.toHaveBeenCalled();
+    expect(acquire).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
   it('keeps invalid input behind an exhausted quota', async () => {
     const { engine } = engineWith({
       admission: { consume: async () => ({ stage: 'quota', quota: 10 }) },
