@@ -310,6 +310,14 @@ the Avatar routes answer `503 AVATAR_STORAGE_UNAVAILABLE` and nothing else is
 affected. Create the bucket with the same SeaweedFS credentials and set the
 variable before deploying.
 
+The value must be exactly the bucket of that runtime scope: `aihub-user-assets`
+in Production and `aihub-sandbox-user-assets` in Sandbox. Any other name leaves
+the adapter unconfigured, so the Avatar routes answer `503
+AVATAR_STORAGE_UNAVAILABLE`. When a shared S3 client is configured, startup
+also logs `event=avatar_storage_bucket_not_owned`. Without a shared client,
+Avatar storage remains unavailable and that event is not logged. The guard is
+what keeps a mis-mapped Sandbox from sweeping a Production bucket.
+
 The Sandbox deployment needs its own Avatar bucket, named by
 `SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET` (for example
 `aihub-sandbox-user-assets`). Production and Sandbox keep their Avatar records
@@ -417,9 +425,12 @@ time.
 ### Sweeping Speaking Audio upload orphans
 
 `speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
-whose one-hour expiry passed at least 24 hours ago. It deletes only the exact
-object key in each intent, then removes that intent. A missing object is an
-idempotent success; failed deletion keeps the intent for the next retry.
+whose one-hour expiry passed at least 24 hours ago. It deletes the exact
+final object key in each intent and its derived staging key, then removes the
+intent. The 2,000-object-key ceiling counts both keys for every eligible
+intent, so more than 1,000 intents makes the sweep delete nothing. A missing
+object is an idempotent success; failed deletion keeps the intent for the next
+retry.
 
 The managed `speaking-upload-sweep` job runs it daily at 04:20 UTC for each
 enabled deployment, with a 30-minute limit per deployment, and logs one summary
@@ -488,6 +499,14 @@ non-zero when a public or staging delete failed, or when the bucket, the
 storage credentials, or the database is not configured, in which case it has
 deleted nothing. Alert on a non-zero exit and on a missed run for either
 container.
+
+One run also refuses to act when it would delete more than 2,000 objects, or
+more than half of the objects it listed once that listing reaches 500: it
+deletes nothing, reports `ceilingExceeded: true`, and exits non-zero, because
+that share means the bucket or the record set is not the one this deployment
+expects. The Speaking Audio upload sweep also caps planned object-key deletion
+attempts at 2,000; each eligible intent contributes its final and staging key,
+and an over-limit run exits non-zero.
 
 ### Sweeping Writing Task 1 chart uploads
 

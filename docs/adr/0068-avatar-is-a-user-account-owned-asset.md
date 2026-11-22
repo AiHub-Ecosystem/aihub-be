@@ -144,3 +144,19 @@ beside the use case that applies them.
 - **Reuse the inferential "no intent" rule and let completion enforce it.**
   Rejected: a URL that is never completed is exactly the abuse case, so the
   limit has to bind before the URL is handed out.
+
+## Update (2026-11-19): the bucket is pinned per runtime scope (#428)
+
+Point 3 said the bucket is named by `SEAWEEDFS_USER_ASSET_BUCKET`. That value
+is now checked against the one name its runtime scope owns: `aihub-user-assets`
+for Production and `aihub-sandbox-user-assets` for Sandbox, decided from
+`AIHUB_RUNTIME_DATABASE_SCOPE`. Any other value leaves the adapter
+unconfigured, so the routes answer `AVATAR_STORAGE_UNAVAILABLE` and startup
+logs `avatar_storage_bucket_not_owned`. The check follows the Speaking audio
+adapter, which pins each scope's bucket the same way.
+
+The daily sweep also refuses a run that would delete more than 2,000 objects,
+or more than half of the objects it listed once that listing reaches 500: it
+deletes nothing and exits non-zero. A Sandbox whose bucket secret names the
+Production bucket can therefore no longer delete most of it, even before the
+deployment is fixed.

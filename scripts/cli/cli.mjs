@@ -1296,14 +1296,18 @@ async function sweepAvatarsCommand(options) {
   );
   if (safety.previewed) return;
 
-  const summary = /** @type {{ failed: number; stagingFailed: number }} */ (
-    await runCliCommand(avatarSweepDescriptor, {
-      databaseUrl: process.env.DATABASE_URL ?? '',
-      dryRun,
-      now: () => safety.maintenanceClock.now,
-      clockSource: safety.maintenanceClock.source,
-    })
-  );
+  const summary =
+    /** @type {{ failed: number; stagingFailed: number; ceilingExceeded: boolean }} */ (
+      await runCliCommand(avatarSweepDescriptor, {
+        databaseUrl: process.env.DATABASE_URL ?? '',
+        dryRun,
+        now: () => safety.maintenanceClock.now,
+        clockSource: safety.maintenanceClock.source,
+      })
+    );
+  if (summary.ceilingExceeded) {
+    throw new Error('avatar sweep would delete more than one run may');
+  }
   if (avatarSweepExitCode(summary) !== 0) {
     throw new Error('avatar sweep could not delete every eligible object');
   }
@@ -1346,7 +1350,7 @@ async function sweepSpeakingAudioUploadsCommand(options) {
   );
   if (safety.previewed) return;
 
-  const summary = /** @type {{ failed: number }} */ (
+  const summary = /** @type {{ failed: number; ceilingExceeded: boolean }} */ (
     await runCliCommand(speakingAudioUploadSweepDescriptor, {
       databaseUrl: process.env.DATABASE_URL ?? '',
       dryRun,
@@ -1354,6 +1358,11 @@ async function sweepSpeakingAudioUploadsCommand(options) {
       clockSource: safety.maintenanceClock.source,
     })
   );
+  if (summary.ceilingExceeded) {
+    throw new Error(
+      'Speaking Audio upload sweep would delete more than one run may',
+    );
+  }
   if (summary.failed > 0) {
     throw new Error(
       'Speaking Audio upload sweep could not delete every object',
