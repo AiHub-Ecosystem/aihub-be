@@ -1,39 +1,21 @@
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
 import { ReadOrganizationIdentityConfigResponseSchema } from '@/contracts/organization/identity-config';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
-import {
-  type ListRosterInput,
-  ORGANIZATION_MEMBERSHIP,
-  type OrganizationMembershipPort,
-  type OrganizationMembershipRole,
-  type OrganizationMembershipStatus,
-} from '@/modules/identity/membership/application/organization-membership.port';
 import {
   ORGANIZATION_IDENTITY_CONFIG_REPOSITORY,
   type OrganizationIdentityConfigRepositoryPort,
   type SaveOrganizationIdentityConfigInput,
   type StoredOrganizationIdentityConfig,
 } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
+import {
+  OrganizationAdmissionHarness,
+  applyOrganizationAdmissionModuleOverrides,
+  initOrganizationTestApp,
+} from '@/modules/identity/testing/organization-admission.spec-support';
 import { JWKS_CACHE } from '@/modules/identity/user-assertions/application/jwks-cache.port';
 import { JWKS_KEY_PROVIDER } from '@/modules/identity/user-assertions/application/jwks-key-provider.port';
 
@@ -43,8 +25,6 @@ const REQUEST_ID = 'req_01J00000000000000000000000';
 const IDENTITY_CONFIG_URL = `/v1/organizations/${ORGANIZATION_ID}/identity-config`;
 const purgeJwks = jest.fn(async (_organizationId: string) => undefined);
 const validateRemote = jest.fn(async (_url: string) => ({ keys: [] }));
-
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function identityConfigBody(response: { json(): unknown }) {
   return Value.Parse(
@@ -91,15 +71,11 @@ function config(
 describe('Organization identity configuration HTTP flow', () => {
   let app: NestFastifyApplication;
   let configs: jest.Mocked<OrganizationIdentityConfigRepositoryPort>;
-  let membership: jest.Mocked<OrganizationMembershipPort>;
+  const admission = new OrganizationAdmissionHarness();
 
   let result: StoredOrganizationIdentityConfig | null = config();
   let auditWrites = 0;
   let refusePrecondition = false;
-  let callerRole: OrganizationMembershipRole = 'owner';
-  let callerStatus: OrganizationMembershipStatus = 'active';
-  let callerMembershipExists = true;
-  let organizationStatus: OrganizationStatus = 'active';
 
   beforeAll(async () => {
     configs = {
@@ -142,47 +118,8 @@ describe('Organization identity configuration HTTP flow', () => {
         },
       ),
     };
-    membership = {
-      resolveMembership: jest.fn(async ({ organizationId, userId }) => {
-        if (!callerMembershipExists) {
-          return { kind: 'missing' as const };
-        }
-        const record = {
-          organizationId,
-          userId,
-          organizationStatus,
-          role: callerRole,
-          status: callerStatus,
-        };
-        return callerStatus === 'active'
-          ? { kind: 'active' as const, membership: record }
-          : { kind: 'disabled' as const, membership: record };
-      }),
-      listRoster: jest.fn(async (_input: ListRosterInput) => ({
-        organizations: [],
-      })),
-      changeRole: jest.fn(),
-      disable: jest.fn(),
-      transfer: jest.fn(),
-    };
 
-    const tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort> = {
-      issue: jest.fn(async (_userId: string) => ({
-        token: 'reissued.token.value',
-        expiresIn: 900,
-      })),
-    };
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token: string) => {
-        if (token !== 'valid.token.value') {
-          throw new Error('invalid token');
-        }
-        return verifiedUserAccessToken(USER_ID, 'jti_01');
-      },
-    };
-    const userAccounts = userAccountStatus();
-
-    const moduleRef = await Test.createTestingModule({
+    const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(ORGANIZATION_IDENTITY_CONFIG_REPOSITORY)
@@ -198,24 +135,11 @@ describe('Organization identity configuration HTTP flow', () => {
         setJwks: async () => undefined,
         deleteJwks: purgeJwks,
         tryAcquireRefresh: async () => ({ acquired: true, available: true }),
-      })
-      .overrideProvider(ORGANIZATION_MEMBERSHIP)
-      .useValue(membership)
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
-      .useValue(tokenIssuer)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
+      });
 
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    applyOrganizationAdmissionModuleOverrides(moduleBuilder, admission);
+    const moduleRef = await moduleBuilder.compile();
+    app = await initOrganizationTestApp(moduleRef, { requestId: REQUEST_ID });
   });
 
   afterAll(async () => {
@@ -224,10 +148,7 @@ describe('Organization identity configuration HTTP flow', () => {
 
   beforeEach(() => {
     result = config();
-    callerRole = 'owner';
-    callerStatus = 'active';
-    callerMembershipExists = true;
-    organizationStatus = 'active';
+    admission.reset();
     auditWrites = 0;
     refusePrecondition = false;
     purgeJwks.mockReset().mockResolvedValue(undefined);
@@ -444,13 +365,13 @@ describe('Organization identity configuration HTTP flow', () => {
   });
 
   it.each<[string, () => void]>([
-    ['admin', () => (callerRole = 'admin')],
-    ['member', () => (callerRole = 'member')],
-    ['disabled owner', () => (callerStatus = 'disabled')],
-    ['non-member', () => (callerMembershipExists = false)],
+    ['admin', () => (admission.callerRole = 'admin')],
+    ['member', () => (admission.callerRole = 'member')],
+    ['disabled owner', () => (admission.callerStatus = 'disabled')],
+    ['non-member', () => (admission.callerMembershipExists = false)],
     [
       'owner of a suspended Organization',
-      () => (organizationStatus = 'suspended'),
+      () => (admission.organizationStatus = 'suspended'),
     ],
   ])(
     'gives a %s the same denial before URL validation or persistence',
@@ -634,13 +555,13 @@ describe('Organization identity configuration HTTP flow', () => {
   });
 
   it.each<[string, () => void]>([
-    ['an admin', () => (callerRole = 'admin')],
-    ['a member', () => (callerRole = 'member')],
-    ['a disabled owner', () => (callerStatus = 'disabled')],
-    ['a non-member', () => (callerMembershipExists = false)],
+    ['an admin', () => (admission.callerRole = 'admin')],
+    ['a member', () => (admission.callerRole = 'member')],
+    ['a disabled owner', () => (admission.callerStatus = 'disabled')],
+    ['a non-member', () => (admission.callerMembershipExists = false)],
     [
       'an owner of a suspended Organization',
-      () => (organizationStatus = 'suspended'),
+      () => (admission.organizationStatus = 'suspended'),
     ],
   ])(
     'gives %s the same denial without reading configuration',
@@ -684,7 +605,7 @@ describe('Organization identity configuration HTTP flow', () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(membership.resolveMembership.mock.calls).toContainEqual([
+    expect(admission.membership.resolveMembership.mock.calls).toContainEqual([
       expect.objectContaining({ organizationId: 'org_other', userId: USER_ID }),
     ]);
     expect(configs.findByOrganizationId.mock.calls).toContainEqual([
@@ -834,7 +755,7 @@ describe('Organization identity configuration HTTP flow', () => {
     });
 
     it('does not let a stale revision tell a non-owner anything', async () => {
-      callerRole = 'admin';
+      admission.callerRole = 'admin';
       refusePrecondition = true;
 
       const response = await set(BODY, { ...OWNER_HEADERS, 'if-match': '"1"' });

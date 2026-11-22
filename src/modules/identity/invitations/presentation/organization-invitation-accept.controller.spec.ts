@@ -1,35 +1,25 @@
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AcceptOrganizationInvitationResponseSchema } from '@/contracts/organization/invitation';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
   EMAIL_SENDER,
   type EmailProviderResponse,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
+import type { UserAccessTokenIssuerPort } from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   type AcceptOrganizationInvitationInput,
   ORGANIZATION_INVITATION_ACCEPTANCE_RECORD,
   type OrganizationInvitationAcceptanceRecordPort,
 } from '@/modules/identity/invitations/application/organization-invitation.port';
+import {
+  applyTestAuthModuleOverrides,
+  createTestAuthMocks,
+  initOrganizationTestApp,
+} from '@/modules/identity/testing/organization-admission.spec-support';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const REQUEST_ID = 'req_01J00000000000000000000000';
@@ -51,50 +41,27 @@ describe('Organization invitation acceptance HTTP flow', () => {
         }),
       ),
     };
-    tokenIssuer = {
-      issue: jest.fn(async (_userId: string) => ({
-        token: 'reissued.token.value',
-        expiresIn: 900,
-      })),
-    };
     const emailSender: EmailSenderPort = {
       send: async (): Promise<EmailProviderResponse> => ({
         status: 202,
         retryAfter: undefined,
       }),
     };
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token: string) => {
-        if (token !== 'valid.token.value') {
-          throw new Error('invalid token');
-        }
-        return verifiedUserAccessToken(USER_ID, 'jti_01');
-      },
-    };
-    const userAccounts = userAccountStatus();
 
-    const moduleRef = await Test.createTestingModule({
+    const authMocks = createTestAuthMocks({ userId: USER_ID });
+    tokenIssuer = authMocks.tokenIssuer;
+
+    const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(ORGANIZATION_INVITATION_ACCEPTANCE_RECORD)
       .useValue(invitations)
       .overrideProvider(EMAIL_SENDER)
-      .useValue(emailSender)
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
-      .useValue(tokenIssuer)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
+      .useValue(emailSender);
 
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    applyTestAuthModuleOverrides(moduleBuilder, { authMocks });
+    const moduleRef = await moduleBuilder.compile();
+    app = await initOrganizationTestApp(moduleRef, { requestId: REQUEST_ID });
   });
 
   afterAll(async () => {

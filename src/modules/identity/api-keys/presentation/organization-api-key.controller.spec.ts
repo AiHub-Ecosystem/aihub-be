@@ -1,45 +1,24 @@
 import { CommandBus } from '@nestjs/cqrs';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
-
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { OrganizationApiKeySecretResponseSchema } from '@/contracts/organization/api-key';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   type CreateOrganizationApiKeyRecordInput,
-  type ListOrganizationApiKeysInput,
   ORGANIZATION_API_KEY,
   type OrganizationApiKeyPort,
 } from '@/modules/identity/api-keys/application/organization-api-key.port';
 import { CreateOrganizationApiKeyCommand } from '@/modules/identity/api-keys/presentation/organization-api-key.cqrs';
 import {
-  type ListRosterInput,
-  ORGANIZATION_MEMBERSHIP,
-  type OrganizationMembershipPort,
-  type OrganizationMembershipRole,
-  type OrganizationMembershipStatus,
-} from '@/modules/identity/membership/application/organization-membership.port';
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
+  OrganizationAdmissionHarness,
+  applyOrganizationAdmissionModuleOverrides,
+  createMockOrganizationApiKeyPort,
+  expectAuthorizationDenial,
+  initOrganizationTestApp,
+} from '@/modules/identity/testing/organization-admission.spec-support';
 
-const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const KEYS_URL = `/v1/organizations/${ORGANIZATION_ID}/api-keys`;
@@ -56,90 +35,29 @@ function expectErrorCode(response: { json(): unknown }, code: string): void {
 describe('Organization API key creation HTTP flow', () => {
   let app: NestFastifyApplication;
   let apiKeys: jest.Mocked<OrganizationApiKeyPort>;
-  let membership: jest.Mocked<OrganizationMembershipPort>;
-
-  let callerRole: OrganizationMembershipRole = 'owner';
-  let callerStatus: OrganizationMembershipStatus = 'active';
-  let callerMembershipExists = true;
-  let organizationStatus: OrganizationStatus = 'active';
+  const admission = new OrganizationAdmissionHarness();
 
   beforeAll(async () => {
-    membership = {
-      resolveMembership: jest.fn(async ({ organizationId, userId }) => {
-        if (!callerMembershipExists) {
-          return { kind: 'missing' as const };
-        }
-        const record = {
-          organizationId,
-          userId,
-          organizationStatus,
-          role: callerRole,
-          status: callerStatus,
-        };
-        return callerStatus === 'active'
-          ? { kind: 'active' as const, membership: record }
-          : { kind: 'disabled' as const, membership: record };
+    apiKeys = createMockOrganizationApiKeyPort({
+      createApiKey: jest.fn().mockResolvedValue({
+        kind: 'created',
+        createdAt: CREATED_AT,
       }),
-      listRoster: jest.fn(async (_input: ListRosterInput) => ({
-        organizations: [],
-      })),
-      changeRole: jest.fn(),
-      disable: jest.fn(),
-      transfer: jest.fn(),
-    };
-    apiKeys = {
-      createApiKey: jest.fn(
-        async (_input: CreateOrganizationApiKeyRecordInput) => ({
-          kind: 'created' as const,
-          createdAt: CREATED_AT,
-        }),
-      ),
-      listApiKeys: jest.fn(
-        async (_input: ListOrganizationApiKeysInput) => [] as const,
-      ),
-      rotateApiKey: jest.fn(),
-      revokeApiKey: jest.fn(),
-    };
+    });
 
-    const tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort> = {
-      issue: jest.fn(async (_userId: string) => ({
-        token: 'reissued.token.value',
-        expiresIn: 900,
-      })),
-    };
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token: string) => {
-        if (token !== 'valid.token.value') {
-          throw new Error('invalid token');
-        }
-        return verifiedUserAccessToken(USER_ID, 'jti_01');
-      },
-    };
-    const userAccounts = userAccountStatus();
+    const moduleRef = await applyOrganizationAdmissionModuleOverrides(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(ORGANIZATION_API_KEY)
+        .useValue(apiKeys),
+      admission,
+    ).compile();
 
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(ORGANIZATION_API_KEY)
-      .useValue(apiKeys)
-      .overrideProvider(ORGANIZATION_MEMBERSHIP)
-      .useValue(membership)
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
-      .useValue(tokenIssuer)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    registerSecurityHeaders(app.getHttpAdapter().getInstance());
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    app = await initOrganizationTestApp(moduleRef, {
+      requestId: REQUEST_ID,
+      securityHeaders: true,
+    });
   });
 
   afterAll(async () => {
@@ -147,10 +65,7 @@ describe('Organization API key creation HTTP flow', () => {
   });
 
   beforeEach(() => {
-    callerRole = 'owner';
-    callerStatus = 'active';
-    callerMembershipExists = true;
-    organizationStatus = 'active';
+    admission.reset();
     jest.clearAllMocks();
     apiKeys.createApiKey.mockResolvedValue({
       kind: 'created',
@@ -258,7 +173,7 @@ describe('Organization API key creation HTTP flow', () => {
   });
 
   it('creates a key for an organization admin', async () => {
-    callerRole = 'admin';
+    admission.callerRole = 'admin';
 
     const response = await create();
 
@@ -267,62 +182,20 @@ describe('Organization API key creation HTTP flow', () => {
 
   // One literal for every caller outside this route's authority: each case
   // equals it, so no two refusals can differ by status, code, or message.
-  it.each<[string, () => void, boolean]>([
-    [
-      'no membership in the organization',
-      () => {
-        callerMembershipExists = false;
-      },
-      false,
-    ],
-    [
-      'a disabled membership',
-      () => {
-        callerStatus = 'disabled';
-      },
-      false,
-    ],
-    [
-      'an ordinary member of an active organization',
-      () => {
-        callerRole = 'member';
-      },
-      false,
-    ],
-    [
-      'an owner of a suspended organization',
-      () => {
-        organizationStatus = 'suspended';
-      },
-      false,
-    ],
-    [
-      'an organization suspended inside the transaction',
-      () => {
-        apiKeys.createApiKey.mockResolvedValue({
-          kind: 'organization_unavailable',
-        });
-      },
-      true,
-    ],
-  ])('gives %s the same denial', async (_label, arrange, storeReached) => {
+  it.each<[string, () => void, boolean]>(
+    admission.mutationDenialCases(() => {
+      apiKeys.createApiKey.mockResolvedValue({
+        kind: 'organization_unavailable',
+      });
+    }),
+  )('gives %s the same denial', async (_label, arrange, storeReached) => {
     arrange();
 
     const response = await create();
 
-    expect({
-      status: response.statusCode,
-      body: response.json<unknown>(),
-    }).toEqual({
-      status: 403,
-      body: {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Organization API key creation is forbidden',
-          request_id: REQUEST_ID,
-          retryable: false,
-        },
-      },
+    expectAuthorizationDenial(response, {
+      message: 'Organization API key creation is forbidden',
+      requestId: REQUEST_ID,
     });
     expect(apiKeys.createApiKey.mock.calls.length > 0).toBe(storeReached);
   });

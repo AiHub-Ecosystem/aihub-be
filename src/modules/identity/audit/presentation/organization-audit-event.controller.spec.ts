@@ -1,25 +1,9 @@
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { ListOrganizationAuditEventsResponseSchema } from '@/contracts/organization/audit-event';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_ISSUER,
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenIssuerPort,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   type ListOrganizationAuditEventsInput,
   ORGANIZATION_AUDIT_EVENT_READ,
@@ -27,19 +11,15 @@ import {
   type OrganizationAuditEventRecord,
 } from '@/modules/identity/audit/application/organization-audit-event-read.port';
 import {
-  type ListRosterInput,
-  ORGANIZATION_MEMBERSHIP,
-  type OrganizationMembershipPort,
-  type OrganizationMembershipRole,
-  type OrganizationMembershipStatus,
-} from '@/modules/identity/membership/application/organization-membership.port';
+  OrganizationAdmissionHarness,
+  applyOrganizationAdmissionModuleOverrides,
+  initOrganizationTestApp,
+} from '@/modules/identity/testing/organization-admission.spec-support';
 
 const USER_ID = 'usr_01J00000000000000000000000';
 const ORGANIZATION_ID = 'org_acme';
 const REQUEST_ID = 'req_01J00000000000000000000000';
 const AUDIT_URL = `/v1/organizations/${ORGANIZATION_ID}/audit-events`;
-
-import type { OrganizationStatus } from '@/modules/identity/organizations/application/organization-status.port';
 
 function auditBody(response: { json(): unknown }) {
   return Value.Parse(
@@ -79,81 +59,25 @@ function event(
 describe('Organization audit trail HTTP flow', () => {
   let app: NestFastifyApplication;
   let auditEvents: jest.Mocked<OrganizationAuditEventReadPort>;
-  let membership: jest.Mocked<OrganizationMembershipPort>;
-
-  let callerRole: OrganizationMembershipRole = 'owner';
-  let callerStatus: OrganizationMembershipStatus = 'active';
-  let callerMembershipExists = true;
-  let organizationStatus: OrganizationStatus = 'active';
+  const admission = new OrganizationAdmissionHarness();
 
   beforeAll(async () => {
-    membership = {
-      resolveMembership: jest.fn(async ({ organizationId, userId }) => {
-        if (!callerMembershipExists) {
-          return { kind: 'missing' as const };
-        }
-        const record = {
-          organizationId,
-          userId,
-          organizationStatus,
-          role: callerRole,
-          status: callerStatus,
-        };
-        return callerStatus === 'active'
-          ? { kind: 'active' as const, membership: record }
-          : { kind: 'disabled' as const, membership: record };
-      }),
-      listRoster: jest.fn(async (_input: ListRosterInput) => ({
-        organizations: [],
-      })),
-      changeRole: jest.fn(),
-      disable: jest.fn(),
-      transfer: jest.fn(),
-    };
     auditEvents = {
       listAuditEvents: jest.fn(
         async (_input: ListOrganizationAuditEventsInput) => [] as const,
       ),
     };
 
-    const tokenIssuer: jest.Mocked<UserAccessTokenIssuerPort> = {
-      issue: jest.fn(async (_userId: string) => ({
-        token: 'reissued.token.value',
-        expiresIn: 900,
-      })),
-    };
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token: string) => {
-        if (token !== 'valid.token.value') {
-          throw new Error('invalid token');
-        }
-        return verifiedUserAccessToken(USER_ID, 'jti_01');
-      },
-    };
-    const userAccounts = userAccountStatus();
+    const moduleRef = await applyOrganizationAdmissionModuleOverrides(
+      Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(ORGANIZATION_AUDIT_EVENT_READ)
+        .useValue(auditEvents),
+      admission,
+    ).compile();
 
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(ORGANIZATION_AUDIT_EVENT_READ)
-      .useValue(auditEvents)
-      .overrideProvider(ORGANIZATION_MEMBERSHIP)
-      .useValue(membership)
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCESS_TOKEN_ISSUER)
-      .useValue(tokenIssuer)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    app = await initOrganizationTestApp(moduleRef, { requestId: REQUEST_ID });
   });
 
   afterAll(async () => {
@@ -161,10 +85,7 @@ describe('Organization audit trail HTTP flow', () => {
   });
 
   beforeEach(() => {
-    callerRole = 'owner';
-    callerStatus = 'active';
-    callerMembershipExists = true;
-    organizationStatus = 'active';
+    admission.reset();
     jest.clearAllMocks();
     auditEvents.listAuditEvents.mockResolvedValue([]);
   });
@@ -223,7 +144,7 @@ describe('Organization audit trail HTTP flow', () => {
     });
 
     it('reads the trail for an admin', async () => {
-      callerRole = 'admin';
+      admission.callerRole = 'admin';
 
       const response = await read();
 
@@ -311,21 +232,21 @@ describe('Organization audit trail HTTP flow', () => {
     }
 
     it('refuses a member', async () => {
-      callerRole = 'member';
+      admission.callerRole = 'member';
 
       await refusalBody();
       expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses a disabled membership', async () => {
-      callerStatus = 'disabled';
+      admission.callerStatus = 'disabled';
 
       await refusalBody();
       expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
     });
 
     it('refuses a caller with no membership in the named organization', async () => {
-      callerMembershipExists = false;
+      admission.callerMembershipExists = false;
 
       await refusalBody();
       expect(auditEvents.listAuditEvents.mock.calls).toHaveLength(0);
@@ -336,15 +257,15 @@ describe('Organization audit trail HTTP flow', () => {
      * tell a suspended organization from one they simply do not belong to.
      */
     it('answers every refusal identically', async () => {
-      callerRole = 'member';
+      admission.callerRole = 'member';
       const memberRefusal = await refusalBody();
 
-      callerRole = 'owner';
-      callerStatus = 'disabled';
+      admission.callerRole = 'owner';
+      admission.callerStatus = 'disabled';
       const disabledRefusal = await refusalBody();
 
-      callerStatus = 'active';
-      callerMembershipExists = false;
+      admission.callerStatus = 'active';
+      admission.callerMembershipExists = false;
       const strangerRefusal = await refusalBody();
 
       expect(disabledRefusal).toBe(memberRefusal);
@@ -352,7 +273,7 @@ describe('Organization audit trail HTTP flow', () => {
     });
 
     it('reads the trail of a suspended organization', async () => {
-      organizationStatus = 'suspended';
+      admission.organizationStatus = 'suspended';
       auditEvents.listAuditEvents.mockResolvedValue([event()]);
 
       const response = await read();
