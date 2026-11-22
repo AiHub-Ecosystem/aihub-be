@@ -7,6 +7,7 @@ import { Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { isRecord } from '@/common/is-record';
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
+import { createAppFastifyErrorOptions } from './common/http/framework-error-responses';
 import {
   CONNECTION_TIMEOUT_MS,
   REQUEST_TIMEOUT_MS,
@@ -25,6 +26,7 @@ import {
   type SheddingLevelPort,
 } from './modules/gateway/application/shedding/shedding-level.port';
 import { recordTierOutcome } from './modules/gateway/public/http-hooks';
+import { writeRequestCompletion } from './modules/metering/public/http-hooks';
 import {
   PUBLIC_API_MAJOR_USAGE_BUFFER,
   type PublicApiMajorUsageBuffer,
@@ -49,6 +51,9 @@ export async function bootstrap(): Promise<void> {
     AppModule,
     new GracefulFastifyAdapter(
       {
+        // Router and parser rejections answer with the same envelope, headers,
+        // and completion event the normal path writes.
+        ...createAppFastifyErrorOptions(writeRequestCompletion),
         ...createAppFastifyProxyOptions(
           configuration.AIHUB_TRUSTED_PROXY_IP as string,
           listenSocket,
