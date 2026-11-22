@@ -53,16 +53,12 @@ class FakeRepository
   }) {
     return this.intents
       .filter(
-        (candidate) =>
-          candidate.status === 'rejected' ||
-          candidate.expiresAt <= input.expiredBefore,
-      )
-      .filter(
-        (candidate) =>
-          input.after === undefined ||
-          candidate.createdAt > input.after.createdAt ||
-          (candidate.createdAt.getTime() === input.after.createdAt.getTime() &&
-            candidate.assetId > input.after.assetId),
+        ({ status, expiresAt, createdAt, assetId }) =>
+          (status === 'rejected' || expiresAt <= input.expiredBefore) &&
+          (input.after === undefined ||
+            createdAt > input.after.createdAt ||
+            (createdAt.getTime() === input.after.createdAt.getTime() &&
+              assetId > input.after.assetId)),
       )
       .sort(
         (left, right) =>

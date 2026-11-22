@@ -12,11 +12,20 @@ import type {
 const BATCH_SIZE = 500;
 
 /**
- * The most one run may delete. A real day leaves a handful of abandoned
- * uploads behind, so a bigger figure means the record set or the bucket is not
- * the one this deployment expects, and deleting would be the damage (#428).
+ * The most object-key deletions one run may attempt. A real day leaves a
+ * handful of abandoned uploads behind, so a bigger figure means the record set
+ * or bucket is not the one this deployment expects (#428).
  */
 const DELETION_CEILING = 2_000;
+
+function objectKeysToDelete(
+  intent: SpeakingAudioUploadIntent,
+): readonly string[] {
+  return [
+    intent.objectKey,
+    speakingAudioStagingObjectKey(intent.organizationId, intent.assetId),
+  ];
+}
 
 export interface SpeakingAudioUploadSweepSummary {
   readonly scanned: number;
@@ -46,19 +55,14 @@ export class SpeakingAudioUploadSweep {
     expiredBefore: Date,
   ): Promise<boolean> {
     try {
-      const outcomes = await Promise.allSettled([
-        this.storage.deleteObject({
-          environment: intent.environment,
-          objectKey: intent.objectKey,
-        }),
-        this.storage.deleteObject({
-          environment: intent.environment,
-          objectKey: speakingAudioStagingObjectKey(
-            intent.organizationId,
-            intent.assetId,
-          ),
-        }),
-      ]);
+      const outcomes = await Promise.allSettled(
+        objectKeysToDelete(intent).map((objectKey) =>
+          this.storage.deleteObject({
+            environment: intent.environment,
+            objectKey,
+          }),
+        ),
+      );
       if (outcomes.some((outcome) => outcome.status === 'rejected'))
         return false;
       return await this.repository.removeCleanupCandidate({
@@ -82,6 +86,7 @@ export class SpeakingAudioUploadSweep {
     let deleted = 0;
     let failed = 0;
     const candidatesToDelete: SpeakingAudioUploadIntent[] = [];
+    let objectKeysPlanned = 0;
 
     let after:
       | { readonly createdAt: Date; readonly assetId: string }
@@ -95,7 +100,8 @@ export class SpeakingAudioUploadSweep {
       scanned += candidates.length;
       eligible += candidates.length;
       for (const candidate of candidates) {
-        if (candidatesToDelete.length < DELETION_CEILING) {
+        objectKeysPlanned += objectKeysToDelete(candidate).length;
+        if (objectKeysPlanned <= DELETION_CEILING) {
           candidatesToDelete.push(candidate);
         }
       }
@@ -114,7 +120,7 @@ export class SpeakingAudioUploadSweep {
 
     // Decided from everything the run listed, before the first delete, so a
     // misconfigured deployment cannot delete part of what it should not touch.
-    const ceilingExceeded = eligible > DELETION_CEILING;
+    const ceilingExceeded = objectKeysPlanned > DELETION_CEILING;
     if (!input.dryRun && !ceilingExceeded) {
       for (const intent of candidatesToDelete) {
         if (await this.deleteCandidate(intent, expiredBefore)) {

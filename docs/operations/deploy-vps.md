@@ -407,9 +407,12 @@ time.
 ### Sweeping Speaking Audio upload orphans
 
 `speaking:audio-upload-sweep` removes rejected uploads and incomplete intents
-whose one-hour expiry passed at least 24 hours ago. It deletes only the exact
-object key in each intent, then removes that intent. A missing object is an
-idempotent success; failed deletion keeps the intent for the next retry.
+whose one-hour expiry passed at least 24 hours ago. It deletes the exact
+final object key in each intent and its derived staging key, then removes the
+intent. The 2,000-object-key ceiling counts both keys for every eligible
+intent, so more than 1,000 intents makes the sweep delete nothing. A missing
+object is an idempotent success; failed deletion keeps the intent for the next
+retry.
 
 The managed `speaking-upload-sweep` job runs it daily at 04:20 UTC for each
 enabled deployment, with a 30-minute limit per deployment, and logs one summary
@@ -483,7 +486,9 @@ One run also refuses to act when it would delete more than 2,000 objects, or
 more than half of the objects it listed once that listing reaches 500: it
 deletes nothing, reports `ceilingExceeded: true`, and exits non-zero, because
 that share means the bucket or the record set is not the one this deployment
-expects. The Speaking Audio upload sweep applies the same 2,000-object ceiling.
+expects. The Speaking Audio upload sweep also caps planned object-key deletion
+attempts at 2,000; each eligible intent contributes its final and staging key,
+and an over-limit run exits non-zero.
 
 ### Sweeping Writing Task 1 chart uploads
 

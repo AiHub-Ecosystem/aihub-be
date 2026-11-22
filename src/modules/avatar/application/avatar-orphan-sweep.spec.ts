@@ -62,7 +62,7 @@ describe('AvatarOrphanSweep staging bucket', () => {
     const recordedObjectKeys = jest.fn(async () => new Set<string>());
     const repository = {
       recordedObjectKeys,
-    } as unknown as AvatarRepositoryPort;
+    } satisfies Pick<AvatarRepositoryPort, 'recordedObjectKeys'>;
     const result = await new AvatarOrphanSweep(repository, storage).run({
       dryRun: false,
       now: NOW,
@@ -82,7 +82,7 @@ describe('AvatarOrphanSweep staging bucket', () => {
     storage.staging.push({ objectKey: KEY, lastModified: new Date(0) });
     const repository = {
       recordedObjectKeys: async () => new Set<string>(),
-    } as unknown as AvatarRepositoryPort;
+    } satisfies Pick<AvatarRepositoryPort, 'recordedObjectKeys'>;
     const result = await new AvatarOrphanSweep(repository, storage).run({
       dryRun: true,
       now: NOW,
@@ -103,7 +103,7 @@ describe('AvatarOrphanSweep staging bucket', () => {
     {
       ceiling: 'stops without deleting past the count ceiling',
       orphans: 2_001,
-      listed: 2_001,
+      listed: 4_100,
       deleted: 0,
       ceilingExceeded: true,
     },
@@ -126,7 +126,7 @@ describe('AvatarOrphanSweep staging bucket', () => {
       }
       const repository = {
         recordedObjectKeys: async () => new Set<string>(),
-      } as unknown as AvatarRepositoryPort;
+      } satisfies Pick<AvatarRepositoryPort, 'recordedObjectKeys'>;
 
       const result = await new AvatarOrphanSweep(repository, storage).run({
         dryRun: false,
