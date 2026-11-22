@@ -41,8 +41,11 @@ reuses the existing logrotate setting and must be checked against the seven-day
 source-volume sample before app logging is enabled for collection.
 
 AIHUB access records contain the Unix timestamp, observed address, upstream
-`X-Request-Id`, method, `$uri` without a query string, and status. The timestamp
-allows daily byte totals to be grouped by UTC date without retaining raw lines.
+`X-Request-Id`, method, path without a query string, and status. The path is
+normally `$uri`. When nginx rejects the request line before selecting a
+location, the log keeps the method and path parsed from that line instead, so
+the record still describes what arrived. The timestamp allows daily byte
+totals to be grouped by UTC date without retaining raw lines.
 Both AIHUB
 hosts use `/var/log/aihub-access.log`; the shared `/var/log/nginx/access.log`
 and other sites are not changed. Rotation runs daily with numeric archive

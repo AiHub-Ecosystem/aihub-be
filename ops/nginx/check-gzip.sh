@@ -67,24 +67,78 @@ fi
 install -m 0640 /dev/null "$tmp/aihub-access.log"
 
 node -e '
-  const { createServer } = require("node:http");
+  const { createServer } = require("node:net");
   const { appendFileSync, readFileSync } = require("node:fs");
-  const body = readFileSync(process.argv[1]);
-  createServer((request, response) => {
-    appendFileSync(process.argv[2], `${JSON.stringify({
-      host: request.headers.host,
-      forwardedHost: request.headers["x-forwarded-host"],
-    })}\n`);
-    const isMetrics = request.url === "/metrics";
-    const responseBody = isMetrics
-      ? Buffer.from("# TYPE aihub_test_metric gauge\naihub_test_metric 1\n")
-      : body;
-    response.writeHead(200, {
-      "Content-Type": isMetrics ? "text/plain; version=0.0.4" : "application/json",
-      "Content-Length": responseBody.length,
-      "X-Request-Id": "req_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-    });
-    response.end(responseBody);
+  const fixture = readFileSync(process.argv[1]);
+  const logPath = process.argv[2];
+  const requestId = "req_01ARZ3NDEKTSV4RRFFQ69G5FAV";
+  const envelope = Buffer.from(JSON.stringify({
+    error: {
+      code: "INVALID_REQUEST",
+      message: "Request failed validation",
+      request_id: requestId,
+      retryable: false,
+    },
+  }));
+  const metrics = Buffer.from("# TYPE aihub_test_metric gauge\naihub_test_metric 1\n");
+
+  function reply(socket, status, contentType, payload) {
+    socket.write(
+      `HTTP/1.1 ${status} ${status === 200 ? "OK" : "Bad Request"}\r\n` +
+        `Content-Type: ${contentType}\r\n` +
+        `Content-Length: ${payload.length}\r\n` +
+        `X-Request-Id: ${requestId}\r\n` +
+        "Connection: close\r\n\r\n",
+    );
+    socket.end(payload);
+  }
+
+  // A raw server, not node:http, so an unusual method reaches the log instead
+  // of being rejected by Node before the request handler runs.
+  createServer((socket) => {
+    let buffered = Buffer.alloc(0);
+    function consume() {
+      const headerEnd = buffered.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return;
+      const head = buffered.subarray(0, headerEnd).toString("latin1");
+      const [requestLine, ...headerLines] = head.split("\r\n");
+      const [method, url] = requestLine.split(" ");
+      const headers = {};
+      for (const line of headerLines) {
+        const separator = line.indexOf(":");
+        if (separator !== -1) {
+          headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
+        }
+      }
+      const contentLength = Number(headers["content-length"] ?? 0);
+      const total = headerEnd + 4 + contentLength;
+      if (buffered.length < total) return;
+      socket.off("data", onData);
+      appendFileSync(logPath, `${JSON.stringify({
+        host: headers.host,
+        forwardedHost: headers["x-forwarded-host"],
+        method,
+        url,
+        contentLength: headers["content-length"] ?? null,
+        transferEncoding: headers["transfer-encoding"] ?? null,
+        realIp: headers["x-real-ip"] ?? null,
+        forwardedFor: headers["x-forwarded-for"] ?? null,
+        forwardedProto: headers["x-forwarded-proto"] ?? null,
+        bodyLength: total - headerEnd - 4,
+      })}\n`);
+      if (url === "/v1/%E0%A4%A") {
+        reply(socket, 400, "application/json", envelope);
+      } else if (url === "/metrics") {
+        reply(socket, 200, "text/plain; version=0.0.4", metrics);
+      } else {
+        reply(socket, 200, "application/json", fixture);
+      }
+    }
+    function onData(chunk) {
+      buffered = Buffer.concat([buffered, chunk]);
+      consume();
+    }
+    socket.on("data", onData);
   }).listen(3021, "127.0.0.1");
 ' "$fixture" "$tmp/upstream-headers.jsonl" &
 backend_pid=$!
@@ -141,6 +195,148 @@ EOF
 
 nginx -t -p "$tmp/" -c "$tmp/nginx.conf"
 nginx -p "$tmp/" -c "$tmp/nginx.conf"
+
+# curl rejects a malformed percent escape before it sends a request. Use raw
+# sockets so the test covers the request line that reaches nginx, including
+# methods other than GET and a body that must not be forwarded.
+node - "$tmp" <<'NODE'
+const { connect } = require('node:net');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+
+const tmp = process.argv[2];
+
+function raw(port, method, target, host, body = '') {
+  return new Promise((resolve, reject) => {
+    let received = '';
+    const socket = connect({ host: '127.0.0.1', port }, () => {
+      const headers = [
+        `${method} ${target} HTTP/1.1`,
+        `Host: ${host}`,
+        'Connection: close',
+      ];
+      if (body) headers.push(`Content-Length: ${Buffer.byteLength(body)}`);
+      // Write without end(): a half-closed socket makes nginx discard the
+      // response it already produced for the rejected request line.
+      socket.write(`${headers.join('\r\n')}\r\n\r\n${body}`);
+    });
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`${method} ${port}: response timed out after ${received.length} bytes`));
+    }, 10000);
+    socket.setEncoding('latin1');
+    socket.on('data', (chunk) => {
+      received += chunk;
+    });
+    socket.on('end', () => {
+      clearTimeout(timeout);
+      resolve(received);
+    });
+    socket.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+function parse(response, label) {
+  const split = response.indexOf('\r\n\r\n');
+  if (split === -1) throw new Error(`${label}: incomplete response`);
+  const head = response.slice(0, split);
+  const body = response.slice(split + 4);
+  const status = Number(head.match(/^HTTP\/1\.1 (\d+)/)?.[1]);
+  const headers = Object.fromEntries(
+    head
+      .split('\r\n')
+      .slice(1)
+      .map((line) => line.split(': '))
+      .filter(([name]) => name)
+      .map(([name, ...value]) => [name.toLowerCase(), value.join(': ')]),
+  );
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    throw new Error(`${label}: response is not JSON: ${body.slice(0, 200)}`);
+  }
+  if (status !== 400) throw new Error(`${label}: expected 400, got ${status}`);
+  if (!headers['content-type']?.includes('application/json')) {
+    throw new Error(`${label}: expected JSON content type, got ${headers['content-type']}`);
+  }
+  if (payload.error?.code !== 'INVALID_REQUEST' ||
+      payload.error?.message !== 'Request failed validation' ||
+      payload.error?.retryable !== false ||
+      !/^req_[0-9A-HJKMNP-TV-Z]{26}$/.test(payload.error?.request_id ?? '')) {
+    throw new Error(`${label}: unexpected envelope: ${body.slice(0, 300)}`);
+  }
+  if (headers['x-request-id'] !== payload.error.request_id) {
+    throw new Error(`${label}: X-Request-Id does not match the envelope`);
+  }
+  if (/FST_ERR|%E0|Request failed validation.*%/.test(body)) {
+    throw new Error(`${label}: response echoed framework or path detail`);
+  }
+}
+
+const requests = [
+  ['GET', 18080, '/v1/%E0%A4%A?private=1', 'api.aihubproduction.com', ''],
+  ['POST', 18080, '/v1/%E0%A4%A', 'api.aihubproduction.com', 'body-must-not-forward'],
+  ['GARBAGE', 18080, '/v1/%E0%A4%A', 'api.aihubproduction.com', ''],
+  ['GET', 18083, '/v1/%E0%A4%A', 'sandbox.aihubproduction.com', ''],
+];
+
+(async () => {
+  for (const [method, port, target, host, body] of requests) {
+    parse(await raw(port, method, target, host, body), `${method} ${port}`);
+  }
+  const direct = await raw(18080, 'GET', '/__aihub/bad-request', 'api.aihubproduction.com');
+  if (!/^HTTP\/1\.1 404 /.test(direct)) {
+    throw new Error(`direct internal location: expected 404, got ${direct.split('\r\n', 1)[0]}`);
+  }
+  const records = readFileSync(join(tmp, 'upstream-headers.jsonl'), 'utf8')
+    .trim().split('\n').map((line) => JSON.parse(line));
+  const malformed = records.filter((record) => record.url === '/v1/%E0%A4%A');
+  const expected = [
+    ['GET', 'api.aihubproduction.com', 'api.aihubproduction.com'],
+    ['POST', 'api.aihubproduction.com', 'api.aihubproduction.com'],
+    ['GARBAGE', 'api.aihubproduction.com', 'api.aihubproduction.com'],
+    ['GET', 'sandbox.aihubproduction.com', 'sandbox.aihubproduction.com'],
+  ];
+  if (malformed.length !== expected.length) {
+    throw new Error(`expected ${expected.length} malformed upstream requests, got ${malformed.length}`);
+  }
+  malformed.forEach((record, index) => {
+    const [method, host, forwardedHost] = expected[index];
+    if (record.method !== method || record.host !== host || record.forwardedHost !== forwardedHost) {
+      throw new Error(`upstream request ${index} was ${record.method} ${record.host}/${record.forwardedHost}, expected ${method} ${host}/${forwardedHost}`);
+    }
+    if (record.contentLength !== null || record.transferEncoding !== null || record.bodyLength !== 0) {
+      throw new Error(`upstream request ${index} forwarded body metadata: ${JSON.stringify(record)}`);
+    }
+    if (record.realIp !== '127.0.0.1' ||
+        record.forwardedFor !== '127.0.0.1' ||
+        record.forwardedProto !== 'http') {
+      throw new Error(`upstream request ${index} has unexpected proxy headers: ${JSON.stringify(record)}`);
+    }
+  });
+  if (records.some((record) => record.url === '/__aihub/bad-request')) {
+    throw new Error('direct internal-location request reached the application');
+  }
+  const access = readFileSync(join(tmp, 'aihub-access.log'), 'utf8')
+    .trim().split('\n').map((line) => JSON.parse(line));
+  const malformedAccess = access.filter((record) => record.path === '/v1/%E0%A4%A' && record.status === 400);
+  if (malformedAccess.length !== 4 ||
+      malformedAccess.map((record) => record.method).join(',') !== 'GET,POST,GARBAGE,GET' ||
+      malformedAccess.some((record) => record.request_id !== 'req_01ARZ3NDEKTSV4RRFFQ69G5FAV')) {
+    throw new Error(`unexpected malformed access records: ${JSON.stringify(malformedAccess)}`);
+  }
+  if (access.some((record) => JSON.stringify(record).includes('private=1'))) {
+    throw new Error('malformed request query string reached the access log');
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+NODE
 
 curl --silent --show-error -o /dev/null \
   -H 'Host: api.aihubproduction.com' \

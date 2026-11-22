@@ -65,6 +65,17 @@ describe('blue-green nginx slot state', () => {
     ).toThrow('production nginx config must have one active upstream port');
   });
 
+  it('retargets an upstream that carries the framework-error URI', () => {
+    const productionB = renderNginxConfig(apiTemplate, 'production', 'b');
+    expect(productionB).toContain(
+      'proxy_pass http://127.0.0.1:3023/v1/%E0%A4%A;',
+    );
+    expect(productionB).not.toContain(
+      'proxy_pass http://127.0.0.1:3021/v1/%E0%A4%A;',
+    );
+    expect(activeSlot(productionB, 'production')).toBe('b');
+  });
+
   it('switches only the requested tier and preserves the other active port', () => {
     const currentApi = renderNginxConfig(apiTemplate, 'production', 'b');
     const currentSandbox = renderNginxConfig(sandboxTemplate, 'sandbox', 'a');

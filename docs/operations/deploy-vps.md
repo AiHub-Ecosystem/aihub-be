@@ -1457,8 +1457,10 @@ See [Roll back a blue-green release](#roll-back-a-blue-green-release).
 
 Both AIHUB hosts write to `/var/log/aihub-access.log`; this does not change the
 shared `/var/log/nginx/access.log` or another site's logging. Each JSON record
-contains only the observed IP, upstream `X-Request-Id`, method, `$uri` without
-the query string, and status. `/etc/logrotate.d/aihub-access` rotates daily
+contains only the observed IP, upstream `X-Request-Id`, method, path without
+the query string, and status. The path is normally `$uri`; for a request line
+nginx rejects before selecting a location, it is the method and path parsed
+from that line. `/etc/logrotate.d/aihub-access` rotates daily
 with numeric archive names, a 10 MiB `maxsize` threshold, `maxage 28`, and up
 to four rotated generations. Numeric names keep the existing `.1` and `.2.gz`
 archives in the same retention chain; date-stamped names would leave those
