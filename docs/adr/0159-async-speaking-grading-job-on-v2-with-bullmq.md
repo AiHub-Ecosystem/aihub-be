@@ -3,6 +3,7 @@
 - Status: Accepted — approved by AIHUB owner @lengocanh2005it in [#1718](https://github.com/AiHub-Ecosystem/aihub-be/issues/1718) on 2026-11-08.
 - Amends: [ADR-0014](0014-ai-speaking-d2-contract-boundary.md) (the planned `POST /v1/speaking/grade`), [ADR-0074](0074-transactional-email-outbox.md) (Redis is not used as a queue), [ADR-0129](0129-public-route-and-response-convention.md) (a graded operation ends in `/grade`)
 - Related: [ADR-0057](0057-graded-request-order-is-a-declared-contract.md), [ADR-0070](0070-speaking-audio-upload-intent-and-retention.md), [ADR-0127](0127-public-api-uri-major-versioning.md), [ADR-0138](0138-batch-ai-service-breaking-changes-into-public-v2.md), [#1051](https://github.com/AiHub-Ecosystem/aihub-be/issues/1051), [#1752](https://github.com/AiHub-Ecosystem/aihub-be/issues/1752)
+- Amended 2026-11-23: Speaking v2 provider timeouts and post-dispatch recovery threshold follow the provider's updated 2026-11-21 guide.
 
 ## Context
 
@@ -19,6 +20,15 @@ ADR-0074 chose Postgres polling for the email outbox and said Redis is not used 
 5. **Worker.** The worker claims a job with one conditional update from `queued` to `running` under a bounded lease; a claim that changes no row is dropped, so a duplicate delivery never grades twice. It acquires the Organization's Concurrency permit (delaying the job without one), re-checks the asset's retention, records that dispatch started, calls the AI Service, then persists the result, records the `response_id` in the Speaking v2 result-ownership store, and meters through the shared finalizer in the month of dispatch.
 6. **Recovery.** Before the dispatch mark, a crash returns the job to `queued`. After it, the job ends `failed` with the retryable `DISPATCH_INTERRUPTED` and is never re-dispatched. BullMQ runs one attempt with no stalled-job re-runs and removes jobs on completion and failure, so every retry is decided from Postgres and a re-enqueue under the same job ID is accepted. One sweep every 30 seconds re-enqueues jobs `queued` over 60 seconds, returns expired pre-dispatch leases to `queued`, ends stale dispatched jobs as `DISPATCH_INTERRUPTED`, ends jobs `queued` over 15 minutes as `JOB_EXPIRED` (releasing any Sandbox reservation), releases the quota reservation of a `succeeded` job whose metering handoff did not release it within 2 minutes, and deletes jobs older than 30 days. Each step is a conditional statement, so two deployment slots may run it at once.
 7. **Placement of the worker.** The worker and sweep run inside the application process.
+
+**Amended 2026-11-23 (provider v2.4 timing).** The provider's updated guide
+recommends a 300-second client timeout for question grading and 120 seconds for
+Part/Test aggregation. The question provider deadline is 180 seconds after up
+to 100 seconds in queue; the aggregation deadline is 90 seconds. AIHUB sets
+these operation budgets to 300 and 120 seconds respectively. A dispatched job
+is marked `DISPATCH_INTERRUPTED` after six minutes, allowing the 300-second
+dispatch deadline plus a 60-second persistence/finalization margin. The
+two-minute claim lease remains for work that has not reached the dispatch mark.
 
 ## Consequences
 

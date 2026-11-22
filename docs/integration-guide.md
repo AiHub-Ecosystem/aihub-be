@@ -883,9 +883,9 @@ read-back routes are `GET`. Writing and Speaking JSON-by-URL use
 | `/v2/ielts/writing/micro-exercises/grade`    | Required; plain ID or JWT by Organization mode | Required          |   256 KB |           20s |
 | `/v2/ielts/speaking/grading-jobs`            | Required; plain ID or JWT by Organization mode | Optional          |   256 KB |           10s |
 | `/v2/ielts/speaking/grading-jobs/{job_id}`   | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
-| `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |           60s |
-| `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
-| `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |           60s |
+| `/v2/ielts/speaking/questions/grade`         | Required; plain ID or JWT by Organization mode | None              |   26 MiB |          300s |
+| `/v2/ielts/speaking/parts/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |          120s |
+| `/v2/ielts/speaking/tests/grade`             | Required; plain ID or JWT by Organization mode | None              |   256 KB |          120s |
 | `/v2/ielts/speaking/responses/{response_id}` | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
 | `/v2/ielts/speaking/parts/{part_result_id}`  | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
 | `/v2/ielts/speaking/tests/{test_id}`         | Required; plain ID or JWT by Organization mode | None              |     0 KB |           30s |
@@ -1163,6 +1163,12 @@ reported no priority errors. A legacy asynchronous result persisted before the
 field existed is also returned with an empty list for compatibility; in that
 case, priority data is unavailable. Treat `group` and `code` as open-ended
 strings so new provider values remain usable.
+
+The provider's current codebook is `speaking_v3.1`; some PR, LR, and GRA code
+meanings or numbers changed from the earlier codebook, while stored results
+keep their original codes. AIHUB does not expose the provider codebook version
+in its public response, so treat error codes as opaque when reading historical
+results. Do not infer one stable meaning from a code alone.
 
 Compared with `/v1`, v2 does not return `scorability`, `relevance`,
 `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,
@@ -1593,13 +1599,18 @@ again. The stored result is keyed by organization, operation, and
 
 Writing grading on `/v1` has a 60-second AIHUB budget. **Set your client timeout
 to at least 90 seconds** for `/v1` Writing `/grade` calls. `/v2` Writing grading
-has a 125-second budget; set at least 160 seconds there. Speaking multipart grading also
-has a 60-second budget; use at least 90 seconds for
-`/v1/ielts/speaking/grading`. The budget includes audio upload, so large files
-on slow links need a proportionally larger client timeout. Speaking JSON-by-URL
-also has a 60-second budget; use at least 90 seconds for
-`/v1/ielts/speaking/grading-json`. A client timeout equal to the server budget
-is unsafe because connection setup and response transfer also consume time.
+has a 125-second budget; set at least 160 seconds there. Speaking `/v1` grading
+has a 60-second budget; set at least 90 seconds for
+`/v1/ielts/speaking/grading` and `/v1/ielts/speaking/grading-json`.
+
+Speaking `/v2` question grading has a 300-second budget; set at least 330 seconds
+for `/v2/ielts/speaking/questions/grade`. Part and Test grading each have a
+120-second budget; set at least 150 seconds for those routes. The question
+budget includes the inbound audio upload, so large or slow uploads consume the
+time available for provider grading. Use the stored-audio grading-job flow
+when that synchronous window is not suitable. A client timeout equal to the
+AIHUB budget is unsafe because connection setup and response transfer also
+consume time.
 
 AIHUB's per-operation budget is a single clock: it is set when the request
 arrives and is consumed as the request travels. It does not restart at any
@@ -1878,7 +1889,8 @@ next one to flood.
 - [ ] `Idempotency-Key` generated per Writing submission and reused across retries
 - [ ] Speaking: catalog fetched from `GET /v1/ielts/speaking/questions`; the submitted `question_id` and `prompt_text` come from the same entry
 - [ ] Speaking audio is one supported file within the documented size limit
-- [ ] Client timeout is ≥ 90s for Writing and Speaking multipart; ≥ 60s for Speaking JSON-by-URL
+- [ ] Client timeout is ≥ 90s for Writing and Speaking v1; ≥ 330s for Speaking v2 question grading
+- [ ] Client timeout is ≥ 150s for Speaking v2 Part/Test grading; ≥ 90s for Speaking JSON-by-URL
 - [ ] Branch on known `error.code` values; for an unknown code, use HTTP status
       and `error.retryable`, never the message
 - [ ] Retries limited to `retryable: true`, with jittered backoff; do not blindly retry Speaking

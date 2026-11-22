@@ -20,6 +20,14 @@ below ([#1450, answers 2–4](https://github.com/AiHub-Ecosystem/aihub-be/issues
 The provider's updated response guide received on 2026-11-21 documents
 `data.error_priority` for question, Part, and Test results. Its example strings
 are represented by a sanitized fixture in `test/fixtures/ai-speaking/`.
+The same guide identifies codebook `speaking_v3.1`; several PR, LR, and GRA
+codes changed meaning or numbering while stored results retain their original
+codebook. It recommends client timeouts of at least 300 seconds for question
+grading, 120 seconds for Part/Test aggregation, and 30 seconds for GET. The
+documented provider deadlines are 180 seconds for question grading and 90
+seconds for aggregation; overload returns `429` after a queue wait over 100
+seconds. AIHUB passes error codes through as provider-owned strings and omits
+provider codebook metadata under ADR-0138.
 
 On 2026-10-31, AI Speaking deployed commit `148f126` to accept AIHUB's opaque
 `org_...` Organization IDs while retaining legacy UUID support. A controlled

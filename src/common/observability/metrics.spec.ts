@@ -169,13 +169,13 @@ describe('request lifecycle metrics', () => {
     expect(await getMetrics()).not.toContain('NaN');
   });
 
-  it('exposes upper duration buckets beyond 30s for long-running AI grading tasks', async () => {
+  it('exposes duration buckets through the 300-second provider deadline', async () => {
     recordCompletedRequest({
       operation: GRADE,
       statusCode: 200,
       outcome: 'success',
-      totalMs: 45000,
-      downstreamMs: 44000,
+      totalMs: 280000,
+      downstreamMs: 280000,
     });
 
     expect(
@@ -196,6 +196,12 @@ describe('request lifecycle metrics', () => {
         operation: GRADE,
       }),
     ).toBeDefined();
+    expect(
+      await sample('aihub_request_duration_seconds_bucket', {
+        le: '300',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
 
     expect(
       await sample('aihub_downstream_duration_seconds_bucket', {
@@ -206,6 +212,12 @@ describe('request lifecycle metrics', () => {
     expect(
       await sample('aihub_downstream_duration_seconds_bucket', {
         le: '120',
+        operation: GRADE,
+      }),
+    ).toBeDefined();
+    expect(
+      await sample('aihub_downstream_duration_seconds_bucket', {
+        le: '300',
         operation: GRADE,
       }),
     ).toBeDefined();

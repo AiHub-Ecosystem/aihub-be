@@ -31,9 +31,8 @@ export type RedisConcurrencyClient = Pick<
 /** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 // A lease older than this no longer counts toward the cap, so it must outlast
-// the longest response deadline (125 s for Writing /v2) or a request still
-// being graded would free its own slot. redis-concurrency-limiter.spec.ts pins it.
-export const CONCURRENCY_STALE_LEASE_MS = 135_000;
+// the longest response deadline by the finalization margin.
+export const CONCURRENCY_STALE_LEASE_MS = largestRequestTimeoutMs() + 10_000;
 export const LEASE_REMOVAL_RETRY_MS = 1_000;
 // Retry for as long as the background drain waits, keeping 15 seconds of it for
 // event-loop delay. Derived, so a longer route timeout widens both together.

@@ -94,6 +94,7 @@ const requestDuration = new Histogram({
   // where the interesting distinction sits.
   buckets: [
     0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 90, 120,
+    180, 300,
   ],
   registers: [registry],
 });
@@ -102,7 +103,9 @@ const downstreamDuration = new Histogram({
   name: 'aihub_downstream_duration_seconds',
   help: 'Time spent waiting on the downstream AI service, in seconds.',
   labelNames: ['operation'],
-  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 90, 120],
+  buckets: [
+    0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 90, 120, 180, 300,
+  ],
   registers: [registry],
 });
 
@@ -112,7 +115,7 @@ const dispatchDeadlineMsRemaining = new Histogram({
   labelNames: ['operation'],
   buckets: [
     1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000,
-    60_000, 120_000, 125_000,
+    60_000, 120_000, 125_000, 180_000, 300_000,
   ],
   registers: [registry],
 });

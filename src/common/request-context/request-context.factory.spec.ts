@@ -5,7 +5,7 @@ import {
 } from './request-context.factory';
 
 describe('createRequestContext', () => {
-  it('accepts the deadline of every catalog operation, including the 125-second Writing /v2 grading', () => {
+  it('accepts the deadline of every catalog operation, including 300-second Speaking /v2 grading', () => {
     for (const { timeoutMs } of Object.values(OPERATION_CATALOG)) {
       expect(() =>
         createRequestContext({
@@ -16,7 +16,7 @@ describe('createRequestContext', () => {
         }),
       ).not.toThrow();
     }
-    expect(MAX_DEADLINE_MS).toBeGreaterThanOrEqual(125_000);
+    expect(MAX_DEADLINE_MS).toBeGreaterThanOrEqual(300_000);
   });
 
   it('creates a bounded context with an abort signal and deadline', () => {

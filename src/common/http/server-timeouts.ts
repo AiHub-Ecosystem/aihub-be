@@ -19,14 +19,14 @@ const CONNECTION_IDLE_MARGIN_MS = 10_000;
 
 // Fastify's requestTimeout is zero by default. It bounds receiving the whole
 // request, so the full-size upload gets the largest catalog deadline plus its
-// wire time at the stated 500 B/s floor: 125,000 ms + 54,525,952 ms =
-// 54,650,952 ms.
+// wire time at the stated 500 B/s floor: 300,000 ms + 54,525,952 ms =
+// 54,825,952 ms.
 export const REQUEST_TIMEOUT_MS =
   LONGEST_ROUTE_DEADLINE_MS +
   Math.ceil((LARGEST_UPLOAD_BYTES * 1_000) / MIN_UPLOAD_BYTES_PER_SECOND);
 
 // Fastify maps connectionTimeout to the Node socket inactivity timeout, which
 // also runs while a valid response is being produced. Keep it above the
-// longest catalog deadline so a 125-second grading response is not reset.
+// longest catalog deadline so a 300-second Speaking response is not reset.
 export const CONNECTION_TIMEOUT_MS =
   LONGEST_ROUTE_DEADLINE_MS + CONNECTION_IDLE_MARGIN_MS;

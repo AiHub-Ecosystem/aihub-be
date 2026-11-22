@@ -29,11 +29,13 @@ describe('shutdown budget', () => {
   it('sizes the background drain at the timeout plus 15 seconds', () => {
     expect(backgroundDrainMs(60_000)).toBe(75_000);
     expect(backgroundDrainMs(125_000)).toBe(140_000);
+    expect(backgroundDrainMs(300_000)).toBe(315_000);
   });
 
-  it('keeps the 60-second budget of ADR-0085 and gives 125 seconds at least 280', () => {
+  it('covers the 60-second baseline, Writing /v2, and Speaking /v2 shutdown budgets', () => {
     expect(requiredStopGraceMs(60_000)).toBe(150_000);
     expect(requiredStopGraceMs(125_000)).toBe(280_000);
+    expect(requiredStopGraceMs(300_000)).toBe(630_000);
   });
 
   it('reaches every operation and timed public route timeout', () => {
@@ -62,10 +64,10 @@ describe('shutdown budget', () => {
     }
   });
 
-  it('is covered for the 125-second Writing /v2 grading timeout', () => {
-    expect(largestRequestTimeoutMs()).toBe(125_000);
+  it('is covered for the 300-second Speaking /v2 grading timeout', () => {
+    expect(largestRequestTimeoutMs()).toBe(300_000);
     for (const period of composeStopGracePeriodsMs()) {
-      expect(period).toBeGreaterThanOrEqual(requiredStopGraceMs(125_000));
+      expect(period).toBeGreaterThanOrEqual(requiredStopGraceMs(300_000));
     }
   });
 });

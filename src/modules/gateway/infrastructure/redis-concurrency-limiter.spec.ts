@@ -5,6 +5,10 @@ import {
   waitForBackgroundWork,
 } from '@/common/http/background-work-drain';
 import {
+  backgroundDrainMs,
+  largestRequestTimeoutMs,
+} from '@/common/http/shutdown-budget';
+import {
   CONCURRENCY_STALE_LEASE_MS,
   type RedisConcurrencyClient,
   RedisConcurrencyLimiter,
@@ -73,7 +77,7 @@ describe('RedisConcurrencyLimiter', () => {
     );
 
     expect(CONCURRENCY_STALE_LEASE_MS).toBeGreaterThan(longest);
-    expect(longest).toBeGreaterThanOrEqual(125_000);
+    expect(longest).toBeGreaterThanOrEqual(300_000);
   });
 
   it('atomically acquires an organization lease and releases its request member', async () => {
@@ -100,7 +104,7 @@ describe('RedisConcurrencyLimiter', () => {
         'aihub:v1:inflight:org_acme',
         '20',
         'req_01JCONCURRENCYLEASE0000000000',
-        '135000',
+        String(CONCURRENCY_STALE_LEASE_MS),
       ],
     });
 
@@ -174,7 +178,7 @@ describe('RedisConcurrencyLimiter', () => {
         '1',
         '10',
         'req_sandbox',
-        '135000',
+        String(CONCURRENCY_STALE_LEASE_MS),
       ],
     });
     if (!decision.allowed) {
@@ -424,12 +428,16 @@ describe('RedisConcurrencyLimiter', () => {
       await jest.advanceTimersByTimeAsync(400);
       expect(await lateRelease).toMatchObject({ code: 'REDIS_UNAVAILABLE' });
 
-      // The old 60-second budget gave up here, leaving the permit counted.
+      // The shutdown drain keeps retrying until the lease-removal budget.
       await jest.advanceTimersByTimeAsync(99_600);
       expect(drained).toBe(false);
 
-      // Both stop at the budget counted from shutdown, inside the 140 s drain.
-      await jest.advanceTimersByTimeAsync(10_000);
+      // Lease cleanup stops 15 seconds before the background drain ends.
+      await jest.advanceTimersByTimeAsync(
+        backgroundDrainMs(largestRequestTimeoutMs()) - 15_000 - 120_000,
+      );
+      expect(drained).toBe(false);
+      await jest.advanceTimersByTimeAsync(15_000);
       expect(drained).toBe(true);
       await drain;
       const attemptsAtDrain = zrem.mock.calls.length;

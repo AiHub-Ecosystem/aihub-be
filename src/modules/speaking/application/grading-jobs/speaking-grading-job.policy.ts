@@ -10,9 +10,9 @@ export const SPEAKING_GRADING_JOB_POLICY = {
   claimLeaseMs: 2 * 60_000,
   /**
    * A dispatched job still `running` this long after its dispatch mark ends
-   * `DISPATCH_INTERRUPTED`: the 60-second question-grading deadline plus margin.
+   * `DISPATCH_INTERRUPTED`: the 300-second question-grading deadline plus margin.
    */
-  dispatchInterruptedAfterMs: 2 * 60_000,
+  dispatchInterruptedAfterMs: 6 * 60_000,
   /**
    * A `succeeded` job still holding its quota reservation this long after
    * completion is released by the sweep: the metering handoff either finished or

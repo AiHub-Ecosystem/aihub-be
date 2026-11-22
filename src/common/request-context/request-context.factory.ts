@@ -1,9 +1,9 @@
 import { internalError } from '@/common/errors/app-error';
 import type { RequestContext, UserIdentityMode } from './request-context';
 
-// At least the largest operation timeout (Writing /v2 grading, 125 s, ADR-0143);
+// At least the largest operation timeout (Speaking /v2 question grading, 300 s);
 // request-context.factory.spec.ts fails when a catalog timeout outgrows it.
-export const MAX_DEADLINE_MS = 125_000;
+export const MAX_DEADLINE_MS = 300_000;
 
 export interface RequestContextInput {
   readonly requestId: string;

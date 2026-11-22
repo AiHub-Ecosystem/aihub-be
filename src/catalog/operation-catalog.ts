@@ -315,10 +315,10 @@ export const OPERATION_CATALOG = {
     idempotency: 'none',
     family: 'speaking',
     meteringMode: 'model',
-    // Same wire ceiling and deadline as the v1 upload: the provider caps the
-    // audio at 25 MiB and one deadline covers upload plus grading.
+    // The v2 provider allows up to 280 s for grading and recommends a 300 s
+    // client timeout. This end-to-end budget also covers the incoming upload.
     maxBodyBytes: 26 * 1024 * 1024,
-    timeoutMs: 60_000,
+    timeoutMs: 300_000,
     maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/questions/grading',
@@ -339,7 +339,7 @@ export const OPERATION_CATALOG = {
     family: 'speaking',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
-    timeoutMs: 60_000,
+    timeoutMs: 120_000,
     maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/parts/grading',
@@ -359,7 +359,7 @@ export const OPERATION_CATALOG = {
     family: 'speaking',
     meteringMode: 'model',
     maxBodyBytes: 256 * 1024,
-    timeoutMs: 60_000,
+    timeoutMs: 120_000,
     maxResponseBytes: SPEAKING_RESPONSE_MAX_BYTES,
     downstream: 'ai-speaking',
     downstreamPath: '/api/v2/speaking/tests/grading',
