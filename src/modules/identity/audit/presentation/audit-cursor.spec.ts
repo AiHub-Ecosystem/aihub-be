@@ -28,6 +28,54 @@ describe('decodeAuditCursor', () => {
     );
   });
 
+  it('encodes through the shared Identity cursor envelope', () => {
+    const payload = JSON.parse(
+      Buffer.from(encodeAuditCursor(position, {}), 'base64url').toString(
+        'utf8',
+      ),
+    ) as unknown;
+
+    expect(payload).toMatchObject({
+      v: 1,
+      pos: {
+        occurredAt: position.occurredAt.toISOString(),
+        id: position.id,
+      },
+    });
+    expect(payload).toHaveProperty(
+      's',
+      expect.stringMatching(/^[0-9a-f]{16}$/),
+    );
+  });
+
+  it('decodes a cursor issued before the shared codec', () => {
+    const legacy = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        occurredAt: position.occurredAt.toISOString(),
+        id: position.id,
+        f: 'caf253d93bc3ac1a',
+      }),
+      'utf8',
+    ).toString('base64url');
+
+    expect(decodeAuditCursor(legacy, {})).toEqual(position);
+  });
+
+  it('refuses a legacy cursor minted against a different filter', () => {
+    const legacy = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        occurredAt: position.occurredAt.toISOString(),
+        id: position.id,
+        f: auditFilterHash({ outcome: 'applied' }),
+      }),
+      'utf8',
+    ).toString('base64url');
+
+    expect(decodeAuditCursor(legacy, {})).toBeUndefined();
+  });
+
   it.each(['', 'oae_01J0000000000000000000000\u0000', "x' OR 1=1", 'oae_'])(
     'refuses a cursor whose id %j is not an event id',
     (id) => {
