@@ -2508,6 +2508,109 @@ describe('presentation does not import appConfig (#1827)', () => {
   });
 });
 
+describe('production code cannot replace the runtime configuration (#1623)', () => {
+  const PRODUCTION = 'src/modules/identity/probe/application/probe.ts';
+  const REASON =
+    'replaceRuntimeConfiguration replaces the process-wide validated snapshot and is for test composition roots only (#1623)';
+
+  it('rejects a named import of replaceRuntimeConfiguration', () => {
+    const result = checkFixtures([
+      [
+        PRODUCTION,
+        "import { replaceRuntimeConfiguration } from '@/config/runtime-configuration';\nexport const install = replaceRuntimeConfiguration;\n",
+      ],
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('imports replaceRuntimeConfiguration');
+    expect(result.output).toContain(`${PRODUCTION}:1`);
+    expect(result.output).toContain(REASON);
+  });
+
+  it('rejects a direct call of replaceRuntimeConfiguration', () => {
+    const result = checkFixtures([
+      [
+        PRODUCTION,
+        'export const install = () => replaceRuntimeConfiguration({});\n',
+      ],
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('calls replaceRuntimeConfiguration');
+    expect(result.output).toContain(`${PRODUCTION}:1`);
+  });
+
+  it.each([
+    [
+      'an aliased import',
+      "import { replaceRuntimeConfiguration as install } from '@/config/runtime-configuration';\nexport const run = () => install({});\n",
+      'imports replaceRuntimeConfiguration',
+    ],
+    [
+      'a namespace import',
+      "import * as configuration from '@/config/runtime-configuration';\nexport const run = () => configuration.replaceRuntimeConfiguration({});\n",
+      'imports the runtime configuration module as a namespace',
+    ],
+    [
+      'an import-equals require',
+      "import configuration = require('@/config/runtime-configuration');\nexport const install = configuration.replaceRuntimeConfiguration;\n",
+      'imports the runtime configuration module as a whole',
+    ],
+    [
+      'a named re-export',
+      "export { replaceRuntimeConfiguration } from '@/config/runtime-configuration';\n",
+      're-exports replaceRuntimeConfiguration',
+    ],
+    [
+      'a star re-export',
+      "export * from '@/config/runtime-configuration';\n",
+      're-exports the runtime configuration module with export *',
+    ],
+    [
+      'a namespace re-export',
+      "export * as configuration from '@/config/runtime-configuration';\n",
+      're-exports the runtime configuration module as a namespace',
+    ],
+    [
+      'a dynamic import',
+      "export const load = () => import('@/config/runtime-configuration');\n",
+      'loads the runtime configuration module dynamically',
+    ],
+  ])('rejects %s of the module', (_name, source, message) => {
+    const result = checkFixtures([[PRODUCTION, source]]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(message);
+    expect(result.output).toContain(`${PRODUCTION}:1`);
+  });
+
+  it('accepts a local function with the same name', () => {
+    const result = checkFixtures([
+      [
+        PRODUCTION,
+        'function replaceRuntimeConfiguration(): string {\n  return "local";\n}\n\nexport const install = () => replaceRuntimeConfiguration();\n',
+      ],
+    ]);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('accepts a spec and the test helper', () => {
+    const result = checkFixtures([
+      [
+        'test/support/test-runtime-configuration.ts',
+        "import { replaceRuntimeConfiguration } from '@/config/runtime-configuration';\nexport const install = replaceRuntimeConfiguration;\n",
+      ],
+      [
+        'src/modules/identity/probe/application/probe.spec.ts',
+        "import { replaceRuntimeConfiguration } from '@/config/runtime-configuration';\nexport const install = replaceRuntimeConfiguration;\n",
+      ],
+    ]);
+
+    expect(result.status).toBe(0);
+  });
+});
+
 describe('domain code never imports contracts (#1828)', () => {
   const REJECTED = 'imports a contract from domain';
 

@@ -1084,6 +1084,165 @@ export function collectSourceTextFailures(options) {
     );
   }
 
+  // #1623: `replaceRuntimeConfiguration` replaces the process-wide validated
+  // snapshot, so it belongs to test composition roots only. It shares its
+  // module with production exports, which dependency-cruiser checks per file;
+  // inspect the source to keep the function out of production code.
+  const RUNTIME_CONFIGURATION_MODULE = 'src/config/runtime-configuration';
+  const RUNTIME_REPLACEMENT = 'replaceRuntimeConfiguration';
+  const RUNTIME_REPLACEMENT_REASON = `${RUNTIME_REPLACEMENT} replaces the process-wide validated snapshot and is for test composition roots only (#1623)`;
+
+  /** @param {string} importer @param {string} specifier @returns {boolean} */
+  function isRuntimeConfigurationSpecifier(importer, specifier) {
+    let candidate;
+    if (specifier.startsWith('@/')) {
+      candidate = join(srcDirectory, specifier.slice(2));
+    } else if (specifier.startsWith('.')) {
+      candidate = join(dirname(importer), specifier);
+    } else {
+      return false;
+    }
+    return (
+      relative(root, candidate)
+        .replace(/\\/g, '/')
+        .replace(/\.(?:ts|js)$/, '') === RUNTIME_CONFIGURATION_MODULE
+    );
+  }
+
+  /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @returns {number} */
+  function sourceLine(sourceFile, node) {
+    return (
+      sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
+      1
+    );
+  }
+
+  for (const file of sourceFiles) {
+    const relativePath = relative(root, file).replace(/\\/g, '/');
+    if (
+      !relativePath.startsWith('src/') ||
+      file.endsWith('.spec.ts') ||
+      file === join(srcDirectory, 'config', 'runtime-configuration.ts')
+    ) {
+      continue;
+    }
+
+    const sourceFile = ts.createSourceFile(
+      file,
+      sourceText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    let hasLocalReplacementDeclaration = false;
+    /** @param {import('typescript').Node} node */
+    function inspectLocalReplacementDeclaration(node) {
+      if (
+        (ts.isFunctionDeclaration(node) ||
+          ts.isClassDeclaration(node) ||
+          ts.isVariableDeclaration(node) ||
+          ts.isParameter(node)) &&
+        node.name !== undefined &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === RUNTIME_REPLACEMENT
+      ) {
+        hasLocalReplacementDeclaration = true;
+      }
+      ts.forEachChild(node, inspectLocalReplacementDeclaration);
+    }
+    inspectLocalReplacementDeclaration(sourceFile);
+
+    for (const statement of sourceFile.statements) {
+      const specifier = moduleSpecifierOf(statement);
+      if (
+        specifier === undefined ||
+        !isRuntimeConfigurationSpecifier(file, specifier)
+      ) {
+        continue;
+      }
+
+      if (ts.isImportDeclaration(statement)) {
+        if (statement.importClause?.isTypeOnly === true) continue;
+        const bindings = statement.importClause?.namedBindings;
+        if (bindings !== undefined && ts.isNamespaceImport(bindings)) {
+          fail(
+            `${relativePath}:${sourceLine(sourceFile, bindings)} imports the runtime configuration module as a namespace, which exposes ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+          );
+        }
+        if (bindings !== undefined && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            if (
+              !element.isTypeOnly &&
+              (element.propertyName ?? element.name).text ===
+                RUNTIME_REPLACEMENT
+            ) {
+              fail(
+                `${relativePath}:${sourceLine(sourceFile, element)} imports ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+              );
+            }
+          }
+        }
+      }
+
+      if (ts.isImportEqualsDeclaration(statement)) {
+        fail(
+          `${relativePath}:${sourceLine(sourceFile, statement)} imports the runtime configuration module as a whole, which exposes ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+        );
+      }
+
+      if (ts.isExportDeclaration(statement)) {
+        if (statement.isTypeOnly) continue;
+        if (statement.exportClause === undefined) {
+          fail(
+            `${relativePath}:${sourceLine(sourceFile, statement)} re-exports the runtime configuration module with export *, which exposes ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+          );
+        } else if (ts.isNamespaceExport(statement.exportClause)) {
+          fail(
+            `${relativePath}:${sourceLine(sourceFile, statement)} re-exports the runtime configuration module as a namespace, which exposes ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+          );
+        } else if (ts.isNamedExports(statement.exportClause)) {
+          for (const element of statement.exportClause.elements) {
+            if (
+              !element.isTypeOnly &&
+              (element.propertyName ?? element.name).text ===
+                RUNTIME_REPLACEMENT
+            ) {
+              fail(
+                `${relativePath}:${sourceLine(sourceFile, element)} re-exports ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    /** @param {import('typescript').Node} node */
+    function visitRuntimeConfigurationUsage(node) {
+      if (ts.isCallExpression(node)) {
+        const specifier = moduleSpecifierOf(node);
+        if (
+          specifier !== undefined &&
+          isRuntimeConfigurationSpecifier(file, specifier)
+        ) {
+          fail(
+            `${relativePath}:${sourceLine(sourceFile, node)} loads the runtime configuration module dynamically, which exposes ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+          );
+        }
+        if (
+          ts.isIdentifier(node.expression) &&
+          node.expression.text === RUNTIME_REPLACEMENT &&
+          !hasLocalReplacementDeclaration
+        ) {
+          fail(
+            `${relativePath}:${sourceLine(sourceFile, node)} calls ${RUNTIME_REPLACEMENT}; ${RUNTIME_REPLACEMENT_REASON}`,
+          );
+        }
+      }
+      ts.forEachChild(node, visitRuntimeConfigurationUsage);
+    }
+    visitRuntimeConfigurationUsage(sourceFile);
+  }
+
   const QUERY_VALIDATION_MARKER = 'arch-check:';
 
   /** @param {import('typescript').SourceFile} sourceFile @param {import('typescript').Node} node @param {string[]} lines */
