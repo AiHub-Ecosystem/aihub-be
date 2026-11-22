@@ -9,6 +9,8 @@ import type {
   SpeakingGradingJobOwner,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import type {
+  SpeakingGradingJobAdmission,
+  SpeakingGradingJobAdmissionRelease,
   SpeakingGradingJobCreationOutcome,
   SpeakingGradingJobRepositoryPort,
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
@@ -60,6 +62,21 @@ async function insertJob(
   );
 }
 
+/**
+ * Gives back what admission spent outside Postgres, on every path where the
+ * job row did not commit (holding order: spend, then commit, then compensate).
+ * A failed release is swallowed: the caller must see why it was refused.
+ */
+async function releaseAdmission(
+  release: SpeakingGradingJobAdmissionRelease | undefined,
+): Promise<void> {
+  try {
+    await release?.();
+  } catch {
+    // A compensation failure cannot replace the reason the submission was refused.
+  }
+}
+
 export class PostgresSpeakingGradingJobRepository
   implements SpeakingGradingJobRepositoryPort
 {
@@ -84,7 +101,9 @@ export class PostgresSpeakingGradingJobRepository
   async createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
     readonly monthlyQuota: number | null;
-    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+    readonly admit: (
+      monthlyQuota: number | null,
+    ) => Promise<SpeakingGradingJobAdmission>;
   }): Promise<SpeakingGradingJobCreationOutcome> {
     const unexpiredSince = new Date(
       input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
@@ -111,17 +130,32 @@ export class PostgresSpeakingGradingJobRepository
     }
 
     if (input.monthlyQuota === null) {
-      const admitted = await input.admit(null);
-      if (!admitted) {
+      const admission = await input.admit(null);
+      if (!admission.admitted) {
         return { created: false, existingJobId: input.job.jobId };
       }
-      await this.create(input.job);
+      try {
+        await this.create(input.job);
+      } catch (error) {
+        // The row did not commit, so what admission spent is given back.
+        await releaseAdmission(admission.release);
+        throw error;
+      }
       return { created: true };
     }
 
     const monthlyQuota = input.monthlyQuota;
     let admissionFailed = false;
     let admissionError: unknown;
+    // Held outside the callback: the transaction deadline can reject the
+    // transaction while the callback is still running, so compensation has to
+    // work from either side and run at most once.
+    let admissionRelease: SpeakingGradingJobAdmissionRelease | undefined;
+    const compensate = async (): Promise<void> => {
+      const release = admissionRelease;
+      admissionRelease = undefined;
+      await releaseAdmission(release);
+    };
     try {
       return await organizationTransaction(
         this.client,
@@ -137,22 +171,33 @@ export class PostgresSpeakingGradingJobRepository
             organizationId: input.job.organizationId,
             environment: input.job.environment,
           });
-          let admitted: boolean;
+          let admission: SpeakingGradingJobAdmission;
           try {
-            admitted = await input.admit(Math.max(0, monthlyQuota - inFlight));
+            admission = await input.admit(Math.max(0, monthlyQuota - inFlight));
           } catch (error) {
             admissionFailed = true;
             admissionError = error;
             throw error;
           }
-          if (!admitted) {
+          if (!admission.admitted) {
             return { created: false, existingJobId: input.job.jobId };
           }
-          await insertJob(transaction, input.job);
+          admissionRelease = admission.release;
+          try {
+            await insertJob(transaction, input.job);
+          } catch (error) {
+            // A closed transaction surfaces here, after this callback has
+            // already spent; the outer catch may have run before the spend.
+            await compensate();
+            throw error;
+          }
           return { created: true };
         },
       );
     } catch (error) {
+      // Any throw from here means the row did not commit, including a commit
+      // that failed after the callback returned (transaction timeout).
+      await compensate();
       if (admissionFailed) throw admissionError;
       if (!isKeyUniquenessViolation(error)) {
         if (error instanceof AppError) throw error;

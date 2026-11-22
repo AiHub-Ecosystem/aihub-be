@@ -25,6 +25,7 @@ import {
   type GradedAdmissionPort,
 } from '@/modules/gateway/application/graded-admission.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
+import { LOCAL_DEVELOPMENT_ORGANIZATION_ID } from '@/modules/identity/shared/presentation/request-environment';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
 import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
@@ -38,6 +39,7 @@ import {
   SPEAKING_UPLOAD_CEILING,
 } from '@/modules/speaking/application/speaking-upload-ceiling';
 import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-audio-asset';
+import { registerSpeakingJsonBodyCancellation } from '@/modules/speaking/public/fastify-speaking-json-body.hook';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { aiSpeakingFixture } from '../../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
@@ -247,6 +249,7 @@ describe('Speaking grading HTTP flow', () => {
     registerBodySizeGuard(app.getHttpAdapter().getInstance());
     registerRequestLifecycle(app.getHttpAdapter().getInstance());
     registerSecurityHeaders(app.getHttpAdapter().getInstance());
+    registerSpeakingJsonBodyCancellation(app.getHttpAdapter().getInstance());
     app
       .getHttpAdapter()
       .getInstance()
@@ -385,12 +388,12 @@ describe('Speaking grading HTTP flow', () => {
 
   describe('customer recording URL', () => {
     const SELF = {
-      organizationId: 'local-development',
+      organizationId: LOCAL_DEVELOPMENT_ORGANIZATION_ID,
       endUserId: 'local-development',
       environment: 'production',
     } as const;
     const RECORDING_ID = 'aud_01ARZ3NDEKTSV4RRFFQ69G5FAV';
-    const RECORDING_URL = `https://s3.wispace.app/aihub-speaking-recordings/orgs/local-development/speaking/${RECORDING_ID}/original?X-Amz-Signature=abc`;
+    const RECORDING_URL = `https://s3.wispace.app/aihub-speaking-recordings/orgs/${LOCAL_DEVELOPMENT_ORGANIZATION_ID}/speaking/${RECORDING_ID}/original?X-Amz-Signature=abc`;
 
     function seedRecording(
       owner: Parameters<typeof speakingAsset>[0],
@@ -515,7 +518,7 @@ describe('Speaking grading HTTP flow', () => {
       'foreign_tenant',
     ],
     [
-      'https://s3.wispace.app/aihub-user-assets/orgs/local-development/avatar.webp',
+      `https://s3.wispace.app/aihub-user-assets/orgs/${LOCAL_DEVELOPMENT_ORGANIZATION_ID}/avatar.webp`,
       'unapproved_bucket',
     ],
   ] as const)(

@@ -737,6 +737,42 @@ describe('JwksKeyProvider', () => {
     ).resolves.toEqual(jwks);
   });
 
+  it('keeps fetched keys usable after a failed cache write', async () => {
+    const cache = new FakeCache();
+    const stale = { keys: [{ ...jwks.keys[0], kid: 'old' }] };
+    cache.entry = { jwks: stale, freshUntil: 1_000, staleUntil: 3_000 };
+    cache.failSet = true;
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => new Response(JSON.stringify(jwks)),
+      publicLookup(),
+      () => 2_000,
+    );
+
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: remoteConfig,
+        forceRefresh: true,
+        rejectOnRefreshFailure: true,
+      }),
+    ).resolves.toEqual(jwks);
+
+    // The cache still holds the stale entry; later requests must not fall back
+    // to the keys the forced reload replaced.
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+    ).resolves.toEqual(jwks);
+    await expect(
+      provider.resolve({
+        organizationId: 'org_acme',
+        config: remoteConfig,
+        forceRefresh: true,
+        rejectOnRefreshFailure: true,
+      }),
+    ).resolves.toEqual(jwks);
+  });
+
   it('validates a URL with one protected fetch while bypassing fresh cache data', async () => {
     const cache = new FakeCache();
     cache.entry = {
@@ -857,6 +893,32 @@ describe('JwksKeyProvider', () => {
       () => 2_000,
     );
 
+    await expect(
+      provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
+    ).resolves.toEqual(jwks);
+  });
+
+  it('rejects a strict forced refresh instead of serving stale keys', async () => {
+    const cache = new FakeCache();
+    cache.entry = { jwks, freshUntil: 1_000, staleUntil: 3_000 };
+    const provider = new JwksKeyProvider(
+      cache,
+      async () => Promise.reject(new Error('provider down')),
+      publicLookup(),
+      () => 2_000,
+    );
+    const strict = {
+      organizationId: 'org_acme',
+      config: remoteConfig,
+      forceRefresh: true,
+      rejectOnRefreshFailure: true,
+    };
+
+    await expect(provider.resolve(strict)).rejects.toBeInstanceOf(AppError);
+    await expect(provider.resolve(strict)).rejects.toMatchObject({
+      retryable: true,
+    });
+    // The ordinary path still serves the stale keys.
     await expect(
       provider.resolve({ organizationId: 'org_acme', config: remoteConfig }),
     ).resolves.toEqual(jwks);

@@ -182,7 +182,11 @@ its email is verified, and sends a verification link to that address.
   username and password, makes every earlier verification link unusable, and
   sends a new one. The answer is the same `201` a new email gets. Only an email
   whose account is already active, or a username another account holds,
-  answers `409 AUTH_IDENTITY_UNAVAILABLE`. One limit: an address can receive at
+  answers `409 AUTH_IDENTITY_UNAVAILABLE`. That difference is deliberate: this
+  endpoint confirms that an address already has an AIHUB account, while login,
+  password recovery, and verification resend do not. Do not build a flow that
+  depends on registration hiding it ([ADR-0178](adr/0178-registration-may-confirm-an-active-account.md)).
+  One limit: an address can receive at
   most nine authentication emails a day. When that ceiling is full, a
   registration answers `email_delivery_status: "suppressed"` and guarantees
   nothing was sent — for an email that already has a pending registration this
@@ -930,6 +934,22 @@ text that AIHUB refuses with `400 INVALID_REQUEST`. Check these fields with
 `String.length` or the equivalent UTF-16 length in your language, for example
 `len(text.encode("utf-16-le")) // 2` in Python.
 
+### Model-generated text in results
+
+The feedback an AI Service writes is model-generated, and it can repeat what the
+learner wrote. This covers fields such as `band_reason`, `strengths`,
+`explanation`, `improved_version`, `summary_vi`, and the Speaking transcript.
+Treat every such field as untrusted plain text: render it as text, never as HTML
+or markup, and never use it to build a URL, a query, or a command.
+
+AIHUB removes control characters from these fields before it answers: the C0
+and C1 controls other than tab, line feed, and carriage return, and the
+bidirectional controls U+202A to U+202E and U+2066 to U+2069. It also bounds
+their length. Feedback, explanations, and labels are at most 4,000 units; a
+quotation or a transcript is at most 20,000 units. A unit is a UTF-16 code unit,
+as in "Text length limits". A response with a longer text, or with a body larger
+than its operation's size limit, is refused as `502 AI_SERVICE_CONTRACT_VIOLATION`.
+
 ### A worked grading call
 
 Supply the prompt and essay from your own application:
@@ -1135,6 +1155,14 @@ and `improvement_vi`; reference timings can be `null`. A question result also
 has `data.transcript` with `text`, `stats.word_count`,
 `stats.speaking_seconds`, and `tokens` containing `index`, `text`, `start_ms`,
 and `end_ms` (either timing can be `null`). Where the AI service has no value, the field is `null`: `data.meta.test_id` when the request named no test; on a question result `data.meta.part_result_id` when it named no Part, and `data.transcript.stats.word_count` and `speaking_seconds` for a recording without speech. On a Part or Test result, `data.meta.total_speaking_seconds` is `null` when the graded recordings held no speech. In `data.criteria.*.diagnostics`, a finding's `error_codes`, `explain_vi`, `improvement` and `improvement_vi` can be `null`.
+
+Every Speaking v2 result also has `data.error_priority`, an ordered list of up
+to three provider-ranked entries. Each entry contains `rank`, `group`, `code`,
+`name_en`, `name_vi`, and `reason_vi`. An empty list from the provider means it
+reported no priority errors. A legacy asynchronous result persisted before the
+field existed is also returned with an empty list for compatibility; in that
+case, priority data is unavailable. Treat `group` and `code` as open-ended
+strings so new provider values remain usable.
 
 Compared with `/v1`, v2 does not return `scorability`, `relevance`,
 `pause_count`, `duration_seconds`, `grammar_errors`, `vocabulary_upgrades`,

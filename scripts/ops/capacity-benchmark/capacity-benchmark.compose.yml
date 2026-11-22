@@ -97,7 +97,7 @@ services:
       DOWNSTREAM_AI_SPEAKING_SECRET_KEY: benchmark-speaking-secret
       RESEND_API_KEY: benchmark-no-send
       RESEND_FROM: "AIHUB Benchmark <benchmark@example.invalid>"
-      AIHUB_WEB_SESSION_CLIENT_SECRET: benchmark-web-session-secret
+      AIHUB_WEB_SESSION_CLIENT_SECRET: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
       AIHUB_USER_ACCESS_JWT_KID: benchmark-user-access-2026
       AIHUB_AUTH_MFA_CURRENT_KEY_ID: benchmark-mfa-2026
       AIHUB_AUTH_MFA_KEYS: '{"benchmark-mfa-2026":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}'

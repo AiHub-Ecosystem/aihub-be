@@ -24,6 +24,10 @@ import {
   type UserAccessTokenRevocationRecordPort,
 } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
 import {
+  type DpopGuardPolicy,
+  USER_ACCESS_DPOP_POLICY,
+} from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
+import {
   USER_ACCESS_TOKEN_VERIFIER,
   type UserAccessSession,
   type UserAccessTokenVerifierPort,
@@ -47,11 +51,33 @@ function requiredToken(): AppError {
   });
 }
 
-function challenge(context: ExecutionContext): void {
+const BEARER_CHALLENGE = 'Bearer';
+const DPOP_CHALLENGE = 'DPoP algs="ES256"';
+
+function challenge(
+  context: ExecutionContext,
+  value: string = BEARER_CHALLENGE,
+): void {
   const response = context
     .switchToHttp()
     .getResponse<FastifyReply | undefined>();
-  response?.header('WWW-Authenticate', 'Bearer');
+  response?.header('WWW-Authenticate', value);
+}
+
+function replayStateUnavailable(cause: unknown): AppError {
+  return new AppError({
+    code: 'REDIS_UNAVAILABLE',
+    message: 'User access controls are temporarily unavailable',
+    retryable: true,
+    diagnostic: 'dpop-replay-cache-unavailable',
+    cause,
+  });
+}
+
+/** The request URL the proof must name: trusted-proxy scheme and host, path only. */
+function proofTargetUrl(request: FastifyRequest): string {
+  const path = (request.url ?? '').split(/[?#]/u, 1)[0] ?? '';
+  return `${request.protocol}://${request.host}${path}`;
 }
 
 function hasAlternateTokenSource(request: FastifyRequest): boolean {
@@ -81,6 +107,8 @@ export class UserAccessJwtGuard implements CanActivate {
     >,
     @Inject(USER_ACCESS_TOKEN_REVOCATION_RECORD)
     private readonly revocations: UserAccessTokenRevocationRecordPort,
+    @Inject(USER_ACCESS_DPOP_POLICY)
+    private readonly dpop: DpopGuardPolicy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -102,13 +130,16 @@ export class UserAccessJwtGuard implements CanActivate {
 
     const parts = header.trim().split(/\s+/u);
     const token = parts[1];
+    const scheme = parts[0]?.toLowerCase();
+    const dpopScheme = scheme === 'dpop' && this.dpop.mode !== 'off';
+    const failure = this.dpop.mode === 'enforce' ? DPOP_CHALLENGE : undefined;
     if (
       parts.length !== 2 ||
-      parts[0]?.toLowerCase() !== 'bearer' ||
+      (scheme !== 'bearer' && !dpopScheme) ||
       token === undefined ||
       token.split('.').length !== 3
     ) {
-      challenge(context);
+      challenge(context, failure);
       throw invalidUserAccessToken();
     }
 
@@ -116,7 +147,25 @@ export class UserAccessJwtGuard implements CanActivate {
     try {
       verified = await this.verifier.verify(token);
     } catch {
-      challenge(context);
+      challenge(context, failure);
+      throw invalidUserAccessToken();
+    }
+
+    // Counted before any refusal below, so Bearer use that `enforce` turns away
+    // still shows up as traffic that has not migrated.
+    this.dpop.recordUse?.({
+      scheme: dpopScheme ? 'dpop' : 'bearer',
+      session: verified.session?.kind ?? 'none',
+    });
+
+    if (dpopScheme) {
+      await this.verifyProof(context, request, token, verified);
+    } else if (
+      this.dpop.mode === 'enforce' &&
+      verified.session?.kind === 'web'
+    ) {
+      // A web-session token must prove possession of its key; Bearer no longer qualifies.
+      challenge(context, DPOP_CHALLENGE);
       throw invalidUserAccessToken();
     }
 
@@ -153,5 +202,35 @@ export class UserAccessJwtGuard implements CanActivate {
       ...(verified.session === undefined ? {} : { session: verified.session }),
     };
     return true;
+  }
+
+  private async verifyProof(
+    context: ExecutionContext,
+    request: FastifyRequest,
+    accessToken: string,
+    verified: VerifiedUserAccessToken,
+  ): Promise<void> {
+    const proof = request.headers['dpop'];
+    if (typeof proof !== 'string' || verified.jkt === undefined) {
+      challenge(context, DPOP_CHALLENGE);
+      throw invalidUserAccessToken();
+    }
+    try {
+      await this.dpop.verifier.verify({
+        proof,
+        method: request.method,
+        url: proofTargetUrl(request),
+        accessToken,
+        expectedJkt: verified.jkt,
+        issuer: verified.issuer,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        challenge(context, DPOP_CHALLENGE);
+        throw error;
+      }
+      // Replay state could not be read: refuse rather than trust an unchecked proof.
+      throw replayStateUnavailable(error);
+    }
   }
 }

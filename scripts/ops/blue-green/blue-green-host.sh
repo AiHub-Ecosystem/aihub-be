@@ -273,7 +273,10 @@ service_for_slot() {
 active_slot() {
   local tier="$1" config="$2"
   local upstreams=()
-  mapfile -t upstreams < <(sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+|unix:[^;[:space:]]+);.*#\1#p' "$config" | sort -u)
+  mapfile -t upstreams < <(sed -nE \
+    -e 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+)(/[^;[:space:]]*)?;.*#\1#p' \
+    -e 's#^[[:space:]]*proxy_pass http://(unix:[^[:space:];:]+)(:/[^;[:space:]]*)?;.*#\1#p' \
+    "$config" | sort -u)
   if [[ "${#upstreams[@]}" -ne 1 ]]; then
     printf '%s nginx config must have exactly one active upstream\n' "$tier" >&2
     return 1
@@ -702,13 +705,22 @@ slot_target() {
 # keep a policy that is not the current template: the live one, or the one a
 # release was serving with.
 retarget_config() {
-  local tier="$1" slot="$2" source="$3" output="$4" target
+  local tier="$1" slot="$2" source="$3" output="$4" target separator=
   if ! grep -Eq '^[[:space:]]*proxy_pass[[:space:]]+http://[^;[:space:]]+;' "$source"; then
     printf 'retained %s nginx config %s has no upstream\n' "$tier" "$source" >&2
     return 1
   fi
   target="$(slot_target "$tier" "$slot")" || return 1
-  sed -E "s#(proxy_pass[[:space:]]+http://)[^;[:space:]]+;#\\1${target};#g" "$source" >"$output"
+  # Keep the optional URI that a proxy_pass may carry, such as the fixed
+  # framework-error path. A Unix-socket target needs its colon before that URI.
+  if [[ "$target" == unix:* ]]; then
+    separator=:
+  fi
+  sed -E \
+    -e "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+(/[^;[:space:]]*);#\\1${target}${separator}\\2;#g" \
+    -e "s#(proxy_pass[[:space:]]+http://)unix:[^[:space:];:]+:(/[^;[:space:]]*);#\\1${target}${separator}\\2;#g" \
+    -e "s#(proxy_pass[[:space:]]+http://)(127\\.0\\.0\\.1:[0-9]+|unix:[^[:space:];:]+);#\\1${target};#g" \
+    "$source" >"$output"
 }
 
 # Which nginx config a tier is rendered from: an override, else the live config
@@ -740,13 +752,20 @@ render_config() {
     default_port=3022
     template=ops/nginx/sandbox.conf
   fi
-  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+);.*#\1#p' "$template" | sort -u)
+  mapfile -t ports < <(sed -nE 's#^[[:space:]]*proxy_pass http://127\.0\.0\.1:([0-9]+)(/[^;[:space:]]*)?;.*#\1#p' "$template" | sort -u)
   if [[ "${#ports[@]}" -ne 1 || "${ports[0]}" != "$default_port" ]]; then
     printf '%s nginx source must use its slot-A port %s\n' "$tier" "$default_port" >&2
     return 1
   fi
   target="$(slot_target "$tier" "$slot")" || return 1
-  sed -E "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+;#\\1${target};#g" "$template" >"$output"
+  if [[ "$target" == unix:* ]]; then
+    sed -E \
+      -e "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+(/[^;[:space:]]*);#\\1${target}:\\2;#g" \
+      -e "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+;#\\1${target};#g" \
+      "$template" >"$output"
+  else
+    sed -E "s#(proxy_pass[[:space:]]+http://)127\\.0\\.0\\.1:[0-9]+#\\1${target}#g" "$template" >"$output"
+  fi
 }
 
 apply_slots() {

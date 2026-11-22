@@ -31,4 +31,29 @@ describe('createRedisClient', () => {
       client.disconnect();
     }
   });
+
+  it('never replays a command after a reconnect unless the caller asks', () => {
+    const client = createRedisClient('redis://127.0.0.1:1/0', {
+      commandTimeoutMs: 400,
+    });
+
+    try {
+      expect(client.options.autoResendUnfulfilledCommands).toBe(false);
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  it('passes lazyConnect through to the driver', () => {
+    const client = createRedisClient('redis://127.0.0.1:1/0', {
+      commandTimeoutMs: 400,
+      lazyConnect: true,
+    });
+
+    try {
+      expect(client.options.lazyConnect).toBe(true);
+    } finally {
+      client.disconnect();
+    }
+  });
 });

@@ -50,6 +50,10 @@
     "promise/always-return": "error",
     "import/no-duplicates": ["error", { "prefer-inline": true }],
     "import/no-named-as-default-member": "error",
+    // `.claude/rules/typescript.md`: Node built-ins use the `node:` protocol.
+    // The `node` plugin is loaded above but enables no rule by itself; this is
+    // the one that states the rule (#1832).
+    "unicorn/prefer-node-protocol": "error",
     // Type-aware rules for #110 — gateway defect class. `no-floating-promises`,
     // `no-misused-promises`, and `await-thenable` are the direct gateway failure
     // modes. `bun run lint` checks the whole repo; pre-commit checks staged
@@ -104,6 +108,31 @@
       "rules": {
         "complexity": "off",
         "max-depth": "off"
+      }
+    },
+    {
+      // `.claude/rules/security.md` leaves redaction to check:log-redaction;
+      // this rule keeps request-serving code on the structured logger. It is
+      // scoped to `src` because `scripts/`, `test/` and `ops/` are terminal
+      // tools, and to the application modules because the CLI and the two
+      // process-entry files below print before or after the logger exists.
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "eslint/no-console": "error"
+      }
+    },
+    {
+      // Operator CLIs report to the terminal; there is no logger to reach.
+      "files": ["src/cli/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    },
+    {
+      // Must print before the Nest logger exists, or after it has shut down.
+      "files": ["src/main.ts", "src/config/load-local-environment.ts"],
+      "rules": {
+        "eslint/no-console": "off"
       }
     },
     {

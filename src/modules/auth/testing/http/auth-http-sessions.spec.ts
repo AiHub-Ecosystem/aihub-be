@@ -370,6 +370,37 @@ describe('local auth HTTP boundary - sessions, login, and refresh', () => {
     expect(logoutAgain.payload).toBe('');
   });
 
+  it('refuses to clear a presented refresh cookie when another cookie arrives', async () => {
+    seedActiveAccount();
+    const login = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: { email: EMAIL, password: 'correct password' },
+    });
+    const refreshCookie = cookieOf(login);
+
+    const logout = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      headers: { cookie: `${refreshCookie}; unrelated=1` },
+    });
+
+    // Refusing is the safe direction: a `204` that cleared the cookie without
+    // revoking the family would claim the user was signed out.
+    expect(logout.statusCode).toBe(400);
+    expect(logout.json<unknown>()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+    expect(logout.headers['set-cookie']).toBeUndefined();
+    const stillUsable = await c.app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { cookie: refreshCookie },
+    });
+    expect(stillUsable.statusCode).toBe(200);
+  });
+
   it('rejects alternate refresh sources and non-empty bodies', async () => {
     const alternate = await c.app.inject({
       method: 'POST',

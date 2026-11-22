@@ -32,6 +32,7 @@ import {
   PASSWORD_HASHER,
   type PasswordHasherPort,
 } from '@/modules/auth/local-credentials/application/password-hasher.port';
+import { REGISTRATION_ATTEMPT_COUNTER } from '@/modules/auth/local-credentials/application/registration-attempt-counter.port';
 import {
   AUTH_MFA_SERVICE,
   type AuthMfaServicePort,
@@ -77,6 +78,10 @@ import {
   REFRESH_TOKEN_ISSUER,
   type RefreshTokenIssuerPort,
 } from '@/modules/auth/web-sessions/application/refresh-token.port';
+import {
+  type DpopGuardPolicy,
+  USER_ACCESS_DPOP_POLICY,
+} from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 import {
   USER_ACCESS_TOKEN_ISSUER,
   USER_ACCESS_TOKEN_VERIFIER,
@@ -376,6 +381,10 @@ export async function createLocalAuthTestContext(
   configureFastify?: (fastify: FastifyInstance) => void,
   clientSecret?: string,
   revocationRecordOverride?: UserAccessTokenRevocationRecordPort,
+  dpopPolicy: DpopGuardPolicy = {
+    mode: 'off',
+    verifier: { verify: async () => undefined },
+  },
 ): Promise<LocalAuthTestContext> {
   const state = createInMemoryAuthState();
   const userAccounts = new InMemoryUserAccountAdapter(state);
@@ -408,6 +417,8 @@ export async function createLocalAuthTestContext(
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
+    .overrideProvider(REGISTRATION_ATTEMPT_COUNTER)
+    .useValue({ count: async () => undefined })
     .overrideProvider(USER_ACCOUNT_REPOSITORY)
     .useValue(userAccounts)
     .overrideProvider(VERIFICATION_TOKEN_REPOSITORY)
@@ -457,6 +468,8 @@ export async function createLocalAuthTestContext(
     .useValue(securityEvents)
     .overrideProvider(WEB_SESSION_CLIENT_SECRET)
     .useValue({ resolve: () => clientSecret })
+    .overrideProvider(USER_ACCESS_DPOP_POLICY)
+    .useValue(dpopPolicy)
     .compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(

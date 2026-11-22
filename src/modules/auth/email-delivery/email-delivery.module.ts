@@ -13,6 +13,10 @@ import {
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
 import { AuthRateLimitModule } from '@/modules/auth/rate-limit/public/auth-rate-limit.module';
 import {
+  assertRetainedKeyVersionsCoverLiveWindows,
+  pruneExpiredAddressCounterWindows,
+} from '@/modules/auth/shared/infrastructure/address-window-counter';
+import {
   EMAIL_DAILY_BUDGET_PRISMA_CLIENT,
   PersistenceModule,
   type PrismaClientHolder,
@@ -66,10 +70,6 @@ import { EmailOutbox } from './application/outbox/email-outbox';
 import { EmailOutboxBackpressureGate } from './application/outbox/email-outbox-backpressure.gate';
 import { EmailDeliveryPoller } from './application/poller/email-delivery-poller';
 import { emailDailySendBudgetLimits } from './application/send-policy/email-send-daily-budget.policy';
-import {
-  assertRetainedKeyVersionsCoverLiveWindows,
-  pruneExpiredAuthEmailRecipientLimits,
-} from './infrastructure/auth-email-recipient-limit';
 import {
   EMAIL_OUTBOX_RECONCILE_INTERVAL_MS,
   EmailOutboxPollerScheduler,
@@ -283,7 +283,7 @@ registerEmailDeliveryMetrics(EMAIL_DELIVERY_KINDS, EMAIL_BACKPRESSURE_KINDS);
           enabled: configuration.NODE_ENV !== 'test',
           walDispatchEnabled: connections.emailWalDatabaseUrl !== undefined,
           pruneExpiredRecipientLimits: () =>
-            pruneExpiredAuthEmailRecipientLimits(runtime.prisma, new Date()),
+            pruneExpiredAddressCounterWindows(runtime.prisma, new Date()),
           cancellations: () => store.cancellationTimestamps(),
           dailyBudget: () => dailyBudget.usage(),
           walSlotHealth: () => store.readWalSlotHealth(),

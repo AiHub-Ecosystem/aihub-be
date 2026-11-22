@@ -13,7 +13,9 @@ const TEMPLATE_PORTS = Object.freeze({ production: 3021, sandbox: 3022 });
 /** @param {string} config @returns {number[]} */
 function portsInConfig(config) {
   return Array.from(
-    config.matchAll(/proxy_pass\s+http:\/\/127\.0\.0\.1:(\d+)\s*;/g),
+    config.matchAll(
+      /proxy_pass\s+http:\/\/127\.0\.0\.1:(\d+)(?:\/[^\s;]*)?\s*;/g,
+    ),
     (match) => Number(match[1]),
   );
 }
@@ -50,8 +52,8 @@ function renderNginxConfig(template, tier, slot) {
   }
 
   return template.replace(
-    /proxy_pass(\s+)http:\/\/127\.0\.0\.1:\d+(\s*;)/g,
-    `proxy_pass$1http://127.0.0.1:${targetPort}$2`,
+    /proxy_pass(\s+)http:\/\/127\.0\.0\.1:\d+/g,
+    `proxy_pass$1http://127.0.0.1:${targetPort}`,
   );
 }
 

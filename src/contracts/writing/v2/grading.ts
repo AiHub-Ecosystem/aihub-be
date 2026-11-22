@@ -1,5 +1,12 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import { isRecord } from '@/common/is-record';
+import {
+  MODEL_TEXT_MAX_LENGTH,
+  ModelQuote,
+  ModelText,
+} from '@/contracts/model-text';
+
 import {
   BandSchema,
   CriterionIdSchema,
@@ -52,32 +59,32 @@ export const WritingErrorPrioritySchema = Type.Object(
   {
     rank: Type.Integer({ minimum: 1, maximum: 3 }),
     group: WritingErrorPriorityGroupSchema,
-    code: Type.String(),
-    name_en: Type.String(),
-    name_vi: Type.String(),
-    reason_vi: Type.String(),
+    code: ModelText(),
+    name_en: ModelText(),
+    name_vi: ModelText(),
+    reason_vi: ModelText(),
   },
   { additionalProperties: false },
 );
 
 const ErrorSchema = Type.Object(
   {
-    quote: Type.String(),
+    quote: ModelQuote(),
     // A standard code such as `LR03`. A string in both captures; opaque, so a
     // provider rename is not a breaking change (ADR-0143 decision 3).
-    error_codes: Type.String(),
-    error_name: Type.String(),
-    explanation: Type.String(),
-    improved_version: Type.String(),
+    error_codes: ModelText(),
+    error_name: ModelText(),
+    explanation: ModelText(),
+    improved_version: ModelQuote(),
   },
   { additionalProperties: false },
 );
 
 const SuggestionSchema = Type.Object(
   {
-    quote: Type.String(),
-    explanation: Type.String(),
-    improved_version: Type.String(),
+    quote: ModelQuote(),
+    explanation: ModelText(),
+    improved_version: ModelQuote(),
   },
   { additionalProperties: false },
 );
@@ -86,18 +93,18 @@ const CriterionSchema = Type.Object(
   {
     id: CriterionIdSchema,
     band: BandSchema,
-    band_reason: Type.String(),
-    strengths: Type.Array(Type.String()),
-    areas_for_improvement: Type.Array(Type.String()),
+    band_reason: ModelText(),
+    strengths: Type.Array(ModelText()),
+    areas_for_improvement: Type.Array(ModelText()),
     errors: Type.Array(ErrorSchema),
     suggestions: Type.Array(SuggestionSchema),
-    feedback_detail: Type.Array(Type.String()),
+    feedback_detail: Type.Array(ModelText()),
   },
   { additionalProperties: false },
 );
 
 const MicroComment = Type.Object(
-  { quote: Type.String(), explanation: Type.String() },
+  { quote: ModelQuote(), explanation: ModelText() },
   { additionalProperties: false },
 );
 
@@ -108,8 +115,8 @@ const MicroComment = Type.Object(
  */
 const MicroExerciseSchema = Type.Object(
   {
-    prompt: Type.String(),
-    question_type: Type.String(),
+    prompt: ModelText(),
+    question_type: ModelText(),
     comments: Type.Array(MicroComment),
   },
   { additionalProperties: false },
@@ -123,18 +130,18 @@ export const WritingV2GradeResponseSchema = Type.Object(
       {
         summary: Type.Object(
           {
-            overall: Type.String(),
-            detail: Type.Array(Type.String()),
-            cta: Type.String(),
+            overall: ModelText(),
+            detail: Type.Array(ModelText()),
+            cta: ModelText(),
           },
           { additionalProperties: false },
         ),
         progress: Type.Object(
           {
-            status: Type.String(),
-            error_recur: Type.Array(Type.String()),
-            error_impro: Type.Array(Type.String()),
-            error_new: Type.Array(Type.String()),
+            status: ModelText(),
+            error_recur: Type.Array(ModelText()),
+            error_impro: Type.Array(ModelText()),
+            error_new: Type.Array(ModelText()),
           },
           { additionalProperties: false },
         ),
@@ -142,6 +149,8 @@ export const WritingV2GradeResponseSchema = Type.Object(
       { additionalProperties: false },
     ),
     error_priority: Type.Array(WritingErrorPrioritySchema, { maxItems: 3 }),
+    // TypeBox turns a record key schema into a pattern and drops its length, so
+    // the keys carry no `maxLength` here; the adapter bounds them (#377).
     data_micro: Type.Record(
       Type.String(),
       Type.Record(Type.String(), MicroExerciseSchema),
@@ -149,6 +158,17 @@ export const WritingV2GradeResponseSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+/** Returns whether both open-ended data_micro key levels fit the text limit. */
+export function hasBoundedWritingV2DataMicroKeys(dataMicro: unknown): boolean {
+  if (!isRecord(dataMicro)) return false;
+  return Object.entries(dataMicro).every(
+    ([trait, errors]) =>
+      trait.length <= MODEL_TEXT_MAX_LENGTH &&
+      isRecord(errors) &&
+      Object.keys(errors).every((code) => code.length <= MODEL_TEXT_MAX_LENGTH),
+  );
+}
 
 /** Read-only idempotency shape for completed grades written before `error_priority`. */
 export const WritingV2StoredGradeResponseSchema = Type.Object(

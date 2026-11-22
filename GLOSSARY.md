@@ -8,6 +8,12 @@ designs that are pending implementation.
 
 ## Language
 
+**Deploy identity**:
+The SSH identity used by continuous deployment to release AIHUB. It can update
+AIHUB workloads but is not trusted with host-root authority; host maintenance
+and shared-host configuration remain operator responsibilities.
+_Avoid_: root deploy account
+
 **Business module**:
 A capability area of the application under `src/modules`: auth, gateway,
 idempotency, identity, metering, secrets, speaking, or writing. A module owns its

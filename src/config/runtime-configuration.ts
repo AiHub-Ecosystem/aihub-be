@@ -133,6 +133,17 @@ const fields = {
     requiredIn: MODES,
     format: 'url',
   },
+  /**
+   * DPoP sender-constraining of web-session User Access JWTs: `off` accepts
+   * Bearer only, `verify` also accepts DPoP and keeps Bearer, `enforce`
+   * requires DPoP for web-session tokens. Turn on `enforce` only after Bearer
+   * traffic from the Customer Web is gone.
+   */
+  AIHUB_DPOP_MODE: {
+    kind: 'enum',
+    values: ['off', 'verify', 'enforce'],
+    defaultValue: 'off',
+  },
   AIHUB_PRODUCTION_HOST: {
     kind: 'string',
     format: 'hostname',
@@ -381,6 +392,7 @@ const runtimeFieldGroups = defineRuntimeFieldGroups({
     'AIHUB_DATABASE_POOLER_ENABLED',
     'AIHUB_EMAIL_VERIFICATION_REQUIRES_PASSWORD',
     'AIHUB_USER_ACCESS_ISSUER',
+    'AIHUB_DPOP_MODE',
     'AIHUB_PRODUCTION_HOST',
     'AIHUB_TRUSTED_PROXY_IP',
     'AIHUB_LISTEN_SOCKET',

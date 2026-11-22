@@ -27,12 +27,13 @@ import {
 
 const ESSAY_MARKER = 'dispatch-attempt-crash-essay-marker';
 
-function sendGradingRequest(
+async function sendGradingRequest(
   appUrl: string,
   apiKey: string,
-  assertion: string,
+  signAssertion: () => Promise<string>,
   idempotencyKey: string,
 ): Promise<HttpAnswer | undefined> {
+  const assertion = await signAssertion();
   return sendRequest(appUrl, {
     path: WRITING_TASK1_PATH,
     headers: {
@@ -87,15 +88,13 @@ describe('durable dispatch-attempt evidence', () => {
       baseline.find((sample) => sample.operation === 'writing.task1.grade')
         ?.count ?? 0;
     await baselineRepository.close();
-    const { organizationId, apiKey, assertion } = await seedGradingOrganization(
-      pool,
-      {
+    const { organizationId, apiKey, signAssertion } =
+      await seedGradingOrganization(pool, {
         label: 'dispatch_crash',
         maxConcurrent: 20,
         monthlyQuota: 10,
         hardStop: true,
-      },
-    );
+      });
     crashOrganizationId = organizationId;
     let resolveProviderReceived!: () => void;
     const providerReceived = new Promise<void>((resolve) => {
@@ -114,7 +113,7 @@ describe('durable dispatch-attempt evidence', () => {
     const customerResponse = sendGradingRequest(
       dispatchWorker.url,
       apiKey.raw,
-      assertion,
+      signAssertion,
       `dispatch-crash-${ulid()}`,
     );
     let dispatchWaitTimer: NodeJS.Timeout | undefined;

@@ -3,6 +3,7 @@ import type { TSchema } from '@sinclair/typebox';
 import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { findPublicApiMajor } from '@/catalog/public-api-majors';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
+import { answeredStatusesByRoute } from '../../test/support/route-handler-statuses';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 import { extendPublicResponseSchemas } from './openapi-response-schemas';
@@ -76,17 +77,18 @@ describe('conditional success statuses', () => {
     ),
   );
 
-  it('covers every runtime alternate the controllers answer', () => {
+  // The new catalog gate proves no handler answers a status its route leaves
+  // undeclared. This proves the other direction: every declared alternate is a
+  // branch a handler really takes, not a document-only promise.
+  it('publishes no alternate a handler never answers', async () => {
+    const answered = await answeredStatusesByRoute();
+
     expect(
-      ALTERNATES.map(([routeId, status]) => `${routeId} ${status}`).sort(),
-    ).toEqual([
-      'auth.login 202',
-      'auth.verify_email 204',
-      'auth.web_sessions.create 202',
-      'auth.web_sessions.verification 204',
-      'me.avatar.uploads.complete 200',
-      'speaking.audioUploads.complete 200',
-    ]);
+      ALTERNATES.filter(
+        ([routeId, status]) =>
+          !(answered.get(routeId)?.statuses ?? []).includes(status),
+      ).map(([routeId, status]) => `${routeId} ${status}`),
+    ).toEqual([]);
   });
 
   it.each(ALTERNATES)(

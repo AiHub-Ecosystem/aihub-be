@@ -94,9 +94,9 @@ case "$(uname -s)" in
   MINGW* | MSYS*) fetch_shim="$(cygpath -w "$fetch_shim")" ;;
 esac
 
-printf 'server {\n  location / {\n    proxy_pass http://127.0.0.1:3021;\n  }\n}\n' \
+printf 'server {\n  location / {\n    proxy_pass http://127.0.0.1:3021;\n  }\n  location = /__aihub/bad-request {\n    proxy_pass http://127.0.0.1:3021/v1/%%E0%%A4%%A;\n  }\n}\n' \
   >"$config_dir/aihub-api.conf"
-printf 'server {\n  location / {\n    proxy_pass http://127.0.0.1:3022;\n  }\n}\n' \
+printf 'server {\n  location / {\n    proxy_pass http://127.0.0.1:3022;\n  }\n  location = /__aihub/bad-request {\n    proxy_pass http://127.0.0.1:3022/v1/%%E0%%A4%%A;\n  }\n}\n' \
   >"$config_dir/sandbox.conf"
 
 # Redirect only the two host nginx paths so the real status script can run

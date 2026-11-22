@@ -76,6 +76,8 @@ x-app-environment: &app-environment
   AIHUB_EMAIL_DAILY_SEND_BUDGET: ${AIHUB_EMAIL_DAILY_SEND_BUDGET:?AIHUB_EMAIL_DAILY_SEND_BUDGET is required}
   AIHUB_TRUSTED_PROXY_IP: ${AIHUB_TRUSTED_PROXY_IP:?AIHUB_TRUSTED_PROXY_IP is required}
   AIHUB_USER_ACCESS_ISSUER: ${AIHUB_USER_ACCESS_ISSUER:?AIHUB_USER_ACCESS_ISSUER is required}
+  # Applies to both tiers and every blue-green application slot.
+  AIHUB_DPOP_MODE: ${AIHUB_DPOP_MODE:-off}
   # Keep both bindings in the shared anchor so every process can validate host
   # collisions. The request resolver admits only hosts allowed for its scope.
   AIHUB_PRODUCTION_HOST: ${AIHUB_PRODUCTION_HOST:?AIHUB_PRODUCTION_HOST is required}

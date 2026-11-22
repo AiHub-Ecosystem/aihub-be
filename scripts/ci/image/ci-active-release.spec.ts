@@ -19,7 +19,11 @@ it('requires main CI to transfer the live predecessor revisions through a same-r
   expect(resolveJob).toContain('path: ${{ runner.temp }}/active-release.txt');
   expect(resolveJob).toContain('if-no-files-found: error');
   expect(resolveJob).not.toContain('$GITHUB_OUTPUT');
-  expect(imageJob).toContain('needs: resolve-active-release');
+  // #1796: the detector joins the release job as a second `needs` entry, so the
+  // dependency is asserted as a list member rather than a single-line value.
+  expect(imageJob).toMatch(
+    /needs:\n\s+- affected-jobs\n\s+- resolve-active-release/,
+  );
   expect(imageJob).toContain(
     "if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n        uses: actions/download-artifact@",
   );

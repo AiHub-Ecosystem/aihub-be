@@ -479,9 +479,58 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
     await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, throttled);
     expect(await lastUsedAt(apiKeyId)).toEqual(first);
 
-    const pastTheWindow = new Date('2026-09-22T12:36:30.000Z');
-    await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, pastTheWindow);
-    expect(await lastUsedAt(apiKeyId)).toEqual(pastTheWindow);
+    const windowElapsed = new Date('2026-09-22T12:35:56.000Z');
+    await store.touchLastUsed(ORGANIZATION_ID, apiKeyId, windowElapsed);
+    expect(await lastUsedAt(apiKeyId)).toEqual(windowElapsed);
+  });
+
+  it('debounces authenticated last-used writes through the PostgreSQL repository', async () => {
+    await seedOrganization();
+    const key = generateOrganizationApiKey();
+    await pool.query(
+      `INSERT INTO api_keys
+         (id, organization_id, key_hash, key_prefix, name, scopes,
+          allowed_environments)
+       VALUES ($1, $2, decode($3, 'hex'), $4, 'Prod backend',
+               ARRAY['writing.grade'], ARRAY['production'])`,
+      [key.id, ORGANIZATION_ID, key.hash, key.prefix],
+    );
+    const repository = new PostgresApiKeyRepository(apiKeys);
+    const touchLastUsed = jest.spyOn(repository, 'touchLastUsed');
+    let now = new Date('2026-11-19T12:00:00.000Z');
+    const authenticator = new ApiKeyAuthenticator(
+      repository,
+      {
+        get: async () => undefined,
+        set: async () => undefined,
+        setMiss: async () => undefined,
+        delete: async () => undefined,
+      },
+      NO_FAILURES,
+      () => now,
+    );
+    const credentials = {
+      value: key.raw,
+      environment: 'production',
+      clientIp: '198.51.100.9',
+      forceFresh: true,
+    };
+
+    await authenticator.authenticate(credentials);
+    await touchLastUsed.mock.results.at(-1)?.value;
+    expect(touchLastUsed).toHaveBeenCalledTimes(1);
+    expect(await lastUsedAt(key.id)).toEqual(now);
+
+    now = new Date(now.getTime() + 59_999);
+    await authenticator.authenticate(credentials);
+    expect(touchLastUsed).toHaveBeenCalledTimes(1);
+    expect(await lastUsedAt(key.id)).not.toEqual(now);
+
+    now = new Date(now.getTime() + 1);
+    await authenticator.authenticate(credentials);
+    await touchLastUsed.mock.results.at(-1)?.value;
+    expect(touchLastUsed).toHaveBeenCalledTimes(2);
+    expect(await lastUsedAt(key.id)).toEqual(now);
   });
 
   it('leaves another Organization key untouched', async () => {

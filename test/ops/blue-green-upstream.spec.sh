@@ -63,6 +63,8 @@ assert_equals "$(active_slot production "$(config http://unix:/srv/aihub/socket/
 assert_equals "$(active_slot production "$(config http://unix:/srv/aihub/socket/app-slot-b.sock)")" b "production socket B"
 assert_equals "$(active_slot sandbox "$(config http://unix:/srv/aihub/socket/app-sandbox.sock)")" a "sandbox socket A"
 assert_equals "$(active_slot sandbox "$(config http://unix:/srv/aihub/socket/app-sandbox-slot-b.sock)")" b "sandbox socket B"
+assert_equals "$(active_slot production "$(config http://127.0.0.1:3023/v1/%E0%A4%A)")" b "production port B with a URI"
+assert_equals "$(active_slot production "$(config http://unix:/srv/aihub/socket/app-slot-b.sock:/v1/%E0%A4%A)")" b "production socket B with a URI"
 
 # A socket belongs to one tier, and an unknown file name is refused.
 assert_fails active_slot production "$(config http://unix:/srv/aihub/socket/app-sandbox.sock)"
@@ -79,6 +81,9 @@ assert_fails active_slot production "$test_root/mixed.conf"
 assert_equals "$(active_upstream "$(config http://127.0.0.1:3021)")" "127.0.0.1:3021" "status port"
 assert_equals "$(active_upstream "$(config http://unix:/srv/aihub/socket/app-slot-b.sock)")" \
   "unix:/srv/aihub/socket/app-slot-b.sock" "status socket"
+assert_equals "$(active_upstream "$(config http://127.0.0.1:3023/v1/%E0%A4%A)")" "127.0.0.1:3023" "status port with a URI"
+assert_equals "$(active_upstream "$(config http://unix:/srv/aihub/socket/app-slot-b.sock:/v1/%E0%A4%A)")" \
+  "unix:/srv/aihub/socket/app-slot-b.sock" "status socket with a URI"
 
 # --- rendering --------------------------------------------------------------
 render() {
@@ -91,12 +96,14 @@ socket_dir=
 slot_is_socket=true
 assert_equals "$(active_slot production "$(render production b)")" b "socket off renders port B"
 grep -Fq 'proxy_pass http://127.0.0.1:3023;' "$test_root/rendered.conf" || fail "socket off keeps port 3023"
+grep -Fq 'proxy_pass http://127.0.0.1:3023/v1/%E0%A4%A;' "$test_root/rendered.conf" || fail "framework-error upstream keeps its URI on port B"
 
 # Socket on, container started with it: nginx gets the socket path.
 socket_dir=/srv/aihub/socket
 slot_is_socket=true
 assert_equals "$(active_slot production "$(render production b)")" b "socket B round-trips"
 grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock;' "$test_root/rendered.conf" || fail "socket path rendered"
+grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock:/v1/%E0%A4%A;' "$test_root/rendered.conf" || fail "framework-error upstream keeps its URI on a socket"
 if grep -Eq 'proxy_pass[[:space:]]+http://127\.0\.0\.1:' "$test_root/rendered.conf"; then
   fail "no TCP upstream may remain in a socket config"
 fi
@@ -108,5 +115,6 @@ grep -Fq 'proxy_pass http://unix:/srv/aihub/socket/app-sandbox.sock;' "$test_roo
 slot_is_socket=false
 assert_equals "$(active_slot production "$(render production a)")" a "old container renders port A"
 grep -Fq 'proxy_pass http://127.0.0.1:3021;' "$test_root/rendered.conf" || fail "old container keeps port 3021"
+grep -Fq 'proxy_pass http://127.0.0.1:3021/v1/%E0%A4%A;' "$test_root/rendered.conf" || fail "framework-error upstream keeps its URI on port A"
 
 printf 'blue-green upstream spec: ok\n'

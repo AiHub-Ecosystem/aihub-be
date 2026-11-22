@@ -1,15 +1,12 @@
-import { Readable } from 'node:stream';
-
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { AppError } from '@/common/errors/app-error';
 import {
   getRequestLifecycle,
   registerRequestLifecycle,
 } from './request-lifecycle.hook';
 
-const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;
+const TIMED_PATH = OPERATION_CATALOG['writing.task1.grade'].path;
 
 describe('registerRequestLifecycle', () => {
   let app: FastifyInstance;
@@ -18,7 +15,7 @@ describe('registerRequestLifecycle', () => {
     await app?.close();
   });
 
-  it('starts the request deadline before JSON parsing and maps an expired body parse to 504', async () => {
+  it('leaves body parsing to Fastify on a timed route without a body-cancellation owner', async () => {
     const timeout = jest
       .spyOn(AbortSignal, 'timeout')
       .mockReturnValue(AbortSignal.abort());
@@ -26,27 +23,20 @@ describe('registerRequestLifecycle', () => {
     registerRequestLifecycle(app);
     app.route({
       method: 'POST',
-      url: JSON_PATH,
+      url: TIMED_PATH,
       handler: async () => ({ ok: true }),
-    });
-    app.setErrorHandler((error, _request, reply) => {
-      const appError = error instanceof AppError ? error : undefined;
-      reply
-        .status(appError?.httpStatus ?? 500)
-        .send({ code: appError?.code ?? 'INTERNAL_ERROR' });
     });
 
     try {
       await app.ready();
       const response = await app.inject({
         method: 'POST',
-        url: JSON_PATH,
+        url: TIMED_PATH,
         headers: { 'content-type': 'application/json' },
-        payload: Readable.from(['{}']),
+        payload: '{}',
       });
 
-      expect(response.statusCode).toBe(504);
-      expect(response.json()).toEqual({ code: 'AI_SERVICE_TIMEOUT' });
+      expect(response.statusCode).toBe(200);
     } finally {
       timeout.mockRestore();
     }
@@ -58,7 +48,7 @@ describe('registerRequestLifecycle', () => {
     registerRequestLifecycle(app);
     app.route({
       method: 'POST',
-      url: JSON_PATH,
+      url: TIMED_PATH,
       handler: async (request) => {
         rawRequest = request.raw;
         expect(getRequestLifecycle(rawRequest)).toBeDefined();
@@ -69,7 +59,7 @@ describe('registerRequestLifecycle', () => {
     await app.ready();
     const response = await app.inject({
       method: 'POST',
-      url: JSON_PATH,
+      url: TIMED_PATH,
       headers: { 'content-type': 'application/json' },
       payload: '{}',
     });
@@ -90,14 +80,14 @@ describe('registerRequestLifecycle', () => {
     });
     app.route({
       method: 'POST',
-      url: JSON_PATH,
+      url: TIMED_PATH,
       handler: async () => ({ ok: true }),
     });
 
     await app.ready();
     await app.inject({
       method: 'POST',
-      url: JSON_PATH,
+      url: TIMED_PATH,
       headers: { 'content-type': 'application/json' },
       payload: '{}',
     });

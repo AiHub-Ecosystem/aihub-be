@@ -247,7 +247,8 @@ export async function verifyRedisCompatibility(input: {
       'candidate JWKS cache fixture was not stored in Redis',
     );
   }
-  const assertionA = identityA.signAssertion(issuerA, identityKid(identityA));
+  // Assertions are single-use (#1867/#175), so every request mints its own.
+  const signA = () => identityA.signAssertion(issuerA, identityKid(identityA));
   const gradeBody = {
     question: gradeRequest.question,
     chart_type: gradeRequest.topic,
@@ -261,7 +262,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionA,
+      assertion: signA(),
       idempotencyKey: gradeKey,
       body: gradeBody,
     },
@@ -338,7 +339,8 @@ export async function verifyRedisCompatibility(input: {
     apiKey,
     apiKeyId,
     organizationId,
-    assertion: assertionA,
+    signAssertion: () =>
+      identityA.signAssertion(issuerA, identityKid(identityA)),
     gradeKey,
     gradeBody,
     previousSha,
@@ -429,7 +431,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionA,
+      assertion: signA(),
       idempotencyKey: `compat-stale-jwks-${randomUUID()}`,
       body: gradeBody,
     },
@@ -439,7 +441,7 @@ export async function verifyRedisCompatibility(input: {
     401,
     'N-1 stale JWKS rejection after generation invalidation',
   );
-  const assertionB = identityB.signAssertion(issuerA, identityKid(identityB));
+  const signB = () => identityB.signAssertion(issuerA, identityKid(identityB));
   report.push(
     candidateHasIdentityCacheHmacKey
       ? 'PASS: candidate JWKS generation invalidation reached the N-1 reader.'
@@ -457,7 +459,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionB,
+      assertion: signB(),
       idempotencyKey: `compat-held-${randomUUID()}`,
       body: gradeBody,
     },
@@ -473,7 +475,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionB,
+      assertion: signB(),
       idempotencyKey: `compat-competing-${randomUUID()}`,
       body: gradeBody,
     },
@@ -487,7 +489,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionB,
+      assertion: signB(),
       idempotencyKey: `compat-after-release-${randomUUID()}`,
       body: gradeBody,
     },
@@ -517,7 +519,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/ielts/writing/task1/grade',
     {
       apiKey,
-      assertion: assertionB,
+      assertion: signB(),
       idempotencyKey: `compat-durable-quota-${randomUUID()}`,
       body: gradeBody,
     },
@@ -580,7 +582,7 @@ export async function verifyRedisCompatibility(input: {
     '/v1/speaking/audio/uploads',
     {
       apiKey,
-      assertion: assertionB,
+      assertion: signB(),
       body: {},
     },
   );

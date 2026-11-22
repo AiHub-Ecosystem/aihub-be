@@ -14,4 +14,5 @@ paths:
 - Use the `node:` protocol for Node built-ins.
 - Keep TypeBox schemas at transport boundaries and derive types from them; application/domain code should consume inferred types.
 - Prefer small discriminated unions over stringly typed flags.
-- Enforced by `bun lint`: `typescript/no-non-null-assertion` and `typescript/explicit-module-boundary-types` in `.oxlintrc.json` (#1346).
+- Enforced by `bun lint`: `typescript/no-non-null-assertion` and `typescript/explicit-module-boundary-types` in `.oxlintrc.json` (#1346); `unicorn/prefer-node-protocol` for the `node:` rule above (#1832).
+- Enforced by `tsc` (`bun run type-check`): `noUnusedLocals` and `noUnusedParameters` for unused code; `bun lint` catches the same finding through the `correctness` category, which is why `no-unused-vars` is not named in `.oxlintrc.json` `rules{}`.

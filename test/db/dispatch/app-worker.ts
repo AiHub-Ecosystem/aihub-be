@@ -222,7 +222,7 @@ export function sendRequest(
 export interface GradingOrganization {
   readonly organizationId: string;
   readonly apiKey: GeneratedApiKey;
-  readonly assertion: string;
+  readonly signAssertion: () => Promise<string>;
 }
 
 /** A production Organization with a Writing key and a signed identity. */
@@ -279,11 +279,12 @@ export async function seedGradingOrganization(
   return {
     organizationId,
     apiKey,
-    assertion: await signUserAssertion(
-      identity,
-      new Date(),
-      options.assertionAudience ?? 'aihub',
-    ),
+    signAssertion: () =>
+      signUserAssertion(
+        identity,
+        new Date(),
+        options.assertionAudience ?? 'aihub',
+      ),
   };
 }
 

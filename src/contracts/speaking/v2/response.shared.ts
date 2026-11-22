@@ -1,5 +1,7 @@
 import { type Static, Type } from '@sinclair/typebox';
 
+import { ModelQuote, ModelText } from '@/contracts/model-text';
+
 export const SpeakingV2TestTypeSchema = Type.Union([
   Type.Literal('practice'),
   Type.Literal('full_test'),
@@ -19,15 +21,30 @@ export const SpeakingV2ScoresSchema = Type.Object(
 
 export const SpeakingV2FeedbackSchema = Type.Object(
   {
-    overview_vi: Type.String(),
+    overview_vi: ModelText(),
     details: Type.Array(
       Type.Object(
-        { criterion: Type.String(), comment_vi: Type.String() },
+        { criterion: ModelText(), comment_vi: ModelText() },
         { additionalProperties: false },
       ),
     ),
   },
   { additionalProperties: false },
+);
+
+export const SpeakingV2ErrorPrioritySchema = Type.Array(
+  Type.Object(
+    {
+      rank: Type.Integer({ minimum: 1, maximum: 3 }),
+      group: ModelText(),
+      code: ModelText(),
+      name_en: ModelText(),
+      name_vi: ModelText(),
+      reason_vi: ModelText(),
+    },
+    { additionalProperties: false },
+  ),
+  { maxItems: 3 },
 );
 
 // A word the provider could not align to the audio has no timing.
@@ -44,19 +61,19 @@ const SpeakingV2DiagnosticSchema = Type.Object(
           minItems: 2,
           maxItems: 2,
         }),
-        text: Type.String(),
+        text: ModelText(),
         start_ms: SpeakingV2TimingMsSchema,
         end_ms: SpeakingV2TimingMsSchema,
       },
       { additionalProperties: false },
     ),
-    kind: Type.String(),
+    kind: ModelText(),
     // A finding the language check could not classify carries null codes or
     // advice; a real recording returned null `error_codes`.
-    error_codes: Type.Union([Type.String(), Type.Null()]),
-    explain_vi: Type.Union([Type.String(), Type.Null()]),
-    improvement: Type.Union([Type.String(), Type.Null()]),
-    improvement_vi: Type.Union([Type.String(), Type.Null()]),
+    error_codes: Type.Union([ModelText(), Type.Null()]),
+    explain_vi: Type.Union([ModelText(), Type.Null()]),
+    improvement: Type.Union([ModelText(), Type.Null()]),
+    improvement_vi: Type.Union([ModelText(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -65,9 +82,9 @@ const SpeakingV2CriterionSchema = Type.Object(
   {
     summary: Type.Object(
       {
-        reason_for_band_vi: Type.String(),
-        strengths_vi: Type.Array(Type.String()),
-        areas_for_improvement_vi: Type.Array(Type.String()),
+        reason_for_band_vi: ModelText(),
+        strengths_vi: Type.Array(ModelText()),
+        areas_for_improvement_vi: Type.Array(ModelText()),
       },
       { additionalProperties: false },
     ),
@@ -93,7 +110,7 @@ export const SpeakingV2CriteriaSchema = Type.Object(
 
 export const SpeakingV2TranscriptSchema = Type.Object(
   {
-    text: Type.String(),
+    text: ModelQuote(),
     stats: Type.Object(
       {
         word_count: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
@@ -109,7 +126,7 @@ export const SpeakingV2TranscriptSchema = Type.Object(
       Type.Object(
         {
           index: Type.Integer({ minimum: 0 }),
-          text: Type.String(),
+          text: ModelText(),
           start_ms: SpeakingV2TimingMsSchema,
           end_ms: SpeakingV2TimingMsSchema,
         },

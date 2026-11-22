@@ -57,9 +57,10 @@ class FakeRedisClient {
   readonly subscribedChannels: string[] = [];
   private messageHandler?: (channel: string, message: string) => void;
   private errorHandler?: (error: unknown) => void;
+  private readyHandler?: () => void;
   subscribeGate?: Promise<void>;
-  publishError?: Error;
-  subscribeError?: Error;
+  publishError?: Error | undefined;
+  subscribeError?: Error | undefined;
 
   async publish(channel: string, message: string): Promise<number> {
     if (this.publishError) throw this.publishError;
@@ -87,6 +88,9 @@ class FakeRedisClient {
     if (event === 'error') {
       this.errorHandler = (error) => handler(error);
     }
+    if (event === 'ready') {
+      this.readyHandler = () => handler();
+    }
   }
 
   emitMessage(channel: string, message: string): void {
@@ -95,6 +99,10 @@ class FakeRedisClient {
 
   emitError(error: unknown): void {
     this.errorHandler?.(error);
+  }
+
+  emitReady(): void {
+    this.readyHandler?.();
   }
 }
 
@@ -650,6 +658,120 @@ describe('BloomFilterUserAccessTokenRevocationAdapter', () => {
       expect(recoveringStore.isRevokedCalls.length).toBe(callsBefore + 1);
     } finally {
       await retryAdapter.close();
+      jest.useRealTimers();
+    }
+  });
+
+  // #1997: production logged a subscriber connection error once at startup and
+  // nothing recorded whether the subscription came back. These pin both the
+  // recovery edge and the fact that revocation decisions stay safe meanwhile.
+  it('returns to subscribed when Redis reconnects with its remembered subscription', async () => {
+    const peerSubscriber = new FakeRedisClient();
+    const peer = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying,
+      bloomFilter: new InProcessBloomFilter(),
+      redisSubscriber: peerSubscriber,
+    });
+    const logInfo = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+
+    try {
+      await peer.init();
+      expect(peer.isSubscribed).toBe(true);
+
+      peerSubscriber.emitError(new Error('Redis connection reset'));
+      expect(peer.isSubscribed).toBe(false);
+
+      // ioredis re-issues SUBSCRIBE in readyHandler, then emits `ready`.
+      peerSubscriber.emitReady();
+      expect(peer.isSubscribed).toBe(true);
+      expect(logInfo.mock.calls).toContainEqual([
+        'Token revocation Redis subscription restored',
+      ]);
+    } finally {
+      await peer.close();
+      logInfo.mockRestore();
+    }
+  });
+
+  it('retries a subscription that never landed, then keeps checking the authoritative store', async () => {
+    jest.useFakeTimers();
+    const subScriber = new FakeRedisClient();
+    subScriber.subscribeError = new Error('Redis connection refused');
+    const recoveringAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying,
+      bloomFilter: new InProcessBloomFilter(),
+      redisSubscriber: subScriber,
+    });
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      await recoveringAdapter.init();
+      expect(recoveringAdapter.isSubscribed).toBe(false);
+      expect(logError).toHaveBeenCalledTimes(1);
+
+      subScriber.subscribeError = undefined;
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(recoveringAdapter.isSubscribed).toBe(true);
+
+      // A token revoked while the subscription was down is still rejected: the
+      // decision never depends on the in-process filter.
+      const token = {
+        issuer: 'aihub_test',
+        jti: 'revoked_while_unsubscribed',
+        effectiveExpiresAt: new Date(Date.now() + 3600_000),
+      };
+      await adapter.revoke(token);
+      expect(
+        await recoveringAdapter.isRevoked({
+          issuer: token.issuer,
+          jti: token.jti,
+          now: new Date(),
+        }),
+      ).toBe(true);
+    } finally {
+      await recoveringAdapter.close();
+      logError.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops retrying after the attempt bound and says so once', async () => {
+    jest.useFakeTimers();
+    const deadSubscriber = new FakeRedisClient();
+    deadSubscriber.subscribeError = new Error('Redis connection refused');
+    const deadAdapter = new BloomFilterUserAccessTokenRevocationAdapter({
+      underlying,
+      bloomFilter: new InProcessBloomFilter(),
+      redisSubscriber: deadSubscriber,
+    });
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      await deadAdapter.init();
+      for (let attempt = 0; attempt < 6; attempt += 1)
+        await jest.advanceTimersByTimeAsync(5_000);
+
+      // One boot error plus one bounded-unavailable line, and no further churn.
+      expect(logError.mock.calls).toHaveLength(2);
+      expect(logError.mock.calls[1]?.[0]).toContain('authoritative store');
+      expect(deadAdapter.isSubscribed).toBe(false);
+      expect(
+        await deadAdapter.isRevoked({
+          issuer: 'aihub_test',
+          jti: 'still_checked',
+          now: new Date(),
+        }),
+      ).toBe(false);
+      expect(underlying.isRevokedCalls).toHaveLength(1);
+    } finally {
+      await deadAdapter.close();
+      logError.mockRestore();
       jest.useRealTimers();
     }
   });

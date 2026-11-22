@@ -30,7 +30,6 @@ import {
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EmailOutbox } from '@/modules/auth/email-delivery/application/outbox/email-outbox';
-import { pruneExpiredAuthEmailRecipientLimits } from '@/modules/auth/email-delivery/infrastructure/auth-email-recipient-limit';
 import { createEmailPayloadCipher } from '@/modules/auth/email-delivery/infrastructure/payload-cipher/email-payload-cipher';
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { ARGON2ID_DUMMY_HASH } from '@/modules/auth/local-credentials/application/argon2id-parameters';
@@ -45,6 +44,7 @@ import {
   AUTH_RATE_LIMITER,
   type AuthRateLimiterPort,
 } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
+import { pruneExpiredAddressCounterWindows } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import { VERIFICATION_TOKEN_REPOSITORY } from '@/modules/auth/verification/application/verification-token-repository.port';
 import { PostgresVerificationTokenRepository } from '@/modules/auth/verification/infrastructure/postgres-verification-token.repository';
 import { REFRESH_SESSION_REPOSITORY } from '@/modules/auth/web-sessions/application/refresh-session-repository.port';
@@ -279,6 +279,13 @@ async function countRows(table: string): Promise<number> {
   return Number(result.rows[0]?.count ?? 0);
 }
 
+async function registrationAttemptCount(): Promise<number> {
+  const result = await pool.query<{ readonly count: string }>(
+    'SELECT COALESCE(sum(attempt_count), 0)::text AS count FROM auth_registration_attempt_counters',
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 /** What a worker would read back out of the row once it claims the request. */
 function sealedPayload(row: SealedRequest | undefined): {
   readonly email: string;
@@ -339,6 +346,7 @@ describe('local auth email outbox over HTTP', () => {
     });
     expect(await countRows('user_accounts')).toBe(1);
     expect(await countRows('email_verification_tokens')).toBe(1);
+    expect(await registrationAttemptCount()).toBe(1);
 
     const requests = await queuedRequests();
     expect(requests).toHaveLength(1);
@@ -353,6 +361,38 @@ describe('local auth email outbox over HTTP', () => {
     });
     expect(sealedPayload(requests[0]).token).toEqual(expect.any(String));
     expect(sender.calls).toHaveLength(0);
+  });
+
+  it('counts an active-email conflict before returning the generic identity error', async () => {
+    await seedAccount('active', 'person@example.com');
+
+    const response = await app.inject(
+      registerRequest('Person@example.com', { username: 'fresh_username' }),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json<unknown>()).toMatchObject({
+      error: { code: 'AUTH_IDENTITY_UNAVAILABLE' },
+    });
+    expect(await registrationAttemptCount()).toBe(1);
+  });
+
+  it('counts a valid attempt that replaces a pending registration', async () => {
+    await seedAccount('pending_verification', 'person@example.com');
+
+    const response = await app.inject(
+      registerRequest('Person@example.com', { username: 'replacement_user' }),
+    );
+
+    expect(response.statusCode).toBe(201);
+    expect(await registrationAttemptCount()).toBe(1);
+  });
+
+  it('does not count a malformed registration request', async () => {
+    const response = await app.inject(registerRequest('not-an-email'));
+
+    expect(response.statusCode).toBe(400);
+    expect(await registrationAttemptCount()).toBe(0);
   });
 
   it('supersedes the open verification token and queues the replacement', async () => {
@@ -565,6 +605,7 @@ describe('local auth email outbox over HTTP', () => {
       status: 'pending_verification',
       email_delivery_status: 'suppressed',
     });
+    expect(await registrationAttemptCount()).toBe(2);
 
     const accountAfter = await pool.query(
       'SELECT username, updated_at FROM user_accounts WHERE id = $1',
@@ -700,7 +741,7 @@ describe('local auth email outbox over HTTP', () => {
     );
 
     await expect(
-      pruneExpiredAuthEmailRecipientLimits(authClient, new Date()),
+      pruneExpiredAddressCounterWindows(authClient, new Date()),
     ).resolves.toBe(1);
     expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
   });
@@ -728,6 +769,7 @@ describe('local auth email outbox over HTTP', () => {
     expect(await countRows('email_verification_tokens')).toBe(0);
     expect(await countRows('email_delivery_requests')).toBe(0);
     expect(await countRows('auth_email_recipient_rate_limits')).toBe(0);
+    expect(await registrationAttemptCount()).toBe(1);
   });
 
   it('rolls the verification rotation back when its outbox write fails', async () => {

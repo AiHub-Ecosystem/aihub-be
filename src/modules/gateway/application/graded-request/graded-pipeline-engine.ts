@@ -21,6 +21,10 @@ import type {
   IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
+import {
+  invalidDeclaredUserId,
+  isEndUserId,
+} from '@/modules/identity/public/end-user-id';
 import type { MeteringFinalizerPort } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
 import {
@@ -149,6 +153,9 @@ export class GradedPipelineEngine implements GradedPipelineEnginePort {
       const userId = identity.userId;
       if (userId === undefined || userId.trim().length === 0) {
         throw userIdentityRequired();
+      }
+      if (!isEndUserId(userId)) {
+        throw invalidDeclaredUserId();
       }
 
       const admissionIdempotencyKey = idempotencyKeyForAdmission(

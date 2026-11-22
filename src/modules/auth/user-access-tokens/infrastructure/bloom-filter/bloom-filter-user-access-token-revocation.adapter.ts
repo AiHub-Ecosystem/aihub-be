@@ -12,6 +12,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
+import { recordRevocationSubscriberState } from './revocation-subscriber-health-metric';
 
 export const REVOCATION_CHANNEL_DEFAULT = 'aihub:auth:token-revocations';
 
@@ -46,6 +47,12 @@ type RevocationMessage = Static<typeof RevocationMessageSchema>;
 const SEED_RETRY_DELAY_MS = 10_000;
 const SEED_FIRST_RETRY_DELAY_MS = 2_000;
 const SEED_POOL_READINESS_TIMEOUT_MS = 750;
+
+// #1997: ioredis resubscribes a connection that once subscribed, but a
+// SUBSCRIBE that never landed has no such memory. Retry it a bounded number of
+// times, then stay down and let the authoritative store answer.
+const SUBSCRIBE_RETRY_DELAY_MS = 5_000;
+const SUBSCRIBE_MAX_ATTEMPTS = 5;
 
 function safeErrorDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -82,6 +89,9 @@ export class BloomFilterUserAccessTokenRevocationAdapter
     | undefined;
   private readonly channel: string;
   private subscribed: boolean;
+  private everSubscribed = false;
+  private subscribeAttempts = 0;
+  private subscribeRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private seeded = false;
   private seedRetried = false;
   private seedReady: Promise<number> | undefined;
@@ -233,6 +243,10 @@ export class BloomFilterUserAccessTokenRevocationAdapter
       clearTimeout(this.seedRetryTimer);
       this.seedRetryTimer = undefined;
     }
+    if (this.subscribeRetryTimer !== undefined) {
+      clearTimeout(this.subscribeRetryTimer);
+      this.subscribeRetryTimer = undefined;
+    }
     if (this.redisSubscriber) {
       try {
         await this.redisSubscriber.unsubscribe(this.channel);
@@ -273,6 +287,20 @@ export class BloomFilterUserAccessTokenRevocationAdapter
   private async setupSubscriber(): Promise<void> {
     if (!this.redisSubscriber) return;
 
+    // #1997: ioredis re-issues SUBSCRIBE for a remembered subscriber inside
+    // `readyHandler`, then sets the status to `ready`, so this event is the
+    // recovery edge for an ordinary client. It was missing: after one error
+    // `subscribed` stayed false for the life of the process and nothing
+    // reported that the subscription had come back.
+    this.redisSubscriber.on('ready', () => {
+      // Only a connection that already had the subscription can recover it;
+      // the first `ready` precedes the SUBSCRIBE acknowledgement.
+      if (this.subscribed || !this.everSubscribed) return;
+      this.subscribed = true;
+      recordRevocationSubscriberState(true);
+      this.logger.log('Token revocation Redis subscription restored');
+    });
+
     this.redisSubscriber.on('message', (...args: unknown[]) => {
       const channel = typeof args[0] === 'string' ? args[0] : '';
       const message = typeof args[1] === 'string' ? args[1] : '';
@@ -289,17 +317,47 @@ export class BloomFilterUserAccessTokenRevocationAdapter
 
     this.redisSubscriber.on('error', () => {
       this.subscribed = false;
+      recordRevocationSubscriberState(false);
       this.logger.error('Token revocation Redis subscriber connection error');
       recordRedisUnavailable('token_revocation');
     });
 
+    recordRevocationSubscriberState(false);
+    await this.trySubscribe();
+  }
+
+  private async trySubscribe(): Promise<void> {
+    if (!this.redisSubscriber || this.subscribed) return;
+
+    this.subscribeAttempts += 1;
     try {
       await this.redisSubscriber.subscribe(this.channel);
       this.subscribed = true;
+      this.everSubscribed = true;
+      recordRevocationSubscriberState(true);
     } catch {
       this.subscribed = false;
-      this.logger.error('Failed to subscribe to token revocation channel');
+      recordRevocationSubscriberState(false);
       recordRedisUnavailable('token_revocation');
+      if (this.subscribeAttempts === 1) {
+        this.logger.error('Failed to subscribe to token revocation channel');
+      }
+      this.scheduleSubscribeRetry();
     }
+  }
+
+  private scheduleSubscribeRetry(): void {
+    if (this.subscribeRetryTimer !== undefined) return;
+    if (this.subscribeAttempts >= SUBSCRIBE_MAX_ATTEMPTS) {
+      this.logger.error(
+        `Token revocation Redis subscription unavailable after ${this.subscribeAttempts} attempt(s); revocation checks stay on the authoritative store`,
+      );
+      return;
+    }
+    this.subscribeRetryTimer = setTimeout(() => {
+      this.subscribeRetryTimer = undefined;
+      void this.trySubscribe().catch(() => undefined);
+    }, SUBSCRIBE_RETRY_DELAY_MS);
+    this.subscribeRetryTimer.unref?.();
   }
 }

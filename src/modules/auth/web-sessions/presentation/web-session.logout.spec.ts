@@ -1,5 +1,6 @@
 import type { LightMyRequestResponse } from 'fastify';
 
+import { sample } from '@/common/observability/metric-sample.testing';
 import {
   type AlternateCredential,
   CLIENT_SECRET,
@@ -155,7 +156,7 @@ describe('web session HTTP boundary', () => {
         }),
       ],
     ])(
-      'answers 204 and revokes nothing for a token offered in %s',
+      'refuses a token offered in %s with a 400 and revokes nothing',
       async (_case, offer) => {
         const token = await webSessionHelpers.webSessionToken();
         const { url, headers } = offer(token);
@@ -163,9 +164,13 @@ describe('web session HTTP boundary', () => {
         const response = await logout(token, { url, headers });
 
         // The body still carried a valid token, so only the alternate source
-        // can explain why nothing was revoked.
-        expect(response.statusCode).toBe(204);
-        expect(response.payload).toBe('');
+        // can explain the refusal. For logout, refusing is the safe direction:
+        // a `204` that revoked nothing would claim the session ended.
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error: { code: 'INVALID_REQUEST' },
+        });
+        expect(response.headers['cache-control']).toBe('no-store');
         expect((await webSessionHelpers.exchange(token)).statusCode).toBe(200);
       },
     );
@@ -178,6 +183,9 @@ describe('web session HTTP boundary', () => {
       'refuses %s with one generic 401 before any lookup',
       async (_case, secret) => {
         const token = await webSessionHelpers.webSessionToken();
+        const before = Number(
+          await sample('aihub_auth_web_session_client_secret_failures_total'),
+        );
         // A store that would throw if it were reached: the answer stays `401`,
         // so the refusal came first and no row was touched.
         suite.context.webSessions.failRevokeWebSession = true;
@@ -189,6 +197,12 @@ describe('web session HTTP boundary', () => {
           error: { code: 'UNAUTHORIZED' },
         });
         expect(suite.context.limiter.calls).toEqual([]);
+        // A guess is counted where it is refused, so a rising rate is alertable.
+        expect(
+          Number(
+            await sample('aihub_auth_web_session_client_secret_failures_total'),
+          ),
+        ).toBe(before + 1);
         // A refused caller logs nobody out.
         expect((await webSessionHelpers.exchange(token)).statusCode).toBe(200);
       },

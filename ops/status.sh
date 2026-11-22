@@ -28,7 +28,10 @@ status=0
 # Unix socket, through the socket file named after its Compose service.
 active_upstream() {
   local config="$1" upstreams=()
-  mapfile -t upstreams < <(sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+|unix:[^;[:space:]]+);.*#\1#p' "$config" | sort -u)
+  mapfile -t upstreams < <(sed -nE \
+    -e 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+)(/[^;[:space:]]*)?;.*#\1#p' \
+    -e 's#^[[:space:]]*proxy_pass http://(unix:[^[:space:];:]+)(:/[^;[:space:]]*)?;.*#\1#p' \
+    "$config" | sort -u)
   [ "${#upstreams[@]}" -eq 1 ] || return 1
   printf '%s\n' "${upstreams[0]}"
 }

@@ -51,6 +51,9 @@ export interface ApiKeyRepositoryPort {
   ): Promise<void>;
 }
 
+/** Best-effort last-used telemetry is recorded at most once per minute. */
+export const API_KEY_LAST_USED_THROTTLE_MS = 60_000;
+
 export const API_KEY_REPOSITORY = Symbol('API_KEY_REPOSITORY');
 
 export interface ApiKeyCachePort {

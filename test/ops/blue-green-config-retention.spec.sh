@@ -142,12 +142,14 @@ cmp -s "$SANDBOX_CONFIG" "$test_root/sandbox.before" || fail "rollback must keep
 set_rollback_nginx_override production "$sha_one"
 apply_slots b a true
 assert_contains "$API_CONFIG" 'proxy_pass http://127.0.0.1:3023;' "retained policy retargeted to port B"
+assert_contains "$API_CONFIG" 'proxy_pass http://127.0.0.1:3023/v1/%E0%A4%A;' "retained framework-error upstream retargeted to port B"
 assert_contains "$API_CONFIG" '# production policy N-1' "retargeting keeps the policy"
 socket_dir=/srv/aihub/socket
 slot_is_socket=true
 set_rollback_nginx_override production "$sha_one"
 apply_slots b a true
 assert_contains "$API_CONFIG" 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock;' "retained policy retargeted to the socket"
+assert_contains "$API_CONFIG" 'proxy_pass http://unix:/srv/aihub/socket/app-slot-b.sock:/v1/%E0%A4%A;' "retained framework-error upstream retargeted to the socket"
 assert_equals "$(grep -c 'proxy_pass http://127' "$API_CONFIG" || true)" 0 "no TCP upstream remains in a socket config"
 socket_dir=
 slot_is_socket=false

@@ -26,21 +26,120 @@ function forbiddenPaths(value: unknown, path = '$'): string[] {
 }
 
 describe('Speaking v2 response adapters', () => {
+  function withErrorPriority(body: unknown, priorities: unknown): unknown {
+    if (!isRecord(body) || !isRecord(body['data'])) {
+      throw new Error('provider fixture has no data object');
+    }
+
+    body['data']['error_priority'] = priorities;
+    return body;
+  }
+
+  function prioritySample(resultType: string): unknown[] {
+    const sample = fixtureJson(
+      'ai-speaking',
+      'grading-v2-error-priority.provider-sample.json',
+    );
+    if (!isRecord(sample)) {
+      throw new Error('provider priority sample is not an object');
+    }
+    const entries = sample[resultType];
+    if (!Array.isArray(entries)) {
+      throw new Error(`provider priority sample has no ${resultType}`);
+    }
+    return entries;
+  }
+
+  function withPrioritySample(body: unknown, resultType: string): unknown {
+    return withErrorPriority(body, prioritySample(resultType));
+  }
+
+  function withEmptyPriority(body: unknown): unknown {
+    return withErrorPriority(body, []);
+  }
+
   it.each([
-    ['grading-v2-question-post.200.json', parseSpeakingV2QuestionResult],
-    ['grading-v2-question-post-second.200.json', parseSpeakingV2QuestionResult],
-    ['grading-v2-question-get.200.json', parseSpeakingV2QuestionResult],
-    ['grading-v2-part-post.200.json', parseSpeakingV2PartResult],
-    ['grading-v2-part-get.200.json', parseSpeakingV2PartResult],
-    ['grading-v2-test-post.200.json', parseSpeakingV2TestResult],
-    ['grading-v2-test-get.200.json', parseSpeakingV2TestResult],
-  ])('projects captured result %s without private fields', (name, parse) => {
-    expect(forbiddenPaths(parse(fixtureJson('ai-speaking', name)))).toEqual([]);
+    [
+      'grading-v2-question-post.200.json',
+      'question_result',
+      parseSpeakingV2QuestionResult,
+    ],
+    [
+      'grading-v2-question-post-second.200.json',
+      'question_result',
+      parseSpeakingV2QuestionResult,
+    ],
+    [
+      'grading-v2-question-get.200.json',
+      'question_result',
+      parseSpeakingV2QuestionResult,
+    ],
+    ['grading-v2-part-post.200.json', 'part_result', parseSpeakingV2PartResult],
+    ['grading-v2-part-get.200.json', 'part_result', parseSpeakingV2PartResult],
+    ['grading-v2-test-post.200.json', 'test_result', parseSpeakingV2TestResult],
+    ['grading-v2-test-get.200.json', 'test_result', parseSpeakingV2TestResult],
+  ])(
+    'projects provider priority for captured result %s',
+    (name, resultType, parse) => {
+      const body = withPrioritySample(
+        fixtureJson('ai-speaking', name),
+        resultType,
+      );
+      const result = parse(body);
+
+      expect(forbiddenPaths(result)).toEqual([]);
+      expect(result.error_priority).toEqual(prioritySample(resultType));
+    },
+  );
+
+  it('accepts the captured empty list returned for a no-speech question', () => {
+    const body = withPrioritySample(
+      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
+      'live_no_speech_question_result',
+    );
+
+    expect(parseSpeakingV2QuestionResult(body).error_priority).toEqual([]);
+  });
+
+  it('rejects a provider result that omits error_priority', () => {
+    const body = fixtureJson(
+      'ai-speaking',
+      'grading-v2-question-post.200.json',
+    );
+
+    expect(() => parseSpeakingV2QuestionResult(body)).toThrow(AppError);
+  });
+
+  it('preserves provider priority order and accepts configured group and code strings', () => {
+    const priorities = prioritySample('question_result');
+    const first = priorities[0];
+    if (!isRecord(first)) throw new Error('priority sample has no first entry');
+    priorities[0] = {
+      ...first,
+      group: 'provider_future_group',
+      code: 'NEW01',
+      provider_trace: 'ignored',
+    };
+    const body = withErrorPriority(
+      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
+      priorities,
+    );
+
+    const result = parseSpeakingV2QuestionResult(body);
+
+    expect(result.error_priority[0]).toMatchObject({
+      rank: 1,
+      group: 'provider_future_group',
+      code: 'NEW01',
+    });
+    expect(result.error_priority[0]).not.toHaveProperty('provider_trace');
   });
 
   it('exposes the transcript and located findings of a question result', () => {
     const result = parseSpeakingV2QuestionResult(
-      fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
+      withEmptyPriority(
+        fixtureJson('ai-speaking', 'grading-v2-question-post.200.json'),
+      ),
     );
 
     expect(result.transcript.text.length).toBeGreaterThan(0);
@@ -68,7 +167,7 @@ describe('Speaking v2 response adapters', () => {
   ])(
     'gives aggregate result %s criteria without a transcript',
     (name, parse) => {
-      const result = parse(fixtureJson('ai-speaking', name));
+      const result = parse(withEmptyPriority(fixtureJson('ai-speaking', name)));
 
       expect(result).not.toHaveProperty('transcript');
       expect(result.criteria.pronunciation.summary.reason_for_band_vi).toEqual(
@@ -85,6 +184,7 @@ describe('Speaking v2 response adapters', () => {
     ) as {
       data: Record<string, unknown>;
     };
+    noCriteria.data['error_priority'] = [];
     delete noCriteria.data['criteria'];
     expect(() => parseSpeakingV2QuestionResult(noCriteria)).toThrow(AppError);
 
@@ -94,6 +194,7 @@ describe('Speaking v2 response adapters', () => {
     ) as {
       data: Record<string, unknown>;
     };
+    noTranscript.data['error_priority'] = [];
     noTranscript.data['transcript'] = null;
     expect(() => parseSpeakingV2QuestionResult(noTranscript)).toThrow(AppError);
   });
@@ -105,11 +206,12 @@ describe('Speaking v2 response adapters', () => {
       'ai-speaking',
       'grading-v2-question-post.200.json',
     ) as {
-      data: {
+      data: Record<string, unknown> & {
         meta: Record<string, unknown>;
         transcript: { stats: Record<string, unknown> };
       };
     };
+    body.data['error_priority'] = [];
     body.data.meta['test_id'] = null;
     body.data.meta['part_result_id'] = null;
     body.data.transcript.stats['speaking_seconds'] = null;
@@ -129,8 +231,9 @@ describe('Speaking v2 response adapters', () => {
     'accepts a null total_speaking_seconds on %s, which the provider returns for recordings without speech',
     (name, parse) => {
       const body = fixtureJson('ai-speaking', name) as {
-        data: { meta: Record<string, unknown> };
+        data: Record<string, unknown> & { meta: Record<string, unknown> };
       };
+      body.data['error_priority'] = [];
       body.data.meta['total_speaking_seconds'] = null;
 
       expect(parse(body).meta.total_speaking_seconds).toBeNull();
@@ -142,10 +245,11 @@ describe('Speaking v2 response adapters', () => {
       'ai-speaking',
       'grading-v2-question-post.200.json',
     ) as {
-      data: {
+      data: Record<string, unknown> & {
         criteria: Record<string, { diagnostics: Record<string, unknown>[] }>;
       };
     };
+    body.data['error_priority'] = [];
     const finding =
       body.data.criteria['grammatical_range_accuracy']?.diagnostics[0];
     if (finding === undefined) throw new Error('fixture has no finding');
@@ -166,8 +270,9 @@ describe('Speaking v2 response adapters', () => {
       'ai-speaking',
       'grading-v2-question-post.200.json',
     ) as {
-      data: { scores: Record<string, unknown> };
+      data: Record<string, unknown> & { scores: Record<string, unknown> };
     };
+    missing.data['error_priority'] = [];
     delete missing.data.scores['overall'];
     expect(() => parseSpeakingV2QuestionResult(missing)).toThrow(AppError);
 
@@ -175,8 +280,9 @@ describe('Speaking v2 response adapters', () => {
       'ai-speaking',
       'grading-v2-question-post.200.json',
     ) as {
-      data: { scores: Record<string, unknown> };
+      data: Record<string, unknown> & { scores: Record<string, unknown> };
     };
+    mistyped.data['error_priority'] = [];
     mistyped.data.scores['overall'] = '7.5';
     expect(() => parseSpeakingV2QuestionResult(mistyped)).toThrow(AppError);
   });

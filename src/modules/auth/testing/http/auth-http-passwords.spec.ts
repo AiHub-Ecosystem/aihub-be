@@ -11,6 +11,7 @@ import {
   USER_ID,
   createLocalAuthTestContext,
 } from '@/modules/auth/testing/local-auth.controller.spec-support';
+import type { DpopGuardPolicy } from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 
 const RequestIdEnvelopeSchema = Type.Object({
   error: Type.Object({ request_id: Type.String({ pattern: '^req_' }) }),
@@ -602,6 +603,55 @@ describe('local auth HTTP boundary - passwords and reset', () => {
     expect(replay.json<unknown>()).toMatchObject({
       error: { code: 'AUTH_PASSWORD_RESET_TOKEN_INVALID' },
     });
+  });
+
+  it('enforces the exported DPoP policy in the LocalCredentialsModule HTTP boundary', async () => {
+    const policy: DpopGuardPolicy = {
+      mode: 'enforce',
+      verifier: { verify: async () => undefined },
+    };
+    const enforced = await createLocalAuthTestContext(
+      undefined,
+      undefined,
+      undefined,
+      CLIENT_SECRET,
+      undefined,
+      policy,
+    );
+    const passwordHash = await enforced.hasher.hash('old password');
+    seedAccount(enforced.state, {
+      userId: USER_ID,
+      email: EMAIL,
+      username: 'person_01',
+      passwordHash,
+    });
+    enforced.accessTokenIssuer.lastSession = {
+      kind: 'web',
+      id: 'wss_01J00000000000000000000000',
+    };
+
+    try {
+      const response = await enforced.app.inject({
+        method: 'POST',
+        url: '/v1/auth/change-password',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer ey.fake.access',
+        },
+        payload: {
+          current_password: 'old password',
+          new_password: 'new password that works',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers['www-authenticate']).toBe('DPoP algs="ES256"');
+      expect(enforced.state.accounts.get(USER_ID)?.passwordHash).toBe(
+        passwordHash,
+      );
+    } finally {
+      await enforced.app.close();
+    }
   });
 
   // keep helper referenced

@@ -1,4 +1,9 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+} from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
@@ -234,35 +239,43 @@ function tokensOf(evidence: MeteringEvidence): number | undefined {
 
 /**
  * One event per response, from `onResponse`, which is the one lifecycle point
- * that sees every reply: matched routes, 404s, framework parse errors, and
- * rejections that happen before Nest does. A request the client abandons
- * never reaches it, so a line always means a response went out.
+ * that sees every reply a hook can see: matched routes, 404s, and rejections
+ * that happen before Nest does. A request the client abandons never reaches
+ * it, so a line always means a response went out.
  *
  * The hook belongs to metering rather than the shared HTTP layer because the
  * Organization, operation, and environment it reports live in Metering
  * evidence, which this module owns (ADR-0061).
  */
+export function writeRequestCompletion(
+  log: FastifyBaseLogger,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  const event = completionEvent(request, reply);
+  const isProbe = isHealthProbe(request.url);
+
+  if (request.url !== METRICS_ROUTE_PATH && !isProbe) {
+    // 5xx are errors; throttling and authentication refusals are warnings; other responses are informational.
+    const level =
+      event.http_status >= 500
+        ? 'error'
+        : event.http_status === 429 ||
+            event.http_status === 401 ||
+            event.http_status === 403
+          ? 'warn'
+          : 'info';
+    log[level](event);
+  }
+
+  recordRequestMetrics(request, reply, event.total_ms);
+}
+
 export function registerRequestCompletionLog(instance: FastifyInstance): void {
   const log = instance.log;
 
   instance.addHook('onResponse', (request, reply, done) => {
-    const event = completionEvent(request, reply);
-    const isProbe = isHealthProbe(request.url);
-
-    if (request.url !== METRICS_ROUTE_PATH && !isProbe) {
-      // 5xx are errors; throttling and authentication refusals are warnings; other responses are informational.
-      const level =
-        event.http_status >= 500
-          ? 'error'
-          : event.http_status === 429 ||
-              event.http_status === 401 ||
-              event.http_status === 403
-            ? 'warn'
-            : 'info';
-      log[level](event);
-    }
-
-    recordRequestMetrics(request, reply, event.total_ms);
+    writeRequestCompletion(log, request, reply);
     done();
   });
 }

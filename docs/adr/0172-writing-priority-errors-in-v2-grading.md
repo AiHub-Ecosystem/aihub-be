@@ -1,6 +1,6 @@
 # ADR-0172: Publish provider-ranked Writing priority errors in `/v2`
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR-0177](0177-sanitize-and-bound-ai-service-grading-responses.md)
 - Date: 2026-11-17
 - Amends: [ADR-0143](0143-public-v2-serves-ai-writing-v3-grading.md) decisions 1 and 2
 

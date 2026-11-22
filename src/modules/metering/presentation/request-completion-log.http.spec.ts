@@ -140,7 +140,7 @@ const testApiKeyAuthenticator: ApiKeyAuthenticatorPort = {
     }
 
     return Promise.resolve({
-      organizationId: 'local-development',
+      organizationId: 'org_local-development',
       apiKeyId: API_KEY_ID,
       environment,
       scopes: [GRADE_OPERATION.requiredScope],
@@ -448,7 +448,7 @@ describe('request completion log over the HTTP boundary', () => {
       route: GRADE_URL,
       http_status: 200,
       outcome: 'success',
-      org_id: 'local-development',
+      org_id: 'org_local-development',
       operation: 'writing.task1.grade',
       environment: 'development',
       identity_mode: 'declared_id',
@@ -519,13 +519,14 @@ describe('request completion log over the HTTP boundary', () => {
       route: GRADE_URL,
       http_status: 200,
       outcome: 'success',
-      api_key_id: API_KEY_ID,
-      org_id: 'local-development',
+      org_id: 'org_local-development',
       operation: 'writing.task1.grade',
       environment: 'development',
       identity_mode: 'declared_id',
       retry_budget: 'keyed_writing',
+      api_key_id: API_KEY_ID,
     });
+    expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
     expect(typeof time).toBe('number');
     expect(matchesPattern(request_id, REQUEST_ID_PATTERN)).toBe(true);
     expect(matchesPattern(trace_id, TRACE_ID_PATTERN)).toBe(true);
@@ -535,7 +536,6 @@ describe('request completion log over the HTTP boundary', () => {
     expect(typeof request_bytes).toBe('number');
     expect(typeof response_bytes).toBe('number');
     expect(idempotent_replay).toBe(false);
-    expect(JSON.stringify(log.all())).not.toContain(API_KEY_VALUE);
   });
 
   it('reports the same total time the Metering record was written with', async () => {

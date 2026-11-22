@@ -6,17 +6,17 @@ import {
   entitlementOfScope,
   isApiKeyFormat,
 } from '@/modules/identity/domain/api-key';
-import { hashApiKey } from './organization-api-key-generator';
-
-import type {
-  ApiKeyAuthenticatorPort,
-  ApiKeyCachePort,
-  ApiKeyCredential,
-  ApiKeyRecord,
-  ApiKeyRepositoryPort,
-  AuthFailureCounterPort,
-  AuthenticatedApiKey,
+import {
+  API_KEY_LAST_USED_THROTTLE_MS,
+  type ApiKeyAuthenticatorPort,
+  type ApiKeyCachePort,
+  type ApiKeyCredential,
+  type ApiKeyRecord,
+  type ApiKeyRepositoryPort,
+  type AuthFailureCounterPort,
+  type AuthenticatedApiKey,
 } from './api-key-authenticator.port';
+import { hashApiKey } from './organization-api-key-generator';
 
 // The credential format lives in the domain so that the self-service endpoint,
 // this authenticator, and the operator CLI share one definition. Only
@@ -25,6 +25,9 @@ export { isApiKeyFormat } from '@/modules/identity/domain/api-key';
 
 export const AUTH_FAILURE_LIMIT = 20;
 const MAX_API_KEY_LOOKUP_FLIGHTS = 1_024;
+// shortcut: 1,024 tracked keys per process; use shared TTL state if new-key
+// touches must not be skipped at capacity.
+export const API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT = 1_024;
 const AUTH_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 
 export function effectiveScopes(record: ApiKeyRecord): readonly string[] {
@@ -90,6 +93,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     string,
     Promise<ApiKeyRecord | null>
   >();
+  private readonly recentLastUsedTouches = new Map<string, number>();
 
   constructor(
     private readonly repository: ApiKeyRepositoryPort,
@@ -183,9 +187,7 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
       this.logEnvironmentRefusal(record.apiKeyId);
       throw environmentNotAllowed();
     }
-    void this.repository
-      .touchLastUsed(record.organizationId, record.apiKeyId, now)
-      .catch(() => undefined);
+    this.touchLastUsedIfDue(record, now);
 
     return {
       organizationId: record.organizationId,
@@ -208,6 +210,40 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     } catch {
       return undefined;
     }
+  }
+
+  private touchLastUsedIfDue(record: ApiKeyRecord, usedAt: Date): void {
+    const key = JSON.stringify([record.organizationId, record.apiKeyId]);
+    const usedAtMs = usedAt.getTime();
+    const previousTouchMs = this.recentLastUsedTouches.get(key);
+    if (
+      previousTouchMs !== undefined &&
+      usedAtMs - previousTouchMs < API_KEY_LAST_USED_THROTTLE_MS
+    ) {
+      return;
+    }
+
+    if (previousTouchMs !== undefined) {
+      this.recentLastUsedTouches.delete(key);
+    }
+    if (
+      this.recentLastUsedTouches.size >= API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT
+    ) {
+      for (const [trackedKey, touchedAtMs] of this.recentLastUsedTouches) {
+        if (usedAtMs - touchedAtMs >= API_KEY_LAST_USED_THROTTLE_MS) {
+          this.recentLastUsedTouches.delete(trackedKey);
+        }
+      }
+    }
+    if (
+      this.recentLastUsedTouches.size >= API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT
+    ) {
+      return;
+    }
+    this.recentLastUsedTouches.set(key, usedAtMs);
+    void this.repository
+      .touchLastUsed(record.organizationId, record.apiKeyId, usedAt)
+      .catch(() => undefined);
   }
 
   private findAndCache(hashHex: string): Promise<ApiKeyRecord | null> {

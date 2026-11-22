@@ -2,6 +2,7 @@ import { type Static, Type } from '@sinclair/typebox';
 
 import {
   SpeakingV2CriteriaSchema,
+  SpeakingV2ErrorPrioritySchema,
   SpeakingV2FeedbackSchema,
   SpeakingV2ScoresSchema,
   SpeakingV2TestTypeSchema,
@@ -28,6 +29,7 @@ export const SpeakingV2TestResultSchema = Type.Object(
     scores: SpeakingV2ScoresSchema,
     overall_feedback: SpeakingV2FeedbackSchema,
     criteria: SpeakingV2CriteriaSchema,
+    error_priority: SpeakingV2ErrorPrioritySchema,
   },
   { additionalProperties: false },
 );

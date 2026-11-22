@@ -115,6 +115,13 @@ export function resolveAihubEnvironment(
   });
 }
 
+/**
+ * The Organization the unauthenticated development bypass presents. It carries
+ * the issued org_ form so the dispatch boundary's Organization check holds
+ * for the local demo too (#1866).
+ */
+export const LOCAL_DEVELOPMENT_ORGANIZATION_ID = 'org_local-development';
+
 export function isLocalAuthBypassEnabled(
   config: RequestEnvironmentConfig,
 ): boolean {

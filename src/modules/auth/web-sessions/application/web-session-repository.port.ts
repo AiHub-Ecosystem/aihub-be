@@ -19,6 +19,13 @@ export interface FindExchangeableWebSessionInput {
 export interface ExchangeableWebSession {
   readonly sessionId: string;
   readonly userId: string;
+  readonly proofKeyJkt?: string;
+}
+
+export interface BindWebSessionProofKeyInput {
+  readonly tokenHash: string;
+  readonly proofKeyJkt: string;
+  readonly now: Date;
 }
 
 export interface RenewWebSessionInput {
@@ -70,6 +77,8 @@ export interface WebSessionRepositoryPort {
   findExchangeableWebSession(
     input: FindExchangeableWebSessionInput,
   ): Promise<ExchangeableWebSession | undefined>;
+  /** Atomically binds the first key; it never replaces an existing thumbprint. */
+  bindWebSessionProofKey(input: BindWebSessionProofKeyInput): Promise<boolean>;
   /** Answers whether the row was renewed; `false` is normal, not a failure. */
   renewWebSession(input: RenewWebSessionInput): Promise<boolean>;
   /** Answers whether a session was revoked; `false` is normal, not a failure. */

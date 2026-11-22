@@ -62,11 +62,32 @@ export class PostgresWebSessionRepository implements WebSessionRepositoryPort {
         revokedAt: null,
         expiresAt: { gt: input.now },
       },
-      select: { id: true, userAccountId: true },
+      select: { id: true, userAccountId: true, proofKeyJkt: true },
     });
     return session === null
       ? undefined
-      : { sessionId: session.id, userId: session.userAccountId };
+      : {
+          sessionId: session.id,
+          userId: session.userAccountId,
+          ...(session.proofKeyJkt === null
+            ? {}
+            : { proofKeyJkt: session.proofKeyJkt }),
+        };
+  }
+
+  async bindWebSessionProofKey(
+    input: Parameters<WebSessionRepositoryPort['bindWebSessionProofKey']>[0],
+  ): Promise<boolean> {
+    const bound = await this.client.webSession.updateMany({
+      where: {
+        tokenHash: input.tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: input.now },
+        proofKeyJkt: null,
+      },
+      data: { proofKeyJkt: input.proofKeyJkt },
+    });
+    return bound.count > 0;
   }
 
   /**

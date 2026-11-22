@@ -79,15 +79,21 @@ describe('requiredSpeakingUserId', () => {
     );
   });
 
+  // ADR-0053: visible ASCII only, at most 256 characters, so neither a
+  // control character nor an over-long value reaches a header or form field.
   it.each([
-    ['missing', undefined],
-    ['blank', '  '],
+    ['a missing', undefined, 'USER_IDENTITY_REQUIRED'],
+    ['a blank', '  ', 'USER_IDENTITY_REQUIRED'],
+    ['a control-character', 'student\u0001id', 'INVALID_USER_IDENTITY'],
+    ['a newline', 'student\nid', 'INVALID_USER_IDENTITY'],
+    ['a spaced', 'student id', 'INVALID_USER_IDENTITY'],
+    ['an over-length', 's'.repeat(257), 'INVALID_USER_IDENTITY'],
   ])(
-    'rejects a %s End-User ID before a downstream request exists',
-    (_name, userId) => {
+    'refuses %s End-User ID before a downstream request exists',
+    (_name, userId, code) => {
       expect(
         captureError(() => requiredSpeakingUserId(context(userId))),
-      ).toMatchObject({ code: 'USER_IDENTITY_REQUIRED' });
+      ).toMatchObject({ code });
     },
   );
 });
@@ -128,6 +134,20 @@ describe('Speaking identity headers', () => {
     expectBothTransportsToReject(context('same-user', '  '), 'INTERNAL_ERROR');
   });
 
+  it.each([
+    ['without the org_ prefix', 'acme'],
+    ['with a suffix that starts outside the issued alphabet', 'org_!acme'],
+    ['with a space', 'org_acme corp'],
+  ])(
+    'fails closed for an Organization ID %s on both transports',
+    (_name, organizationId) => {
+      expect.assertions(2);
+      expectBothTransportsToReject(
+        context('same-user', organizationId),
+        'INTERNAL_ERROR',
+      );
+    },
+  );
   it('fails closed for a missing End-User ID on both transports', () => {
     expect.assertions(2);
     expectBothTransportsToReject(

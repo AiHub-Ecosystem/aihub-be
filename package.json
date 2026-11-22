@@ -109,6 +109,7 @@
     "test:check-app-errors": "jest --runTestsByPath scripts/checks/data/check-app-errors.spec.ts",
     "test:check-changed": "node --test scripts/checks/changed/check-changed.spec.mjs",
     "test:secret-scan": "node --test scripts/ci/secret-scan/secret-scan-plan.spec.mjs",
+    "test:affected-jobs": "node --test scripts/ci/push/affected-jobs.spec.mjs",
     "test:shell-specs": "node scripts/checks/changed/run-shell-specs.mjs"
   },
   "dependencies": {

@@ -17,6 +17,23 @@ each hostname to its matching loopback port. See
 
 ## Prerequisites
 
+### Deploy identity trust boundary (#58)
+
+The accepted target is a constrained deploy identity using rootless Docker.
+This is not yet implemented on Production: the current account's sudo rules
+still grant root-equivalent access through Docker and other commands. Do not
+remove those current permissions until the rootless CD deploy and rollback
+paths have been rehearsed. After that rehearsal, remove Docker/dockerd,
+package-management, `dpkg`, Certbot, root-editor, general nginx/systemctl, and
+`/var/www/autonginx.sh` sudo access. Host maintenance and hostname/certificate
+changes belong to a separately supervised operator process.
+
+The only planned deploy-user sudo exception is the fixed no-argument AIHUB
+nginx helper. Keep CD invocation disabled until the staged-file race and
+server-name/certificate allowlist protections in [#434](https://github.com/AiHub-Ecosystem/aihub-be/issues/434)
+are implemented and verified. This decision is recorded in
+[ADR-0179](../adr/0179-constrain-the-production-deploy-identity.md).
+
 - Docker Engine with the Compose plugin.
 - DNS `A/AAAA` for `AIHUB_PRODUCTION_HOST` pointing to this VPS, and an nginx
   server block for it. Ports 80 and 443 are already held by nginx.
@@ -1458,8 +1475,10 @@ See [Roll back a blue-green release](#roll-back-a-blue-green-release).
 
 Both AIHUB hosts write to `/var/log/aihub-access.log`; this does not change the
 shared `/var/log/nginx/access.log` or another site's logging. Each JSON record
-contains only the observed IP, upstream `X-Request-Id`, method, `$uri` without
-the query string, and status. `/etc/logrotate.d/aihub-access` rotates daily
+contains only the observed IP, upstream `X-Request-Id`, method, path without
+the query string, and status. The path is normally `$uri`; for a request line
+nginx rejects before selecting a location, it is the method and path parsed
+from that line. `/etc/logrotate.d/aihub-access` rotates daily
 with numeric archive names, a 10 MiB `maxsize` threshold, `maxage 28`, and up
 to four rotated generations. Numeric names keep the existing `.1` and `.2.gz`
 archives in the same retention chain; date-stamped names would leave those
@@ -1548,6 +1567,11 @@ What changes, and what does not:
   and the rollout rolls back.
 
 ### Publishing another hostname
+
+Hostname and certificate changes on the shared VPS are operator-run. The
+commands below are examples for that supervised operator process; the deploy
+identity must not receive sudo access to Certbot, root editors, or general
+nginx/systemctl commands.
 
 certbot cannot create a server block, only attach a certificate to one that
 already exists. Running `certbot --nginx -d <new host>` first obtains the

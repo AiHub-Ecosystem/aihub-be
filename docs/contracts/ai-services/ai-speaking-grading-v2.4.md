@@ -17,6 +17,10 @@ Written provider answers received on 2026-11-02 and 2026-11-03 are recorded
 below ([#1450, answers 2–4](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6581758654),
 [#1450, answer 10](https://github.com/AiHub-Ecosystem/aihub-be/issues/1450#issuecomment-6608652752)).
 
+The provider's updated response guide received on 2026-11-21 documents
+`data.error_priority` for question, Part, and Test results. Its example strings
+are represented by a sanitized fixture in `test/fixtures/ai-speaking/`.
+
 On 2026-10-31, AI Speaking deployed commit `148f126` to accept AIHUB's opaque
 `org_...` Organization IDs while retaining legacy UUID support. A controlled
 Production question-grade request using a synthetic `org_...` ID returned
@@ -103,6 +107,16 @@ are `null`, while an empty array means the group applies and has no entries.
 `data.meta.schema_version` is `2.4`; `result_type` is `question_result`,
 `part_result`, or `test_result`. The numeric band fields for individual
 criteria are integers from 0–9; `overall` is a number in 0.5 steps.
+
+Each of the three result types includes `data.error_priority`, an ordered list
+of up to three entries. Each entry has `rank` (1–3), `group`, `code`,
+`name_en`, `name_vi`, and `reason_vi`. The provider currently documents the
+groups `fluency_pronunciation`, `lexical_resource`, and
+`grammatical_range_accuracy`; group names and error codes remain strings. An
+empty list means no priority errors. The guide says
+`name_vi` is AI-generated and awaits Academic approval. The updated guide's
+shortened examples are captured with free text redacted; a no-speech Production
+probe returned an empty list.
 
 The provider's principal error responses are:
 

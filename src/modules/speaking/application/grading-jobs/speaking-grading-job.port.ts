@@ -18,15 +18,48 @@ export type SpeakingGradingJobCreationOutcome =
   | { created: true }
   | { created: false; existingJobId: string };
 
+/**
+ * What admission spent outside Postgres, and gives back if the job row never
+ * commits. `release` must never throw: a compensation failure cannot replace
+ * the reason the submission was refused.
+ */
+export type SpeakingGradingJobAdmissionRelease = () => Promise<void>;
+
+/** What one admission attempt decided, and what it spent if it admitted. */
+export type SpeakingGradingJobAdmission =
+  | { readonly admitted: false }
+  | {
+      readonly admitted: true;
+      readonly release?: SpeakingGradingJobAdmissionRelease;
+    };
+
 export interface SpeakingGradingJobRepositoryPort {
   /** Commits a new job as `queued`. */
   create(job: NewSpeakingGradingJob): Promise<void>;
 
-  /** Serializes quota check, graded admission, key recovery and job creation for one Organization. */
+  /**
+   * Serializes quota check, graded admission, key recovery and job creation for
+   * one Organization. Admission returns its own compensation, which this method
+   * runs whenever the job row does not commit: a refusal, a unique-violation
+   * recovery, or a rollback the driver reports.
+   *
+   * Ordering: spend, then commit, then compensate on abort (#1992). The chosen
+   * alternative — commit first and spend afterwards — cannot hold the monthly
+   * quota for work that is not accepted yet, because a concurrent submit would
+   * read a quota that no row reserves. The cost is a process that dies between
+   * the spend and the commit: the job row never exists, so no sweep can find it
+   * and the Sandbox reservation stays consumed until #851 reclaims reservations
+   * that never dispatched. A crash there loses at most one dispatch unit for the
+   * month; a rollback, which is the case this contract makes recoverable, loses
+   * none. The monthly quota counter is not among those spends: submit only reads
+   * it, and the counter is incremented at metering, after the job completes.
+   */
   createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
     readonly monthlyQuota: number | null;
-    readonly admit: (monthlyQuota: number | null) => Promise<boolean>;
+    readonly admit: (
+      monthlyQuota: number | null,
+    ) => Promise<SpeakingGradingJobAdmission>;
   }): Promise<SpeakingGradingJobCreationOutcome>;
 
   /** The non-terminal job whichever holds this idempotency key, if any. */

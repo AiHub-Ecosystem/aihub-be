@@ -38,7 +38,7 @@ import { useTestRuntimeConfiguration } from '../../../../../test/support/test-ru
 const VALID_API_KEY = `aihub_sk_${'C'.repeat(43)}`;
 
 const authenticatedApiKey: AuthenticatedApiKey = {
-  organizationId: 'local-development',
+  organizationId: 'org_local-development',
   apiKeyId: 'ak_backend',
   environment: 'production',
   scopes: ['writing.grade'],

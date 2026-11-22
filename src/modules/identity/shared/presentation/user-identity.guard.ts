@@ -22,6 +22,7 @@ import {
   getAuthenticatedApiKey,
 } from './authenticated-request';
 import {
+  LOCAL_DEVELOPMENT_ORGANIZATION_ID,
   type RequestEnvironmentConfig,
   isLocalAuthBypassEnabled,
 } from './request-environment';
@@ -57,7 +58,7 @@ export class UserIdentityGuard implements CanActivate {
       if (
         this.configuration !== undefined &&
         isLocalAuthBypassEnabled(this.configuration) &&
-        authenticated.organizationId === 'local-development'
+        authenticated.organizationId === LOCAL_DEVELOPMENT_ORGANIZATION_ID
       ) {
         request.aihubIdentity = {
           userId: 'local-development',
