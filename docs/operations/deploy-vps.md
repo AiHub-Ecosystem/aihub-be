@@ -313,9 +313,10 @@ variable before deploying.
 The value must be exactly the bucket of that runtime scope: `aihub-user-assets`
 in Production and `aihub-sandbox-user-assets` in Sandbox. Any other name leaves
 the adapter unconfigured, so the Avatar routes answer `503
-AVATAR_STORAGE_UNAVAILABLE` and the startup log carries
-`event=avatar_storage_bucket_not_owned`. That guard is what keeps a mis-mapped
-Sandbox from sweeping a Production bucket.
+AVATAR_STORAGE_UNAVAILABLE`. When a shared S3 client is configured, startup
+also logs `event=avatar_storage_bucket_not_owned`. Without a shared client,
+Avatar storage remains unavailable and that event is not logged. The guard is
+what keeps a mis-mapped Sandbox from sweeping a Production bucket.
 
 The Sandbox deployment needs its own Avatar bucket, named by
 `SEAWEEDFS_SANDBOX_USER_ASSET_BUCKET` (for example
