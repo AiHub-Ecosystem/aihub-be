@@ -96,6 +96,7 @@ describe('loadCliRunner', () => {
     const sourceRunners = [
       ['organization-status.ts', 'runOrganizationStatusCommand'],
       ['organization-first-owner.ts', 'runAttachFirstOwnerCommand'],
+      ['organization-create.ts', 'runCreateOrganizationCommand'],
       ['usage-prune.ts', 'runUsagePruneCommand'],
       ['usage-report.ts', 'runUsageReportCommand'],
       ['quota-reconcile.ts', 'runQuotaReconciliationCommand'],

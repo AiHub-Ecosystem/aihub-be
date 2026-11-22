@@ -195,6 +195,12 @@ const redisTtlAuditDescriptor = cliRunnerDescriptor(
   'runRedisTtlAuditCommand',
   'Redis TTL audit command is unavailable',
 );
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-create').runCreateOrganizationCommand>} */
+const createOrganizationDescriptor = cliRunnerDescriptor(
+  'organization-create',
+  'runCreateOrganizationCommand',
+  'organization creation command is unavailable',
+);
 /** @type {CliRunnerDescriptor<typeof import('../../src/cli/organization-api-key').runCreateOperatorApiKeyCommand>} */
 const createOperatorApiKeyDescriptor = cliRunnerDescriptor(
   'organization-api-key',
@@ -283,6 +289,21 @@ async function runGrantOrganizationEntitlement(input) {
 /** @param {Parameters<typeof import('../../src/cli/organization-first-owner').runAttachFirstOwnerCommand>[0]} input */
 async function runAttachFirstOwner(input) {
   return runCliCommand(attachFirstOwnerDescriptor, input);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/organization-create').runCreateOrganizationCommand>[0]} input */
+async function runCreateOrganization(input) {
+  return runCliCommand(createOrganizationDescriptor, input);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/organization-api-key').runCreateOperatorApiKeyCommand>[0]} input */
+async function runCreateOperatorApiKey(input) {
+  return runCliCommand(createOperatorApiKeyDescriptor, input);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/organization-api-key').runRevokeOperatorApiKeyCommand>[0]} input */
+async function runRevokeOperatorApiKey(input) {
+  return runCliCommand(revokeOperatorApiKeyDescriptor, input);
 }
 
 /** @param {Parameters<typeof import('../../src/cli/usage-prune').runUsagePruneCommand>[0]} input */
@@ -725,35 +746,28 @@ function operatorApplicationName(role) {
 
 /** @param {CliOptions} options */
 async function createOrganization(options) {
-  const values = [
-    `org_${ulid()}`,
-    requiredOption(options, 'name'),
-    listOption(options, 'entitlements', 'writing'),
-    positiveIntegerOption(options, 'rate-limit-rpm', '600'),
-    positiveIntegerOption(options, 'max-concurrent', '20'),
-    // Quota and hard stop live on the organization, not the key: they are one
-    // budget shared by every key it issues.
-    quotaOption(options, 'monthly-quota'),
-    booleanOption(options, 'hard-stop'),
-  ];
+  const name = requiredOption(options, 'name');
+  const entitlements = listOption(options, 'entitlements', 'writing');
+  const rateLimitRpm = positiveIntegerOption(options, 'rate-limit-rpm', '600');
+  const maxConcurrent = positiveIntegerOption(options, 'max-concurrent', '20');
+  // Quota and hard stop live on the organization, not the key: they are one
+  // budget shared by every key it issues.
+  const monthlyRequestQuota = quotaOption(options, 'monthly-quota');
+  const hardStopOnQuota = booleanOption(options, 'hard-stop');
   const safety = await prepareOperatorMutation('org:create', options);
   if (safety?.previewed) return;
 
-  const pool = await databasePool({ controlPlane: true });
-  try {
-    const result = /** @type {import('pg').QueryResult<{id: string}>} */ (
-      await pool.query(
-        `INSERT INTO organizations
-         (id, name, entitlements, rate_limit_rpm, max_concurrent,
-          monthly_request_quota, hard_stop_on_quota)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id`,
-        values,
-      )
-    );
-    console.log(result.rows[0].id);
-  } finally {
-    await pool.end();
+  const outcome = await runCreateOrganization({
+    databaseUrl: controlPlaneDatabaseUrl(),
+    name,
+    entitlements,
+    rateLimitRpm,
+    maxConcurrent,
+    monthlyRequestQuota,
+    hardStopOnQuota,
+  });
+  if (outcome !== 'created') {
+    usageError();
   }
 }
 
@@ -916,7 +930,7 @@ async function createKey(options) {
   const generateApiKey = await loadApiKeyGenerator();
   const generated = generateApiKey(`ak_${ulid()}`, environment);
 
-  const outcome = await runCliCommand(createOperatorApiKeyDescriptor, {
+  const outcome = await runCreateOperatorApiKey({
     databaseUrl: controlPlaneDatabaseUrl(),
     organizationId,
     actorUsername,
@@ -943,7 +957,7 @@ async function revokeKey(options) {
   const safety = await prepareOperatorMutation('key:revoke', options);
   if (safety?.previewed) return;
 
-  const outcome = await runCliCommand(revokeOperatorApiKeyDescriptor, {
+  const outcome = await runRevokeOperatorApiKey({
     databaseUrl: controlPlaneDatabaseUrl(),
     redisUrl: process.env.REDIS_URL,
     apiKeyId,
