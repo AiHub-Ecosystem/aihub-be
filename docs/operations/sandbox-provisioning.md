@@ -318,9 +318,10 @@ The key is issued as `aihub_sandbox_…` because it is bound to one environment.
 `/demo/scoring` requires `writing.grade`; `/demo/speaking` requires
 `speaking.grade`. The demo refuses Organizations with active Identity
 Configuration because it cannot collect an assertion signed by that
-Organization. `--envs` takes exactly one environment: the command refuses a
-list, because every newly issued key is bound to one environment. Only keys
-issued before ADR-0095 keep the shared `aihub_sk_` prefix.
+Organization. `--envs` is required and takes exactly one environment: the
+command refuses to issue a key without it, and refuses a list, because every
+newly issued key is bound to one environment. Only keys issued before ADR-0095
+keep the shared `aihub_sk_` prefix.
 
 To revoke:
 

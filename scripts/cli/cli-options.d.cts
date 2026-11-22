@@ -13,5 +13,4 @@ export function booleanOption(
 export function environmentOption(
   options: ReadonlyMap<string, string>,
   name: string,
-  fallback?: string,
 ): string;

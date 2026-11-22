@@ -71,11 +71,18 @@ const ALLOWED_ENVIRONMENTS = new Set([
  * every newly issued key has exactly one environment, so there is no shared
  * multi-environment prefix to issue it under.
  */
-/** @param {ReadonlyMap<string, string>} options @param {string} name @param {string} [fallback] @returns {string} */
-function environmentOption(options, name, fallback = 'production') {
-  const value = (options.get(name) ?? fallback).trim();
+/** @param {ReadonlyMap<string, string>} options @param {string} name @returns {string} */
+function environmentOption(options, name) {
+  const valid = [...ALLOWED_ENVIRONMENTS].join(', ');
+  const value = options.get(name)?.trim();
+  // No default: a forgotten --envs must never issue a Production key (#435).
+  if (value === undefined || value.length === 0) {
+    throw new CliUsageError(
+      `--${name} is required and must be one of: ${valid}`,
+    );
+  }
   if (!ALLOWED_ENVIRONMENTS.has(value)) {
-    usageError();
+    throw new CliUsageError(`--${name} must be one of: ${valid}`);
   }
 
   return value;

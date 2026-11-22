@@ -922,7 +922,7 @@ async function createKey(options) {
   const name = requiredOption(options, 'name');
   const scopes = listOption(options, 'scopes', 'writing.grade');
   // A new key is bound to one environment and issued under its display prefix.
-  const environment = environmentOption(options, 'envs', 'production');
+  const environment = environmentOption(options, 'envs');
   const internal = booleanOption(options, 'internal');
   const safety = await prepareOperatorMutation('key:create', options);
   if (safety?.previewed) return;

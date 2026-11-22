@@ -280,8 +280,11 @@ describe('booleanOption', () => {
 });
 
 describe('environmentOption', () => {
-  it('defaults key creation to production', () => {
-    expect(environmentOption(options(), 'envs')).toBe('production');
+  // A forgotten flag must never issue a Production key (#435).
+  it('requires an explicit environment and lists the valid values', () => {
+    expect(() => environmentOption(options(), 'envs')).toThrow(
+      '--envs is required and must be one of: development, staging, production, sandbox',
+    );
   });
 
   it.each(['development', 'staging', 'production', 'sandbox'])(

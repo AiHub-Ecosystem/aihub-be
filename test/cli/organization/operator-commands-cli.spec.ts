@@ -45,6 +45,10 @@ describe('operator commands CLI dispatch and validation', () => {
       ['missing actor', ['--org', 'org_01', '--name', 'k']],
       ['missing name', ['--org', 'org_01', '--actor', 'ops-alice']],
       [
+        'missing environment',
+        ['--org', 'org_01', '--actor', 'ops-alice', '--name', 'k'],
+      ],
+      [
         'unsupported option',
         [
           '--org',
@@ -90,6 +94,22 @@ describe('operator commands CLI dispatch and validation', () => {
       expect(result.stderr).toContain('Command failed');
     });
 
+    it('names the valid environments when --envs is missing', () => {
+      const result = executeCli([
+        'key:create',
+        '--org',
+        'org_01',
+        '--actor',
+        'ops-alice',
+        '--name',
+        'k',
+      ]);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain(
+        '--envs is required and must be one of: development, staging, production, sandbox',
+      );
+    });
+
     it('reaches database layer and fails operationally when unconfigured', () => {
       const result = executeCli([
         'key:create',
@@ -99,6 +119,8 @@ describe('operator commands CLI dispatch and validation', () => {
         'ops-alice',
         '--name',
         'k',
+        '--envs',
+        'production',
       ]);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('Command failed');
