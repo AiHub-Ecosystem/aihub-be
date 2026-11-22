@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 const CODE_RABBIT_PATH = '.coderabbit.yaml';
 const API_SCOPES = ['src/**/*.controller.ts', 'src/**/presentation/**'];
 const IDENTITY_SCOPE =
-  '{src/modules/identity/*/application/**,src/modules/identity/*/domain/**,src/modules/identity/*/infrastructure/**,src/modules/identity/*/public/**,src/modules/identity/shared/application/**,src/modules/identity/shared/domain/**,src/modules/identity/shared/infrastructure/**,src/modules/identity/domain/**,src/modules/identity/public/**,src/modules/identity/identity.module.ts,src/common/request-context/**,src/common/security/**}';
+  '{src/modules/identity/*/application/**,src/modules/identity/*/domain/**,src/modules/identity/*/infrastructure/**,src/modules/identity/*/public/**,src/modules/identity/shared/application/**,src/modules/identity/shared/domain/**,src/modules/identity/shared/infrastructure/**,src/modules/identity/domain/**,src/modules/identity/public/**,src/modules/identity/testing/**,src/modules/identity/identity.module.ts,src/common/request-context/**,src/common/security/**}';
 const CHECKS_SCOPE = 'scripts/checks/**';
 const MAX_PATH_INSTRUCTIONS_LENGTH = 20_000;
 
