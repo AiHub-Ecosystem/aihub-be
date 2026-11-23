@@ -83,6 +83,8 @@ describe('operator commands CLI dispatch and validation', () => {
           'ops-alice',
           '--name',
           'k',
+          '--envs',
+          'production',
           '--internal',
           'yes',
         ],
