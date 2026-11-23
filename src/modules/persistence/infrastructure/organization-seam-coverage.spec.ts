@@ -313,6 +313,7 @@ const groups: readonly Group[] = [
       expireQueued: SWEEP,
       releaseSettledQuotaReservations: SWEEP,
       deleteCreatedBefore: SWEEP,
+      recoverKeyedJob: HELPER,
       scoped: HELPER,
       run: HELPER,
     },

@@ -139,7 +139,8 @@ export class PostgresSpeakingGradingJobRepository
       } catch (error) {
         // The row did not commit, so what admission spent is given back.
         await releaseAdmission(admission.release);
-        throw error;
+        if (!isKeyUniquenessViolation(error)) throw error;
+        return this.recoverKeyedJob(error, input.job, unexpiredSince);
       }
       return { created: true };
     }
@@ -206,27 +207,36 @@ export class PostgresSpeakingGradingJobRepository
           'Speaking grading job store is unavailable',
         );
       }
-      const retryKey = input.job.idempotencyKey;
-      const existingAfter =
-        retryKey === undefined
-          ? undefined
-          : await this.scoped(input.job.organizationId, (transaction) =>
-              selectKeyedJob(transaction, {
-                organizationId: input.job.organizationId,
-                endUserId: input.job.endUserId,
-                idempotencyKey: retryKey,
-                unexpiredSince,
-              }),
-            );
-      if (existingAfter === undefined) {
-        if (error instanceof AppError) throw error;
-        throw databaseUnavailableError(
-          error,
-          'Speaking grading job store is unavailable',
-        );
-      }
-      return { created: false, existingJobId: existingAfter.jobId };
+      return this.recoverKeyedJob(error, input.job, unexpiredSince);
     }
+  }
+
+  /** Returns the job a concurrent submission with the same key committed. */
+  private async recoverKeyedJob(
+    error: unknown,
+    job: NewSpeakingGradingJob,
+    unexpiredSince: Date,
+  ): Promise<SpeakingGradingJobCreationOutcome> {
+    const idempotencyKey = job.idempotencyKey;
+    const existing =
+      idempotencyKey === undefined
+        ? undefined
+        : await this.scoped(job.organizationId, (transaction) =>
+            selectKeyedJob(transaction, {
+              organizationId: job.organizationId,
+              endUserId: job.endUserId,
+              idempotencyKey,
+              unexpiredSince,
+            }),
+          );
+    if (existing !== undefined) {
+      return { created: false, existingJobId: existing.jobId };
+    }
+    if (error instanceof AppError) throw error;
+    throw databaseUnavailableError(
+      error,
+      'Speaking grading job store is unavailable',
+    );
   }
 
   async findOwned(
