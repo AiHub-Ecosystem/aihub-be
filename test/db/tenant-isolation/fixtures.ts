@@ -128,6 +128,22 @@ export function createTenantIsolationRedis(): Redis {
 export function createTenantIsolationRedisClients(): TenantIsolationRedisClients {
   const raw = createTenantIsolationRedis();
   const gateway: RedisGatewayClient = {
+    waitUntilReady: (signal) => {
+      if (raw.status === 'ready') return Promise.resolve(true);
+      if (signal.aborted) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        const finish = (ready: boolean): void => {
+          raw.removeListener('ready', onReady);
+          signal.removeEventListener('abort', onAbort);
+          resolve(ready);
+        };
+        const onReady = (): void => finish(true);
+        const onAbort = (): void => finish(false);
+        raw.once('ready', onReady);
+        signal.addEventListener('abort', onAbort, { once: true });
+        if (raw.status === 'ready') onReady();
+      });
+    },
     ping: () => raw.ping(),
     get: (key) => raw.get(key),
     set: (key, value, mode, seconds) => raw.set(key, value, mode, seconds),

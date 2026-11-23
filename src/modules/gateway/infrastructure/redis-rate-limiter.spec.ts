@@ -190,7 +190,6 @@ describe('RedisRateLimiter', () => {
       '',
       {
         eval: (...args) => current.eval(...args),
-        quit: () => current.quit(),
       },
       Date.now,
       logger,
@@ -212,5 +211,15 @@ describe('RedisRateLimiter', () => {
       limiter.consume({ keyId: 'ak_backend', limit: 10 }),
     ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
     expect(logger.warnings).toHaveLength(2);
+  });
+
+  it('does not close an injected Redis client during module teardown', async () => {
+    const redis = new FakeRedis();
+    const quit = jest.spyOn(redis, 'quit');
+    const limiter = new RedisRateLimiter('', redis);
+
+    await limiter.onModuleDestroy();
+
+    expect(quit).not.toHaveBeenCalled();
   });
 });

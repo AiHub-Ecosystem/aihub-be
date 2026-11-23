@@ -80,6 +80,16 @@ describe('RedisConcurrencyLimiter', () => {
     expect(longest).toBeGreaterThanOrEqual(300_000);
   });
 
+  it('does not close its injected Redis client during module teardown', async () => {
+    const redis = new FakeRedis();
+    const quit = jest.spyOn(redis, 'quit');
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    await limiter.onModuleDestroy();
+
+    expect(quit).not.toHaveBeenCalled();
+  });
+
   it('atomically acquires an organization lease and releases its request member', async () => {
     const redis = new FakeRedis();
     const limiter = new RedisConcurrencyLimiter(redis);
@@ -317,7 +327,6 @@ describe('RedisConcurrencyLimiter', () => {
           ...args: readonly (string | number)[]
         ) => current.eval(script, numberOfKeys, ...args),
         zrem: (key: string, member: string) => current.zrem(key, member),
-        quit: () => current.quit(),
       },
       logger,
     );

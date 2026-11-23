@@ -210,7 +210,6 @@ describe('tenant isolation for Redis counters', () => {
         }
         return result;
       },
-      quit: () => secondRedis.quit(),
     };
     const firstInstance = gradedAdmission();
     const secondInstance = gradedAdmission(secondClient);

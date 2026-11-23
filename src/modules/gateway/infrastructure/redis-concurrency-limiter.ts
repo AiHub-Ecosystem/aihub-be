@@ -23,10 +23,7 @@ import type {
 } from '@/modules/gateway/application/concurrency-limiter.port';
 import type { RedisGatewayClient } from './redis-gateway.client';
 
-export type RedisConcurrencyClient = Pick<
-  RedisGatewayClient,
-  'eval' | 'zrem' | 'quit'
->;
+export type RedisConcurrencyClient = Pick<RedisGatewayClient, 'eval' | 'zrem'>;
 
 /** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
@@ -159,7 +156,6 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     for (const settle of this.pendingRemovals) settle();
-    await this.client?.quit().catch(() => undefined);
   }
 
   private remoteLease(

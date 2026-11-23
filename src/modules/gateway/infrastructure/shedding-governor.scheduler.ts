@@ -1,4 +1,4 @@
-import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
+import type { BeforeApplicationShutdown, OnModuleInit } from '@nestjs/common';
 
 import { JitteredTimer } from '@/common/jittered-timer';
 import { SheddingPolicy } from '@/modules/gateway/application/shedding/shedding-policy';
@@ -33,11 +33,15 @@ function peakUtilization(
  * host; the shared level store makes the higher decision win across peers.
  */
 export class SheddingGovernorScheduler
-  implements OnModuleInit, OnApplicationShutdown
+  implements OnModuleInit, BeforeApplicationShutdown
 {
   private readonly policy = new SheddingPolicy();
   private readonly timer: JitteredTimer;
+  private readonly startupAbort = new AbortController();
+  private readonly pendingOperations = new Set<Promise<void>>();
+  private startup = Promise.resolve();
   private readingSharedLevel = false;
+  private stopping = false;
 
   constructor(
     private readonly snapshot: () => readonly DownstreamConcurrencySample[],
@@ -48,30 +52,47 @@ export class SheddingGovernorScheduler
   }
 
   onModuleInit(): void {
-    this.timer.start(0);
+    this.startup = (async () => {
+      const ready = await this.level.waitUntilReady(this.startupAbort.signal);
+      if (ready && !this.stopping) this.timer.start(0);
+    })();
   }
 
-  onApplicationShutdown(): void {
+  async beforeApplicationShutdown(): Promise<void> {
+    this.stopping = true;
     this.timer.stop();
+    this.startupAbort.abort();
+    await this.startup;
+    await Promise.all(this.pendingOperations);
   }
 
   /** One decision pass, exposed so a test can drive it without the timer. */
   runPass(): void {
+    if (this.stopping) return;
+
     const next = this.policy.observe(
       peakUtilization(this.snapshot()),
       this.now(),
     );
-    this.level.setLocal(next);
+    this.track(this.level.setLocal(next));
     // The gauge reports the level this instance applies, which is the higher of
     // its own decision and a peer's; a peer shedding alone must still show.
     setSheddingLevelMetric(this.level.current());
     this.readSharedLevel();
   }
 
+  private track(operation: Promise<void>): void {
+    this.pendingOperations.add(operation);
+    void operation.then(
+      () => this.pendingOperations.delete(operation),
+      () => this.pendingOperations.delete(operation),
+    );
+  }
+
   private readSharedLevel(): void {
-    if (this.readingSharedLevel) return;
+    if (this.stopping || this.readingSharedLevel) return;
     this.readingSharedLevel = true;
-    void this.level
+    const operation = this.level
       .refresh()
       // A peer's level raises what this instance applies, so the gauge moves
       // with the read rather than a pass later.
@@ -79,5 +100,6 @@ export class SheddingGovernorScheduler
       .finally(() => {
         this.readingSharedLevel = false;
       });
+    this.track(operation);
   }
 }

@@ -1,3 +1,5 @@
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
+
 import { internalError } from '@/common/errors/app-error';
 import {
   REDIS_NO_REPLAY_OPTIONS,
@@ -7,6 +9,7 @@ import { numberReply } from '@/common/redis/number-reply';
 import Redis from 'ioredis';
 
 export interface RedisGatewayClient {
+  waitUntilReady(signal: AbortSignal): Promise<boolean>;
   ping(): Promise<string>;
   get(key: string): Promise<string | null>;
   set(
@@ -34,6 +37,18 @@ export interface RedisGatewayClient {
 
 export const REDIS_GATEWAY_CLIENT = Symbol('REDIS_GATEWAY_CLIENT');
 
+@Injectable()
+export class RedisGatewayClientLifecycle implements OnApplicationShutdown {
+  constructor(
+    @Inject(REDIS_GATEWAY_CLIENT)
+    private readonly client: Pick<RedisGatewayClient, 'quit'> | undefined,
+  ) {}
+
+  async onApplicationShutdown(): Promise<void> {
+    await this.client?.quit().catch(() => undefined);
+  }
+}
+
 /** An `EVAL` reply that must be an array of integers; anything else throws. */
 export function integerArrayReply(result: unknown): readonly number[] {
   if (
@@ -47,6 +62,28 @@ export function integerArrayReply(result: unknown): readonly number[] {
 
 class IoredisGatewayClient implements RedisGatewayClient {
   constructor(private readonly client: Redis) {}
+
+  waitUntilReady(signal: AbortSignal): Promise<boolean> {
+    if (this.client.status === 'ready') return Promise.resolve(true);
+    if (signal.aborted) return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ready: boolean): void => {
+        if (settled) return;
+        settled = true;
+        this.client.removeListener('ready', onReady);
+        signal.removeEventListener('abort', onAbort);
+        resolve(ready);
+      };
+      const onReady = (): void => finish(true);
+      const onAbort = (): void => finish(false);
+
+      this.client.once('ready', onReady);
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (this.client.status === 'ready') onReady();
+    });
+  }
 
   ping(): Promise<string> {
     return this.client.ping();

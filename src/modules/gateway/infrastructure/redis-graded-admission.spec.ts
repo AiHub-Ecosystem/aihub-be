@@ -29,8 +29,6 @@ class FakeRedis implements RedisGradedAdmissionClient {
     if (this.failure !== undefined) throw this.failure;
     return [this.queued.shift() ?? this.result, this.rateCount];
   }
-
-  async quit(): Promise<void> {}
 }
 
 const NOW = 1_782_000_000_000;

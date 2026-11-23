@@ -39,7 +39,10 @@ end
 return current
 `;
 
-export type SheddingLevelRedisClient = Pick<RedisGatewayClient, 'get' | 'eval'>;
+export type SheddingLevelRedisClient = Pick<
+  RedisGatewayClient,
+  'get' | 'eval' | 'waitUntilReady'
+>;
 
 /**
  * The level this instance applies: the higher of its own policy and the shared
@@ -65,6 +68,10 @@ export class SheddingLevelStore implements SheddingLevelPort {
     );
   }
 
+  waitUntilReady(signal: AbortSignal): Promise<boolean> {
+    return this.client?.waitUntilReady(signal) ?? Promise.resolve(true);
+  }
+
   current(): number {
     // A failed read leaves `shared` untouched, so it is trusted only while a
     // read that produced it is fresher than the key's own TTL. Otherwise a
@@ -74,10 +81,10 @@ export class SheddingLevelStore implements SheddingLevelPort {
     return Math.max(this.local, shared);
   }
 
-  setLocal(level: number): void {
+  setLocal(level: number): Promise<void> {
     const next = clampSheddingLevel(level);
     this.local = next;
-    if (next > 0) this.publish(next);
+    return next > 0 ? this.publish(next) : Promise.resolve();
   }
 
   /** Reads a peer's level. A failed read keeps the last known value. */
@@ -95,10 +102,10 @@ export class SheddingLevelStore implements SheddingLevelPort {
     }
   }
 
-  private publish(level: number): void {
+  private publish(level: number): Promise<void> {
     const client = this.client;
-    if (client === undefined) return;
-    void client
+    if (client === undefined) return Promise.resolve();
+    return client
       .eval(
         RAISE_LEVEL_SCRIPT,
         1,
@@ -106,6 +113,7 @@ export class SheddingLevelStore implements SheddingLevelPort {
         level,
         SHARED_LEVEL_TTL_SECONDS,
       )
+      .then(() => undefined)
       .catch((error: unknown) => this.health.reportDegraded(error));
   }
 }

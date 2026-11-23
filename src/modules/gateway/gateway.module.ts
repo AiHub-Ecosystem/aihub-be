@@ -116,6 +116,7 @@ import { RedisDownstreamRetryBudget } from './infrastructure/redis-downstream-re
 import {
   REDIS_GATEWAY_CLIENT,
   type RedisGatewayClient,
+  RedisGatewayClientLifecycle,
   createRedisGatewayClient,
 } from './infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from './infrastructure/redis-graded-admission';
@@ -142,6 +143,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
       ): RedisGatewayClient | undefined =>
         createRedisGatewayClient(configuration.redisUrl ?? ''),
     },
+    RedisGatewayClientLifecycle,
     {
       provide: GATEWAY_REDIS_READINESS,
       inject: [REDIS_GATEWAY_CLIENT],

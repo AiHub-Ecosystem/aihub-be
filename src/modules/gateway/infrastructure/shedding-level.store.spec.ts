@@ -11,6 +11,10 @@ class FakeRedis implements SheddingLevelRedisClient {
   writes = 0;
   failReads = false;
 
+  waitUntilReady(_signal: AbortSignal): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+
   async get(key: string): Promise<string | null> {
     this.getCalls += 1;
     if (this.failReads) throw new Error('redis down');
@@ -39,7 +43,7 @@ describe('SheddingLevelStore', () => {
     const redis = new FakeRedis();
     const store = new SheddingLevelStore(redis);
 
-    store.setLocal(1);
+    await store.setLocal(1);
     await store.refresh();
     expect(store.current()).toBe(1);
 
@@ -53,9 +57,7 @@ describe('SheddingLevelStore', () => {
     redis.values.set(SHEDDING_LEVEL_KEY, 2);
     const store = new SheddingLevelStore(redis);
 
-    store.setLocal(1);
-    // The fake's `eval` writes before its first await, so the raise is visible.
-    await Promise.resolve();
+    await store.setLocal(1);
 
     expect(redis.values.get(SHEDDING_LEVEL_KEY)).toBe(2);
     expect(store.current()).toBe(1);
@@ -74,7 +76,7 @@ describe('SheddingLevelStore', () => {
   it('applies its own level with no Redis at all', async () => {
     const store = new SheddingLevelStore(undefined);
 
-    store.setLocal(2);
+    await store.setLocal(2);
     await store.refresh();
 
     expect(store.current()).toBe(2);
@@ -105,8 +107,7 @@ describe('SheddingLevelStore', () => {
     redis.ttls.set(SHEDDING_LEVEL_KEY, 15);
     const store = new SheddingLevelStore(redis);
 
-    store.setLocal(1);
-    await Promise.resolve();
+    await store.setLocal(1);
 
     expect(redis.values.get(SHEDDING_LEVEL_KEY)).toBe(2);
     // The 2 expires on its own: the level-1 publisher wrote nothing, so it

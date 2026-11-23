@@ -107,7 +107,7 @@ return {result, rate_count}
 
 export type RedisGradedAdmissionClient = Pick<
   RedisGatewayClient,
-  'evalNumbers' | 'quit'
+  'evalNumbers'
 >;
 
 interface LoggerLike {
@@ -220,10 +220,6 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
           this.random,
         );
     }
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.client?.quit().catch(() => undefined);
   }
 
   private async evaluate(

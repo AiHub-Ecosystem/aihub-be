@@ -23,10 +23,11 @@ export function rateLimitKey(keyId: string, windowIndex: number): string {
   return `aihub:v1:rl:${keyId}:${windowIndex}`;
 }
 
-export type RedisRateLimitClient = Pick<RedisGatewayClient, 'eval' | 'quit'>;
+export type RedisRateLimitClient = Pick<RedisGatewayClient, 'eval'>;
 
 export class RedisRateLimiter implements RateLimiterPort {
   private readonly client: RedisRateLimitClient | undefined;
+  private readonly ownedClient: RedisGatewayClient | undefined;
   private readonly now: () => number;
   private readonly random: () => number;
   private readonly health: RedisHealthReporter;
@@ -38,7 +39,9 @@ export class RedisRateLimiter implements RateLimiterPort {
     logger: Pick<Logger, 'warn' | 'log'> = new Logger(RedisRateLimiter.name),
     random: () => number = Math.random,
   ) {
-    this.client = client ?? createRedisGatewayClient(url);
+    this.ownedClient =
+      client === undefined ? createRedisGatewayClient(url) : undefined;
+    this.client = client ?? this.ownedClient;
     this.now = now;
     this.random = random;
     this.health = new RedisHealthReporter(
@@ -76,7 +79,7 @@ export class RedisRateLimiter implements RateLimiterPort {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client?.quit().catch(() => undefined);
+    await this.ownedClient?.quit().catch(() => undefined);
   }
 
   private unavailableError(cause?: unknown): AppError {
