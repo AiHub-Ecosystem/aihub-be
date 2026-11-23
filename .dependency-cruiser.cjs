@@ -339,6 +339,25 @@ function restrictedEdgeRule({ name, fromPattern, toModule, comment }) {
 }
 
 /**
+ * #1509: the Operator CLI composes concrete adapters for most modules, but
+ * Speaking and Avatar publish their operator composition through `public/`.
+ * Reaching their `infrastructure/` again would bypass the facade the owning
+ * module publishes, so this edge stays closed rather than relying on review.
+ */
+function cliSpeakingAvatarFacadeRule() {
+  return {
+    name: 'no-cli-speaking-avatar-infrastructure-import',
+    severity: 'error',
+    comment:
+      'The Operator CLI imports Speaking and Avatar only through their public/ facades, application ports, or module files (#1509); their concrete adapters are composed inside the owning module.',
+    from: { path: '^src/cli/', pathNot: '[.]spec[.]ts$' },
+    to: {
+      path: '^src/modules/(speaking|avatar)/(infrastructure/|.*/infrastructure/)',
+    },
+  };
+}
+
+/**
  * Runtime source outside Auth has consumers that are not business modules,
  * such as contracts and OpenAPI. They use Auth's root facade and declared
  * module seams. The Operator CLI keeps its separate composition-root rule,
@@ -572,6 +591,7 @@ module.exports = {
     externalAuthRule(),
     crossModuleRule(),
     cliRule(),
+    cliSpeakingAvatarFacadeRule(),
   ],
   options: {
     tsPreCompilationDeps: true,

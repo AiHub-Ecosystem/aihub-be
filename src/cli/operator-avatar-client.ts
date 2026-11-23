@@ -1,21 +1,22 @@
-import type { PostgresAvatarRepository } from '@/modules/avatar/infrastructure/postgres-avatar.repository';
+import {
+  type AvatarRepositoryPort,
+  createOperatorAvatarRepository,
+} from '@/modules/avatar/public/avatar-sweep';
 
 import { operatorPostgresApplicationName } from './operator-postgres-application-name';
 
 export async function createOperatorAvatarClient(
   databaseUrl: string,
-): Promise<PostgresAvatarRepository & { close(): Promise<void> }> {
-  const [{ createOperatorPrismaClient }, { PostgresAvatarRepository }] =
-    await Promise.all([
-      import('@/modules/persistence/infrastructure/prisma-client'),
-      import('@/modules/avatar/infrastructure/postgres-avatar.repository'),
-    ]);
+): Promise<AvatarRepositoryPort & { close(): Promise<void> }> {
+  const { createOperatorPrismaClient } = await import(
+    '@/modules/persistence/infrastructure/prisma-client'
+  );
   const holder = createOperatorPrismaClient(
     'runtime',
     databaseUrl,
     operatorPostgresApplicationName('runtime'),
   );
-  return Object.assign(new PostgresAvatarRepository(holder.prisma), {
+  return Object.assign(createOperatorAvatarRepository(holder.prisma), {
     close: () => holder.close(),
   });
 }

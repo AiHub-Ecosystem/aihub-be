@@ -88,6 +88,9 @@ const authBoundaryRule = rules.find(
 const nonModuleRule = rules.find(
   (rule) => rule.name === 'no-non-module-private-import',
 );
+const cliSpeakingAvatarRule = rules.find(
+  (rule) => rule.name === 'no-cli-speaking-avatar-infrastructure-import',
+);
 
 function matches(pattern: string | string[], path: string): boolean {
   const patterns = Array.isArray(pattern) ? pattern : [pattern];
@@ -738,6 +741,7 @@ describe('cross-module import rule over the real tree', () => {
   let avatarGatewayViolations: Array<{ from: string; to: string }>;
   let authBoundaryViolations: Array<{ from: string; to: string }>;
   let nonModuleViolations: Array<{ from: string; to: string }>;
+  let cliSpeakingAvatarViolations: Array<{ from: string; to: string }>;
 
   beforeAll(() => {
     const result = spawnSync(
@@ -786,6 +790,9 @@ describe('cross-module import rule over the real tree', () => {
       'no-auth-internal-import-outside-auth',
     );
     nonModuleViolations = violationsFor('no-non-module-private-import');
+    cliSpeakingAvatarViolations = violationsFor(
+      'no-cli-speaking-avatar-infrastructure-import',
+    );
   });
 
   it('reports no imports of another module internal files', () => {
@@ -956,6 +963,54 @@ describe('cross-module import rule over the real tree', () => {
 
   it('reports no private module imports from non-module trees (#1827)', () => {
     expect(nonModuleViolations).toEqual([]);
+  });
+
+  it('reports no CLI import of Speaking or Avatar infrastructure (#1509)', () => {
+    expect(cliSpeakingAvatarViolations).toEqual([]);
+  });
+});
+
+describe('Speaking and Avatar CLI facade boundary (#1509)', () => {
+  it('reads the rule from the config', () => {
+    expect(cliSpeakingAvatarRule?.severity).toBe('error');
+    expect(
+      matches(
+        cliSpeakingAvatarRule?.from.path ?? '',
+        'src/cli/avatar-sweep.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(cliSpeakingAvatarRule?.from.path ?? '', 'src/cli/usage-prune.ts'),
+    ).toBe(true);
+    expect(
+      matches(cliSpeakingAvatarRule?.from.path ?? '', 'src/common/foo.ts'),
+    ).toBe(false);
+  });
+
+  it('covers only Speaking and Avatar infrastructure targets', () => {
+    const toPath = cliSpeakingAvatarRule?.to.path ?? '';
+
+    expect(
+      matches(toPath, 'src/modules/avatar/infrastructure/s3-avatar.storage.ts'),
+    ).toBe(true);
+    expect(
+      matches(
+        toPath,
+        'src/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        toPath,
+        'src/modules/speaking/infrastructure/grading-jobs/postgres-speaking-grading-job.repository.ts',
+      ),
+    ).toBe(true);
+    expect(
+      matches(toPath, 'src/modules/metering/infrastructure/billing/usage.ts'),
+    ).toBe(false);
+    expect(matches(toPath, 'src/modules/avatar/public/avatar-sweep.ts')).toBe(
+      false,
+    );
   });
 });
 
