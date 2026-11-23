@@ -202,6 +202,8 @@ withBuild('operator CLI against PostgreSQL', () => {
       'ops-alice',
       '--name',
       'k',
+      '--envs',
+      'production',
     );
     const [key] = await rows('SELECT id FROM api_keys');
     const keyId = String(key?.['id']);
@@ -232,6 +234,8 @@ withBuild('operator CLI against PostgreSQL', () => {
       'ops-alice',
       '--name',
       'k',
+      '--envs',
+      'production',
     );
     const [key] = await rows('SELECT id FROM api_keys');
     const keyId = String(key?.['id']);
@@ -295,10 +299,23 @@ withBuild('operator CLI against PostgreSQL', () => {
   });
 
   it.each([
-    ['no actor', ['key:create', '--org', 'org_x', '--name', 'k']],
+    [
+      'no actor',
+      ['key:create', '--org', 'org_x', '--name', 'k', '--envs', 'production'],
+    ],
     [
       'an unknown actor',
-      ['key:create', '--org', 'org_x', '--actor', 'nobody', '--name', 'k'],
+      [
+        'key:create',
+        '--org',
+        'org_x',
+        '--actor',
+        'nobody',
+        '--name',
+        'k',
+        '--envs',
+        'production',
+      ],
     ],
     [
       'an unknown key',

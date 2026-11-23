@@ -18,7 +18,7 @@ Separately, a Writing grading that AIHUB finishes in the background after answer
 
 **What a statement bills.** For one Organization (or all) and one UTC calendar month, `billing:statement` bills usage records with `outcome = 'success'`, `billable_requests = 1`, `environment = 'production'`, made with a key not marked internal. The month is `[first instant, first instant of next month)` of `created_at`, which is set when the request completes. Each line also counts what it excluded and why: replays, failures, internal keys, non-Production environments; billed records whose quota increment could not be confirmed are flagged as `quota_unverified`.
 
-**Internal traffic is marked per API key.** `api_keys.internal` marks a key AIHUB itself uses. Operators create one with `key:create --internal true`. Its traffic is metered as usual, left off the statement, and shown on its own line.
+**Internal traffic is marked per API key.** `api_keys.internal` marks a key AIHUB itself uses. Operators create one with `key:create --envs production --internal true`. Its traffic is metered as usual, left off the statement, and shown on its own line.
 
 **Adjustments.** A correction is a row in the append-only `billing_adjustments` table, written only by `billing:adjust`, with the actor, a reason, a signed request count, and either the request ids or the period it corrects. It never modifies `usage_records`. A statement shows each adjustment beside the evidence and adds it to the total.
 
