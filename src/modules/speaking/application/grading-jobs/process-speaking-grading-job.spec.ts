@@ -80,6 +80,7 @@ function harness(
     readonly dispatchError?: unknown;
     readonly recordError?: unknown;
     readonly permit?: 'allowed' | 'denied';
+    readonly acquireError?: unknown;
     readonly markDispatchStarted?: boolean;
     readonly advanceClockMs?: number;
   } = {},
@@ -127,11 +128,12 @@ function harness(
     }),
   } satisfies Pick<SpeakingAudioAssetStoragePort, 'readObject'>;
   const concurrencyLimiter = {
-    acquire: jest.fn(async () =>
-      options.permit === 'denied'
+    acquire: jest.fn(async () => {
+      if (options.acquireError !== undefined) throw options.acquireError;
+      return options.permit === 'denied'
         ? { allowed: false as const, retryAfterMs: 10_000 }
-        : { allowed: true as const, lease: { release } },
-    ),
+        : { allowed: true as const, lease: { release } };
+    }),
   } satisfies ConcurrencyLimiterPort;
   const execute = jest.fn(async () => {
     if (options.dispatchError !== undefined) throw options.dispatchError;
@@ -245,6 +247,29 @@ describe('ProcessSpeakingGradingJob', () => {
     });
     expect(subject.audioRepository.findUpload).not.toHaveBeenCalled();
     expect(subject.release).not.toHaveBeenCalled();
+  });
+
+  it('keeps the retryable acquire error and leaves the job for the claim lease to requeue', async () => {
+    const unavailable = new AppError({
+      code: 'REDIS_UNAVAILABLE',
+      message: 'Grading controls are temporarily unavailable',
+      retryable: true,
+      retryAfterMs: 1_200,
+    });
+    const subject = harness({ acquireError: unavailable });
+
+    await expect(
+      subject.processor.execute({
+        jobId: job.jobId,
+        environment: job.environment,
+      }),
+    ).rejects.toBe(unavailable);
+
+    expect(subject.repository.returnToQueue).not.toHaveBeenCalled();
+    expect(subject.queue.enqueue).not.toHaveBeenCalled();
+    expect(subject.repository.fail).not.toHaveBeenCalled();
+    expect(subject.repository.markDispatchStarted).not.toHaveBeenCalled();
+    expect(subject.execute).not.toHaveBeenCalled();
   });
 
   it('fails an expired asset before dispatch and releases its Sandbox reservation and permit', async () => {
