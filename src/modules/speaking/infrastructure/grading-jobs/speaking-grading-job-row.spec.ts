@@ -1,7 +1,11 @@
 import { isRecord } from '@/common/is-record';
 import { parseSpeakingV2QuestionResult } from '@/downstream/speaking/speaking-v2-question-response.adapter';
 import { fixtureJson } from '../../../../../test/support/json-fixtures';
-import { type SpeakingGradingJobRow, mapJob } from './speaking-grading-job-row';
+import {
+  type SpeakingGradingJobRow,
+  isKeyUniquenessViolation,
+  mapJob,
+} from './speaking-grading-job-row';
 
 function row(result: unknown): SpeakingGradingJobRow {
   return {
@@ -48,6 +52,29 @@ describe('stored Speaking grading job results', () => {
     const result = resultWithPriorities(priorities);
 
     expect(mapJob(row(result))?.result?.error_priority).toHaveLength(1);
+  });
+});
+
+describe('Speaking grading job idempotency key violations', () => {
+  it.each([
+    ['speaking_grading_jobs_org_user_key_idx', true],
+    ['speaking_grading_jobs_pkey', false],
+    ['other_unique_index', false],
+  ])('classifies the %s constraint', (constraint, expected) => {
+    const error = {
+      name: 'PrismaClientKnownRequestError',
+      code: 'P2010',
+      meta: {
+        driverAdapterError: {
+          cause: {
+            originalCode: '23505',
+            originalMessage: `duplicate key violates unique constraint "${constraint}"`,
+          },
+        },
+      },
+    };
+
+    expect(isKeyUniquenessViolation(error)).toBe(expected);
   });
 });
 

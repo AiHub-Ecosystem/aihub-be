@@ -567,42 +567,51 @@ describe('Speaking grading job repository in PostgreSQL', () => {
   }, 20_000);
 
   it.each([
-    { name: 'a graded', environment: 'production' as const, monthlyQuota: 10 },
-    { name: 'a Sandbox', environment: 'sandbox' as const, monthlyQuota: null },
+    { name: 'graded', environment: 'production' as const, monthlyQuota: 10 },
+    { name: 'Sandbox', environment: 'sandbox' as const, monthlyQuota: null },
   ])(
-    'gives the losing admission back and returns the winner when a concurrent duplicate key races $name insert',
+    'gives the losing admission back when another insert wins before the $name insert',
     async ({ environment, monthlyQuota }) => {
       const organizationId = 'org_' + ulid();
       const idempotencyKey = 'key_' + ulid();
-      const releases: string[] = [];
-      const submit = async (label: string) => ({
-        label,
-        outcome: await repository.createWithAdmission({
-          job: makeJob({ organizationId, environment, idempotencyKey }),
-          monthlyQuota,
-          admit: async () => ({
+      let releases = 0;
+      const jobOverrides = {
+        organizationId,
+        environment,
+        idempotencyKey,
+        quotaTracked: monthlyQuota !== null,
+      };
+      const winnerJob = makeJob(jobOverrides);
+      const duplicateJob = makeJob(jobOverrides);
+      const outcome = await repository.createWithAdmission({
+        job: duplicateJob,
+        monthlyQuota,
+        admit: async () => {
+          await repository.create(winnerJob);
+          return {
             admitted: true,
             release: async () => {
-              releases.push(label);
+              releases += 1;
             },
-          }),
-        }),
+          };
+        },
       });
 
-      const results = await Promise.all([submit('first'), submit('second')]);
-
-      expect(results.filter((result) => result.outcome.created)).toHaveLength(
-        1,
-      );
-      expect(releases).toHaveLength(1);
-      const refused = results.find((result) => !result.outcome.created);
-      if (refused?.outcome.created !== false) {
-        throw new Error('expected one submission to lose the insert');
-      }
-      expect(refused.outcome.existingJobId).toMatch(/^sgj_/);
+      expect(outcome).toEqual({
+        created: false,
+        existingJobId: winnerJob.jobId,
+      });
+      expect(releases).toBe(1);
+      await expect(
+        repository.findByIdempotencyKey({
+          organizationId,
+          endUserId: winnerJob.endUserId,
+          idempotencyKey,
+        }),
+      ).resolves.toMatchObject({ jobId: winnerJob.jobId });
       await expect(
         repository.countInFlight({ organizationId, environment }),
-      ).resolves.toBe(1);
+      ).resolves.toBe(monthlyQuota === null ? 0 : 1);
     },
   );
 

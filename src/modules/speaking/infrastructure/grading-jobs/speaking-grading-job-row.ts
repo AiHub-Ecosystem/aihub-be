@@ -126,10 +126,14 @@ export async function clearExpiredKeyedJobs(
 }
 
 export function isKeyUniquenessViolation(error: unknown): boolean {
-  // Prisma reports a raw statement's constraint failure as P2010 and keeps the
-  // SQLSTATE on the wrapped driver error, so reading `code` alone never matched.
   return (
-    findPostgresErrorLink(error, (link) => link.code === '23505') !== undefined
+    findPostgresErrorLink(
+      error,
+      (link) =>
+        link.code === '23505' &&
+        typeof link.message === 'string' &&
+        link.message.includes('speaking_grading_jobs_org_user_key_idx'),
+    ) !== undefined
   );
 }
 

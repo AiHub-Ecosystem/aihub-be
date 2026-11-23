@@ -77,6 +77,14 @@ async function releaseAdmission(
   }
 }
 
+function throwStoreUnavailable(error: unknown): never {
+  if (error instanceof AppError) throw error;
+  throw databaseUnavailableError(
+    error,
+    'Speaking grading job store is unavailable',
+  );
+}
+
 export class PostgresSpeakingGradingJobRepository
   implements SpeakingGradingJobRepositoryPort
 {
@@ -200,13 +208,7 @@ export class PostgresSpeakingGradingJobRepository
       // that failed after the callback returned (transaction timeout).
       await compensate();
       if (admissionFailed) throw admissionError;
-      if (!isKeyUniquenessViolation(error)) {
-        if (error instanceof AppError) throw error;
-        throw databaseUnavailableError(
-          error,
-          'Speaking grading job store is unavailable',
-        );
-      }
+      if (!isKeyUniquenessViolation(error)) throwStoreUnavailable(error);
       return this.recoverKeyedJob(error, input.job, unexpiredSince);
     }
   }
@@ -232,11 +234,7 @@ export class PostgresSpeakingGradingJobRepository
     if (existing !== undefined) {
       return { created: false, existingJobId: existing.jobId };
     }
-    if (error instanceof AppError) throw error;
-    throw databaseUnavailableError(
-      error,
-      'Speaking grading job store is unavailable',
-    );
+    throwStoreUnavailable(error);
   }
 
   async findOwned(
@@ -476,11 +474,7 @@ export class PostgresSpeakingGradingJobRepository
     try {
       return await operation();
     } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw databaseUnavailableError(
-        error,
-        'Speaking grading job store is unavailable',
-      );
+      throwStoreUnavailable(error);
     }
   }
 }
