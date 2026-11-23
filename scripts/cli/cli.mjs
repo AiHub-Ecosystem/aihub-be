@@ -56,6 +56,7 @@ import {
   CliUsageError,
   booleanOption,
   environmentOption,
+  environmentRequiredMessage,
   quotaOption,
   usageError,
 } from './cli-options.cjs';
@@ -441,6 +442,9 @@ function parseOptions(values) {
     }
     const value = values[index + 1];
     if (typeof value !== 'string' || value.startsWith('--')) {
+      if (name === '--envs') {
+        throw new CliUsageError(environmentRequiredMessage('envs'));
+      }
       usageError();
     }
     options.set(name.slice(2), value);

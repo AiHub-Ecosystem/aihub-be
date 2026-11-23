@@ -14,3 +14,4 @@ export function environmentOption(
   options: ReadonlyMap<string, string>,
   name: string,
 ): string;
+export function environmentRequiredMessage(name: string): string;

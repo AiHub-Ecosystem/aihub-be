@@ -66,6 +66,12 @@ const ALLOWED_ENVIRONMENTS = new Set([
   'sandbox',
 ]);
 
+/** @param {string} name @returns {string} */
+function environmentRequiredMessage(name) {
+  const valid = [...ALLOWED_ENVIRONMENTS].join(', ');
+  return `--${name} is required and must be one of: ${valid}`;
+}
+
 /**
  * The one environment a new key is bound to (ADR-0095). A list is refused:
  * every newly issued key has exactly one environment, so there is no shared
@@ -77,9 +83,7 @@ function environmentOption(options, name) {
   const value = options.get(name)?.trim();
   // No default: a forgotten --envs must never issue a Production key (#435).
   if (value === undefined || value.length === 0) {
-    throw new CliUsageError(
-      `--${name} is required and must be one of: ${valid}`,
-    );
+    throw new CliUsageError(environmentRequiredMessage(name));
   }
   if (!ALLOWED_ENVIRONMENTS.has(value)) {
     throw new CliUsageError(`--${name} must be one of: ${valid}`);
@@ -94,4 +98,5 @@ module.exports = {
   quotaOption,
   booleanOption,
   environmentOption,
+  environmentRequiredMessage,
 };

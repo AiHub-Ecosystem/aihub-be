@@ -110,6 +110,29 @@ describe('operator commands CLI dispatch and validation', () => {
       );
     });
 
+    it.each([
+      ['a trailing --envs', ['--envs']],
+      ['--envs followed by another option', ['--envs', '--internal', 'true']],
+    ])(
+      'names the valid environments when %s leaves --envs without a value',
+      (_, tail) => {
+        const result = executeCli([
+          'key:create',
+          '--org',
+          'org_01',
+          '--actor',
+          'ops-alice',
+          '--name',
+          'k',
+          ...tail,
+        ]);
+        expect(result.status).toBe(2);
+        expect(result.stderr).toContain(
+          '--envs is required and must be one of: development, staging, production, sandbox',
+        );
+      },
+    );
+
     it('reaches database layer and fails operationally when unconfigured', () => {
       const result = executeCli([
         'key:create',
