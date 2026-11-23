@@ -40,6 +40,7 @@ const STALLED_BOUND_MS =
 
 const noCache: ApiKeyCachePort = {
   get: async () => undefined,
+  newPositiveFreshUntil: () => Date.now() + 60_000,
   set: async () => undefined,
   setMiss: async () => undefined,
   delete: async () => undefined,

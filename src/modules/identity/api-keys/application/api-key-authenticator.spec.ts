@@ -75,15 +75,28 @@ class FakeCache implements ApiKeyCachePort {
   getCalls = 0;
   setCalls = 0;
   missCalls = 0;
+  freshUntilCalls = 0;
+  setFreshUntil: number | undefined;
+
+  newPositiveFreshUntil(): number {
+    this.freshUntilCalls += 1;
+    return Date.now() + 60_000;
+  }
 
   get(_hashHex: string): Promise<ApiKeyRecord | null | undefined> {
     this.getCalls += 1;
     return Promise.resolve(this.value);
   }
 
-  set(_hashHex: string, record: ApiKeyRecord): Promise<void> {
+  set(
+    _hashHex: string,
+    record: ApiKeyRecord,
+    freshUntil?: number,
+  ): Promise<void> {
     this.setCalls += 1;
-    this.value = record;
+    this.setFreshUntil = freshUntil;
+    this.value =
+      freshUntil !== undefined && freshUntil <= Date.now() ? undefined : record;
     return Promise.resolve();
   }
 
@@ -450,6 +463,43 @@ describe('ApiKeyAuthenticator', () => {
     expect(failures.uncachedLookups).toBe(1);
   });
 
+  it('does not cache a positive lookup after its pre-lookup deadline', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-19T12:00:00.000Z'));
+    try {
+      const { authenticator, repository, cache } = createAuthenticator();
+      let releaseLookup: ((record: ApiKeyRecord | null) => void) | undefined;
+      let markLookupStarted: (() => void) | undefined;
+      const lookupStarted = new Promise<void>((resolve) => {
+        markLookupStarted = resolve;
+      });
+      repository.findByHash = () => {
+        repository.calls += 1;
+        markLookupStarted?.();
+        return new Promise((resolve) => {
+          releaseLookup = resolve;
+        });
+      };
+
+      const originalFreshUntil = Date.now() + 60_000;
+      const authentication = authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'production',
+        clientIp: '203.0.113.10',
+      });
+      await lookupStarted;
+      jest.advanceTimersByTime(60_001);
+      releaseLookup?.(activeRecord);
+
+      await expect(authentication).resolves.toMatchObject({
+        organizationId: activeRecord.organizationId,
+      });
+      expect(cache.setFreshUntil).toBe(originalFreshUntil);
+      expect(cache.value).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rejects a new hash at flight capacity while coalescing an existing hash', async () => {
     const { authenticator, repository, cache } = createAuthenticator();
     const maxFlights = 1_024;
@@ -501,7 +551,7 @@ describe('ApiKeyAuthenticator', () => {
   });
 
   it('does not coalesce concurrent forceFresh Postgres lookups', async () => {
-    const { authenticator, repository } = createAuthenticator();
+    const { authenticator, repository, cache } = createAuthenticator();
     const credentials = {
       value: VALID_KEY,
       environment: 'production',
@@ -516,6 +566,32 @@ describe('ApiKeyAuthenticator', () => {
       ]),
     ).resolves.toHaveLength(2);
     expect(repository.calls).toBe(2);
+    expect(cache.getCalls).toBe(0);
+    expect(cache.freshUntilCalls).toBe(0);
+    expect(cache.setCalls).toBe(0);
+    expect(cache.missCalls).toBe(0);
+  });
+
+  it('bypasses both cache tiers for Sandbox authentication', async () => {
+    const { authenticator, repository, cache, failures } = createAuthenticator({
+      ...activeRecord,
+      allowedEnvironments: ['sandbox'],
+    });
+
+    await expect(
+      authenticator.authenticate({
+        value: VALID_KEY,
+        environment: 'sandbox',
+        clientIp: '203.0.113.10',
+      }),
+    ).resolves.toMatchObject({ environment: 'sandbox' });
+
+    expect(repository.calls).toBe(1);
+    expect(failures.sandboxLookups).toBe(1);
+    expect(cache.getCalls).toBe(0);
+    expect(cache.freshUntilCalls).toBe(0);
+    expect(cache.setCalls).toBe(0);
+    expect(cache.missCalls).toBe(0);
   });
 
   it('returns 429 after the brute-force threshold is reached', async () => {

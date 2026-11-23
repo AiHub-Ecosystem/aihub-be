@@ -259,11 +259,14 @@ export class ApiKeyAuthenticator implements ApiKeyAuthenticatorPort {
     let flight: Promise<ApiKeyRecord | null>;
     flight = (async () => {
       await this.requireLookupBudget();
+      const freshUntil = this.cache.newPositiveFreshUntil();
       const record = await this.repository.findByHash(hashHex);
       if (record === null) {
         await this.cache.setMiss(hashHex).catch(() => undefined);
       } else {
-        await this.cache.set(hashHex, record).catch(() => undefined);
+        await this.cache
+          .set(hashHex, record, freshUntil)
+          .catch(() => undefined);
       }
       return record;
     })().finally(() => {

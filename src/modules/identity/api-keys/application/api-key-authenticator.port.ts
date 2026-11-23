@@ -59,7 +59,8 @@ export const API_KEY_REPOSITORY = Symbol('API_KEY_REPOSITORY');
 export interface ApiKeyCachePort {
   /** undefined = cache miss, null = cached negative lookup. */
   get(hashHex: string): Promise<ApiKeyRecord | null | undefined>;
-  set(hashHex: string, record: ApiKeyRecord): Promise<void>;
+  newPositiveFreshUntil(): number;
+  set(hashHex: string, record: ApiKeyRecord, freshUntil: number): Promise<void>;
   setMiss(hashHex: string): Promise<void>;
   delete(
     hashHex: string,

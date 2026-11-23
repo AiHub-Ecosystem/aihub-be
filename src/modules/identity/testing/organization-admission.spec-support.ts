@@ -123,6 +123,7 @@ export function createTestAuthMocks(
 export function createMockApiKeyCache(): jest.Mocked<ApiKeyCachePort> {
   return {
     get: jest.fn(),
+    newPositiveFreshUntil: jest.fn(() => Date.now() + 60_000),
     set: jest.fn(),
     setMiss: jest.fn(),
     delete: jest.fn().mockResolvedValue(undefined),
