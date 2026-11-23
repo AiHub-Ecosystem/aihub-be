@@ -502,6 +502,7 @@ describe('API-key lookup and last-used tracking against PostgreSQL', () => {
       repository,
       {
         get: async () => undefined,
+        newPositiveFreshUntil: () => Date.now() + 60_000,
         set: async () => undefined,
         setMiss: async () => undefined,
         delete: async () => undefined,
@@ -618,6 +619,7 @@ describe('organization API key rotation against PostgreSQL', () => {
   function emptyCache(): ApiKeyCachePort {
     return {
       get: async () => undefined,
+      newPositiveFreshUntil: () => Date.now() + 60_000,
       set: async () => undefined,
       setMiss: async () => undefined,
       delete: async () => undefined,
@@ -967,6 +969,7 @@ describe('organization API key revocation against PostgreSQL', () => {
       new PostgresApiKeyRepository(apiKeys),
       {
         get: async () => undefined,
+        newPositiveFreshUntil: () => Date.now() + 60_000,
         set: async () => undefined,
         setMiss: async () => undefined,
         delete: async () => undefined,

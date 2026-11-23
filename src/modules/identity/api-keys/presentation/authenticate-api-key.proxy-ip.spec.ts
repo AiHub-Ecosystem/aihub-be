@@ -78,6 +78,7 @@ describe('API-key failure budgets behind the trusted proxy', () => {
       } satisfies ApiKeyRepositoryPort,
       {
         get: async () => undefined,
+        newPositiveFreshUntil: () => Date.now() + 60_000,
         set: async () => undefined,
         setMiss: async () => undefined,
         delete: async () => undefined,

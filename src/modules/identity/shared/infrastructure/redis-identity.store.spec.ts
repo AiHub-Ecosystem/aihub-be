@@ -280,6 +280,26 @@ describe('RedisIdentityStore', () => {
     ).toBeGreaterThanOrEqual(30);
   });
 
+  it('keeps a positive entry within its captured freshness deadline', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+    try {
+      const redis = new FakeRedis();
+      const store = createStore(redis);
+      const hash = 'a'.repeat(64);
+      const freshUntil = Date.now() + 5_500;
+
+      await store.set(hash, record, freshUntil);
+      expect(redis.expirations.get(apiKeyCacheKey(hash))).toBe(6);
+
+      jest.advanceTimersByTime(5_501);
+      await expect(store.get(hash)).resolves.toBeUndefined();
+      expect(redis.values.has(apiKeyCacheKey(hash))).toBe(false);
+    } finally {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    }
+  });
+
   it('authenticates from the repository when a forged API-key cache entry is read', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);
@@ -664,6 +684,7 @@ describe('RedisIdentityStore', () => {
     };
     const cache = {
       get: async () => undefined,
+      newPositiveFreshUntil: () => Date.now() + 60_000,
       set: async () => undefined,
       setMiss: async () => undefined,
       delete: async () => undefined,

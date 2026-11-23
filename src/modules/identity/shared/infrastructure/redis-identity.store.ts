@@ -245,14 +245,21 @@ export class RedisIdentityStore
     }
   }
 
-  async set(hashHex: string, record: ApiKeyRecord): Promise<void> {
-    const ttlSeconds = shortenedTtl(API_KEY_CACHE_POSITIVE_TTL_SECONDS);
-    const freshUntil = Date.now() + ttlSeconds * 1_000;
-    this.rememberApiKey(
-      hashHex,
-      record,
-      performance.now() + ttlSeconds * 1_000,
+  newPositiveFreshUntil(): number {
+    return (
+      Date.now() + shortenedTtl(API_KEY_CACHE_POSITIVE_TTL_SECONDS) * 1_000
     );
+  }
+
+  async set(
+    hashHex: string,
+    record: ApiKeyRecord,
+    freshUntil = this.newPositiveFreshUntil(),
+  ): Promise<void> {
+    const remainingMs = freshUntil - Date.now();
+    if (remainingMs <= 0) return;
+    const ttlSeconds = Math.ceil(remainingMs / 1_000);
+    this.rememberApiKey(hashHex, record, performance.now() + remainingMs);
     if (this.client === undefined || this.hmacKey === undefined) return;
 
     const cacheKey = apiKeyCacheKey(hashHex);
