@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 
 import { createErrorEnvelope } from '@/common/errors/error-envelope';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
+import { markRequestAdmission } from '@/common/http/hooks/request-timing.hook';
 import { recordRequestFailure } from '@/common/http/request-failure.recorder';
-import { markRequestAdmission } from '@/common/http/request-timing.hook';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
   type RequestTier,

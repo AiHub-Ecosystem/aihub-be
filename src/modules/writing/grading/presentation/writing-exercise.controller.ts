@@ -11,7 +11,7 @@ import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import {
   CreateLongWritingExerciseRequestSchema,
   CreateMicroExerciseRequestSchema,

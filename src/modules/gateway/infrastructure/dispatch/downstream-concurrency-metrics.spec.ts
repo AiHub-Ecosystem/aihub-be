@@ -1,4 +1,4 @@
-import { getMetrics, registry } from '@/common/observability/metrics';
+import { getMetrics, registry } from '@/common/observability/metrics/metrics';
 import {
   recordDownstreamLimitDropped,
   setDownstreamConcurrencySource,

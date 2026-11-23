@@ -12,8 +12,8 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { parseRequestBody } from '@/common/http/parse-request-body';
-import { parseRequestParams } from '@/common/http/parse-request-params';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
+import { parseRequestParams } from '@/common/http/parsing/parse-request-params';
 import type { SpeakingV2PartResult } from '@/contracts/speaking/v2/part-result';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import {

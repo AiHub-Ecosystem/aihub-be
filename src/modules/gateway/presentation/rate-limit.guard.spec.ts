@@ -1,6 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import type { RateLimiterPort } from '@/modules/gateway/application/rate-limiter.port';
 import { RateLimitGuard } from './rate-limit.guard';
 

@@ -1,7 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import type {
   ApiKeyAuthenticatorPort,
   AuthenticatedApiKey,

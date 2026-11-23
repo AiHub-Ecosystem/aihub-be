@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import type { DpopTokenUse } from '@/modules/auth/web-sessions/application/user-access-token-dpop.port';
 
 const SCHEMES = ['bearer', 'dpop'] as const;

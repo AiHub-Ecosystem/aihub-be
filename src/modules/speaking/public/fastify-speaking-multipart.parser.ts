@@ -7,7 +7,7 @@ import { Value } from '@sinclair/typebox/value';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError, timeoutError } from '@/common/errors/app-error';
-import { containsUnstorableText } from '@/common/http/unstorable-text';
+import { containsUnstorableText } from '@/common/http/parsing/unstorable-text';
 import {
   type SpeakingAudio,
   type SpeakingGradeInput,

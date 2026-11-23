@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import type { RequestTier } from '@/modules/gateway/application/shedding/request-tier';
 
 const TIERS: readonly RequestTier[] = ['critical', 'standard', 'best-effort'];

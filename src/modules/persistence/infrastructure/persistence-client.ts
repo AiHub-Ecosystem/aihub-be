@@ -1,4 +1,4 @@
-import type { PostgresConnectionRole } from '@/common/observability/metrics';
+import type { PostgresConnectionRole } from '@/common/observability/metrics/metrics';
 import type { PrismaClient } from '@prisma-client/client';
 
 /**

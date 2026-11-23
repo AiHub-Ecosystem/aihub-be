@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
 import {
   RATE_LIMITER,

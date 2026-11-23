@@ -1,6 +1,6 @@
 import type { LightMyRequestResponse } from 'fastify';
 
-import { sample } from '@/common/observability/metric-sample.testing';
+import { sample } from '@/common/observability/metrics/metric-sample.testing';
 import {
   type AlternateCredential,
   CLIENT_SECRET,

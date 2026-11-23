@@ -1,5 +1,5 @@
-import { sample } from '@/common/observability/metric-sample.testing';
-import { getMetrics } from '@/common/observability/metrics';
+import { sample } from '@/common/observability/metrics/metric-sample.testing';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { metricsDispatchObserver } from '@/modules/gateway/infrastructure/dispatch/metrics-dispatch-observer';
 
 describe('metricsDispatchObserver', () => {

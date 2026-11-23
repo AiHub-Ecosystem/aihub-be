@@ -1,4 +1,4 @@
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { INCREMENT_WITH_EXPIRY_SCRIPT } from '@/common/redis/increment-with-expiry';
 import {
   AUTH_FAILURE_LIMIT,

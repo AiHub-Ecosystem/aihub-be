@@ -13,8 +13,8 @@ import type { FastifyReply } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { parseRequestBody } from '@/common/http/parse-request-body';
-import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { getRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type CreateSpeakingAudioUploadRequest,

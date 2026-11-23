@@ -12,8 +12,8 @@ import {
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
-import { parseRequestBody } from '@/common/http/parse-request-body';
-import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { getRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {
   type SpeakingGradingJobPollResponse,

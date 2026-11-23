@@ -9,11 +9,11 @@ import {
   jitteredRetryAfterMs,
   outageRetryAfterMs,
 } from '@/common/errors/retry-jitter';
-import { shutdownStartedAt } from '@/common/http/background-work-drain';
+import { shutdownStartedAt } from '@/common/http/runtime/background-work-drain';
 import {
   backgroundDrainMs,
   largestRequestTimeoutMs,
-} from '@/common/http/shutdown-budget';
+} from '@/common/http/runtime/shutdown-budget';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   ConcurrencyDecision,

@@ -13,9 +13,9 @@ import {
   type ErrorEnvelope,
   createErrorEnvelope,
 } from '@/common/errors/error-envelope';
+import { BASELINE_CONTENT_SECURITY_POLICY } from '@/common/http/hooks/security-headers.hook';
+import { recordRequestFailure } from '@/common/http/request-failure.recorder';
 import { generateRequestId } from '@/common/request-context/request-id';
-import { recordRequestFailure } from './request-failure.recorder';
-import { BASELINE_CONTENT_SECURITY_POLICY } from './security-headers.hook';
 
 /**
  * The router's own rejections and the HTTP parser's own rejections both happen

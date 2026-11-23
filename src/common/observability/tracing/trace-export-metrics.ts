@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from './metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 const traceExportFailures = new Counter({
   name: 'aihub_otel_export_failures_total',

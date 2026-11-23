@@ -8,7 +8,7 @@ import { Value } from '@sinclair/typebox/value';
 import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { WritingV2GradeResponseSchema } from '@/contracts/writing/v2/grading';
 import { providerOrganizationId } from '@/downstream/writing/writing-v3-organization-id';

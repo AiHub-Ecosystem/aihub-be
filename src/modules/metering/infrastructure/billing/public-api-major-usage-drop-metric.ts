@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 const droppedSamples = new Counter({
   name: 'aihub_public_api_major_usage_samples_dropped_total',

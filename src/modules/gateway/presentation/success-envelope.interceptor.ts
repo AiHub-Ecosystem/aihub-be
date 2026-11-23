@@ -11,7 +11,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { type Observable, mergeMap } from 'rxjs';
 
 import { isOperationId } from '@/catalog/operation-id';
-import { requestDurationMs } from '@/common/http/request-timing.hook';
+import { requestDurationMs } from '@/common/http/hooks/request-timing.hook';
 import {
   type SuccessEnvelope,
   buildSuccessEnvelope,

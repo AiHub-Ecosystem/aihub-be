@@ -1,6 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
-import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordIdentityCacheCoalescedWait } from '@/common/observability/metrics/metrics';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
 import {
   entitlementOfScope,

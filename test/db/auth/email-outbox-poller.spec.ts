@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createCliRuntimeSecretProvider } from '@/cli/runtime-secret-provider';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import {
   EMAIL_DELIVERY_KINDS,
   type EmailDeliveryKind,

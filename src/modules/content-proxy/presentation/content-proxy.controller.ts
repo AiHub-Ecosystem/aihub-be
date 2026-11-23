@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import { PracticeContentPaginationQuerySchema } from '@/contracts/practice/v2/pagination-query';
 import type {
   ListeningTestsResponse,

@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import type { QuotaCounterSeedPort } from '@/modules/metering/application/quota/quota-counter.port';
 import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
 import { quotaPeriod } from '@/modules/metering/application/quota/quota-period';

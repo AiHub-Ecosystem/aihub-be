@@ -1,8 +1,8 @@
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
-import { getMetrics } from '@/common/observability/metrics';
-import type { RedisProtectionSeam } from '@/common/observability/redis-unavailable-metric';
+import { getMetrics } from '@/common/observability/metrics/metrics';
+import type { RedisProtectionSeam } from '@/common/observability/metrics/redis-unavailable-metric';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
 import { testDatabaseUrl } from '../../shared/database';

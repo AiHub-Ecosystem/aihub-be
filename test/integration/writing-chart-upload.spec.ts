@@ -9,8 +9,8 @@ import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   WritingChartAssetResponseSchema,

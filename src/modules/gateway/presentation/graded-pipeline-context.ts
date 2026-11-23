@@ -5,9 +5,9 @@ import type { OperationId } from '@/catalog/operation-id';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { AppError, internalError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
-import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { markRequestAdmission } from '@/common/http/request-timing.hook';
-import { routeTemplate } from '@/common/http/request-tracing.hook';
+import { getRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { markRequestAdmission } from '@/common/http/hooks/request-timing.hook';
+import { routeTemplate } from '@/common/http/hooks/request-tracing.hook';
 import type { GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
 import {
   type AuthenticatedRequest,

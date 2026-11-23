@@ -6,7 +6,7 @@ import {
 } from '@/common/background-work-tracker';
 import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import type {
   ConcurrencyLease,
   ConcurrencyLimiterPort,

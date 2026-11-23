@@ -5,7 +5,7 @@ import { isRecord } from '@/common/is-record';
 import {
   type ApiKeyCacheInvalidationSeam,
   recordRedisUnavailable,
-} from '@/common/observability/redis-unavailable-metric';
+} from '@/common/observability/metrics/redis-unavailable-metric';
 import {
   type ApiKeyCachePort,
   type ApiKeyRecord,

@@ -1,4 +1,4 @@
-import { sample } from '@/common/observability/metric-sample.testing';
+import { sample } from '@/common/observability/metrics/metric-sample.testing';
 import { recordCriticalJourneyMetrics } from './critical-journey-metrics';
 
 describe('critical journey metrics', () => {

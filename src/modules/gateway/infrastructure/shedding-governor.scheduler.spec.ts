@@ -63,7 +63,7 @@ describe('SheddingGovernorScheduler', () => {
   });
 
   it('reports the applied level, including a peer level it did not decide', async () => {
-    const metrics = await import('@/common/observability/metrics');
+    const metrics = await import('@/common/observability/metrics/metrics');
     const redis = new FakeRedis();
     redis.values.set(SHEDDING_LEVEL_KEY, '2');
     const level = new SheddingLevelStore(redis, noLogger);

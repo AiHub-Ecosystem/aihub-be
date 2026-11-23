@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import type { IdentityCacheKind } from './identity-cache-envelope';
 
 const REJECTIONS = new Counter({

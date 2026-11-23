@@ -5,7 +5,7 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';

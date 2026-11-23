@@ -8,7 +8,7 @@ import {
 } from '@opentelemetry/api';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
-import { isHealthProbe } from './request-path';
+import { isHealthProbe } from '@/common/http/request-path';
 
 interface RequestTraceState {
   readonly span: Span;

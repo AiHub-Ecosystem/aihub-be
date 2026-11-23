@@ -5,7 +5,7 @@ import {
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import type { GradeResponse } from '@/contracts/writing/grading';
 import {

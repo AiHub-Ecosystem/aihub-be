@@ -5,7 +5,7 @@ import type { OnModuleDestroy } from '@nestjs/common';
 
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
 import { isRecord } from '@/common/is-record';
-import type { DispatchAttemptUnresolvedSample } from '@/common/observability/metrics';
+import type { DispatchAttemptUnresolvedSample } from '@/common/observability/metrics/metrics';
 import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,

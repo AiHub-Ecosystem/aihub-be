@@ -1,4 +1,4 @@
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 import { recordUserAccessTokenUse } from './user-access-token-use-metric';
 

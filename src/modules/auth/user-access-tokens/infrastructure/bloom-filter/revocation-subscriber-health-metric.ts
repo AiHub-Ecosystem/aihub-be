@@ -1,6 +1,6 @@
 import { Gauge } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 /**
  * #1997: whether this process currently receives token-revocation broadcasts.

@@ -1,4 +1,4 @@
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import {
   type EmailSendRateRedisClient,
   RedisEmailSendRateLimiter,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 import { RedisDpopReplayCache } from './redis-dpop-replay-cache';
 

@@ -2,7 +2,7 @@ import { Transform } from 'node:stream';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { timeoutError } from '@/common/errors/app-error';
-import { getRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { getRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { isRecord } from '@/common/is-record';
 
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;

@@ -16,11 +16,11 @@ import {
   createErrorEnvelope,
   createInternalErrorEnvelope,
 } from '@/common/errors/error-envelope';
-import { recordRequestFailure } from '@/common/http/request-failure.recorder';
 import {
   markRequestAdmission,
   requestDurationMs,
-} from '@/common/http/request-timing.hook';
+} from '@/common/http/hooks/request-timing.hook';
+import { recordRequestFailure } from '@/common/http/request-failure.recorder';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import {
   databaseUnavailableError,

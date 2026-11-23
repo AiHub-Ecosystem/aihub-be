@@ -15,8 +15,8 @@ import {
 } from 'fast-check';
 
 import { AppError } from '@/common/errors/app-error';
-import { parseRequestBody } from '@/common/http/parse-request-body';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 
 import { assertWithReproducer } from './assert-with-reproducer';
 import seeds from './seeds.json';

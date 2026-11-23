@@ -10,7 +10,7 @@ import {
 import { type Static, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { recordRedisUnavailable } from '@/common/observability/metrics/redis-unavailable-metric';
 import { InProcessBloomFilter } from './in-process-bloom-filter';
 import { recordRevocationSubscriberState } from './revocation-subscriber-health-metric';
 

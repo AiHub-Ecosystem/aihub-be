@@ -111,7 +111,7 @@ await test('spec files are excluded: they may assert on captured log output', ()
 
 await test('the observability module is excluded: it constructs the records', () => {
   const failures = check({
-    'src/common/observability/request-logger.ts': [
+    'src/common/observability/logging/request-logger.ts': [
       'export function line(apiKey: string) {',
       '  console.log(apiKey);',
       '}',

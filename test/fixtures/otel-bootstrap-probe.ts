@@ -2,7 +2,7 @@ import {
   requestTracer,
   shutdownOpenTelemetry,
   tracingEnabled,
-} from '@/common/observability/open-telemetry';
+} from '@/common/observability/tracing/open-telemetry';
 
 async function main(): Promise<void> {
   if (!tracingEnabled || requestTracer === undefined) {

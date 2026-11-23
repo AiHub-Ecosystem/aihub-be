@@ -5,7 +5,7 @@ import {
   type ResourceMetrics,
 } from '@opentelemetry/sdk-metrics';
 
-import { getMetrics } from './metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { TraceProcessorMetricsExporter } from './trace-processor-metrics-exporter';
 
 describe('trace processor metrics exporter', () => {

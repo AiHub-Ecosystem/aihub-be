@@ -1,5 +1,5 @@
-import { sample } from '@/common/observability/metric-sample.testing';
-import { getMetrics, registry } from '@/common/observability/metrics';
+import { sample } from '@/common/observability/metrics/metric-sample.testing';
+import { getMetrics, registry } from '@/common/observability/metrics/metrics';
 import {
   recordEmailDeliveryFailed,
   recordEmailOutboxBackpressureRefusal,

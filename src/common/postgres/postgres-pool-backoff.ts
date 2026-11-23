@@ -1,5 +1,5 @@
 import { isRecord } from '@/common/is-record';
-import type { PostgresBreakerState } from '@/common/observability/postgres-pool-resilience-metrics';
+import type { PostgresBreakerState } from '@/common/observability/metrics/postgres-pool-resilience-metrics';
 
 /**
  * Decorrelated jitter (#1608): each wait is drawn from `[base, previous * 3]`

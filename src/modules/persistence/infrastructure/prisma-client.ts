@@ -6,7 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import type {
   PostgresConnectionRole,
   PostgresPoolName,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import {
   OPERATOR_POSTGRES_TIMEOUTS,
   type PostgresTimeouts,

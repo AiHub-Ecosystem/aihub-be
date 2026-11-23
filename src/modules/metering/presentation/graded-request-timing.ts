@@ -1,5 +1,5 @@
 import type { OperationId } from '@/catalog/operation-id';
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import {
   type GradedRequestTiming,
   getMeteringEvidence,

@@ -7,7 +7,7 @@ import { AppError, internalError } from '@/common/errors/app-error';
 import { S3Client } from '@aws-sdk/client-s3';
 
 import { isRecord } from '@/common/is-record';
-import { setObjectStorageQueueSource } from '@/common/observability/metrics';
+import { setObjectStorageQueueSource } from '@/common/observability/metrics/metrics';
 import {
   DEFAULT_SEAWEEDFS_ENDPOINT,
   DEFAULT_SEAWEEDFS_REGION,

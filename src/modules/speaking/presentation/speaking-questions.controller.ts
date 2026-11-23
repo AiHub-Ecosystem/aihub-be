@@ -4,7 +4,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import {
   type SpeakingPart,
   SpeakingQuestionsQuerySchema,

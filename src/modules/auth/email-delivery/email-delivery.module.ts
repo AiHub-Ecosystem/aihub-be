@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
-import { isShuttingDown } from '@/common/http/background-work-drain';
+import { isShuttingDown } from '@/common/http/runtime/background-work-drain';
 import { prefixedIdGenerator } from '@/common/ids/prefixed-id';
 import { hashOpaqueToken } from '@/common/security/opaque-token-issuer';
 import { appConfig } from '@/config/runtime-configuration';

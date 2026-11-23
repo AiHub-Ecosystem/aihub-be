@@ -1,6 +1,6 @@
 import { Client, type Pool } from 'pg';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
 import { testDatabaseUrl } from './database';
 

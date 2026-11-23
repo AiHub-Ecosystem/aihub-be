@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { isRequestId } from '@/common/request-context/request-id';
 import {

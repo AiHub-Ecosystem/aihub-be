@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { OnModuleDestroy } from '@nestjs/common';
 
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { recordRedisUnavailable } from '@/common/observability/metrics/redis-unavailable-metric';
 import {
   REDIS_NO_REPLAY_OPTIONS,
   createRedisClient,

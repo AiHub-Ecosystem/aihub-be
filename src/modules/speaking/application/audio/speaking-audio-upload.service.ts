@@ -6,7 +6,7 @@ import {
   uploadNotFound,
 } from '@/common/errors/upload-errors';
 import type { IdMinter } from '@/common/ids/prefixed-id';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
   SPEAKING_AUDIO_MAX_BYTES,

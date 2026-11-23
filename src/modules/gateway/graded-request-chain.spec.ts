@@ -12,7 +12,7 @@ import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';

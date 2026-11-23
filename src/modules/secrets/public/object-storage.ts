@@ -7,7 +7,7 @@ import { isRecord } from '@/common/is-record';
 import {
   type ObjectStorageFailureReason,
   recordObjectStorageFailure,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 
 export function objectStorageNotFound(error: unknown): boolean {
   if (!isRecord(error)) return false;

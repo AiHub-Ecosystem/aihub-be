@@ -10,8 +10,8 @@ import { exportPKCS8 } from 'jose';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { stableOffsetMs } from '@/common/stable-offset';
 import {

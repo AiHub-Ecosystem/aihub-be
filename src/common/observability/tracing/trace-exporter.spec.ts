@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
-import { getMetrics } from './metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { withTraceExportSignals } from './trace-exporter';
 
 describe('trace exporter outage signals', () => {

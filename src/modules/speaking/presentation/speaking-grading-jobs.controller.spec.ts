@@ -7,9 +7,9 @@ import {
 import { Test } from '@nestjs/testing';
 import { ulid } from 'ulid';
 
-import { registerBodySizeGuard } from '@/common/http/body-size.hook';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerBodySizeGuard } from '@/common/http/hooks/body-size.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import type { ConcurrencyLimiterPort } from '@/modules/gateway/application/concurrency-limiter.port';
 import { DispatchAttemptPolicy } from '@/modules/gateway/application/dispatch/dispatch-attempt-policy';

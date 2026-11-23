@@ -9,7 +9,7 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import type { RequestContext } from '@/common/request-context/request-context';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';

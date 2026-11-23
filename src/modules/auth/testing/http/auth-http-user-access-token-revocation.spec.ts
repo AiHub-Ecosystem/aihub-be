@@ -2,7 +2,7 @@ import { type KeyObject, generateKeyPairSync, randomUUID } from 'node:crypto';
 
 import { SignJWT } from 'jose';
 
-import type { RequestLogStream } from '@/common/observability/request-logger';
+import type { RequestLogStream } from '@/common/observability/logging/request-logger';
 import { seedAccount } from '@/modules/auth/testing/in-memory-auth.state';
 import { InMemoryUserAccessTokenRevocationAdapter } from '@/modules/auth/testing/in-memory-user-access-token-revocation.adapter';
 import {

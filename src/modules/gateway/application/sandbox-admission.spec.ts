@@ -1,4 +1,4 @@
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import {

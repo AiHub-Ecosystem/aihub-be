@@ -6,7 +6,7 @@ import {
   RasterImageProcessingAbortedError,
   RasterImageProcessingCapacityError,
 } from '@/common/image/raster-image';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import {
   AVATAR_MAX_BYTES,
   type Avatar,

@@ -20,12 +20,15 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
-import { METRICS_ROUTE_PATH, getMetrics } from '@/common/observability/metrics';
-import { registerMetricsRoute } from '@/common/observability/metrics.route';
 import {
   createNestPinoOptions,
   createRequestLogging,
-} from '@/common/observability/request-logger';
+} from '@/common/observability/logging/request-logger';
+import {
+  METRICS_ROUTE_PATH,
+  getMetrics,
+} from '@/common/observability/metrics/metrics';
+import { registerMetricsRoute } from '@/common/observability/metrics/metrics.route';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';

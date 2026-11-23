@@ -8,9 +8,9 @@ import { Test } from '@nestjs/testing';
 import { MockAgent, FormData as UndiciFormData } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
-import { registerBodySizeGuard } from '@/common/http/body-size.hook';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerBodySizeGuard } from '@/common/http/hooks/body-size.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';

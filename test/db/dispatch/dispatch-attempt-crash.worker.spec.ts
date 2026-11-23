@@ -6,7 +6,7 @@ import {
 } from '@nestjs/platform-fastify';
 
 import { AppModule } from '@/app.module';
-import { registerMetricsRoute } from '@/common/observability/metrics.route';
+import { registerMetricsRoute } from '@/common/observability/metrics/metrics.route';
 import { generateRequestId } from '@/common/request-context/request-id';
 import {
   SHEDDING_LEVEL,

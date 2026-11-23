@@ -3,11 +3,11 @@ import { AppError } from '@/common/errors/app-error';
 import {
   beginShutdown,
   waitForBackgroundWork,
-} from '@/common/http/background-work-drain';
+} from '@/common/http/runtime/background-work-drain';
 import {
   backgroundDrainMs,
   largestRequestTimeoutMs,
-} from '@/common/http/shutdown-budget';
+} from '@/common/http/runtime/shutdown-budget';
 import {
   CONCURRENCY_STALE_LEASE_MS,
   type RedisConcurrencyClient,

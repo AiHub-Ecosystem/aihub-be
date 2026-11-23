@@ -1,4 +1,4 @@
-import { sample } from '@/common/observability/metric-sample.testing';
+import { sample } from '@/common/observability/metrics/metric-sample.testing';
 
 describe('aihub_auth_web_session_client_secret_failures_total', () => {
   it('exposes a zero sample and counts each failed guess', async () => {

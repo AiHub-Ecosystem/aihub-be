@@ -10,7 +10,7 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { authenticationConfigurationInvalid } from '@/common/errors/auth-boundary-errors';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import {
   USER_IDENTITY_RESOLVER,
   type UserIdentityResolverPort,

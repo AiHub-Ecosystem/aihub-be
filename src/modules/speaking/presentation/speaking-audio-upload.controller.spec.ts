@@ -7,8 +7,8 @@ import { Value } from '@sinclair/typebox/value';
 
 import { AppModule } from '@/app.module';
 import { AppError } from '@/common/errors/app-error';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import {
   SpeakingAudioAssetResponseSchema,
   SpeakingAudioUploadUrlResponseSchema,

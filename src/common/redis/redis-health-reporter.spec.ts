@@ -15,7 +15,7 @@ class FakeLogger {
 
 describe('RedisHealthReporter', () => {
   const metricsText = async (): Promise<string> => {
-    const metrics = await import('@/common/observability/metrics');
+    const metrics = await import('@/common/observability/metrics/metrics');
     return metrics.getMetrics();
   };
 

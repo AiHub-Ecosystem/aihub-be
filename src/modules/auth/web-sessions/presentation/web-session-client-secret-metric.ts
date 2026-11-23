@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 const clientSecretFailures = new Counter({
   name: 'aihub_auth_web_session_client_secret_failures_total',

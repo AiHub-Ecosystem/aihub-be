@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net';
 import type { TLSSocket } from 'node:tls';
 import { Pool } from 'undici/index.js';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';

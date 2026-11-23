@@ -15,7 +15,7 @@ import { isRecord } from '@/common/is-record';
 import {
   type DownstreamPoolQueuedSample,
   setDownstreamPoolQueuedSource,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import { contractViolation } from '@/downstream/contract-violation';
 import type {
   DownstreamId,

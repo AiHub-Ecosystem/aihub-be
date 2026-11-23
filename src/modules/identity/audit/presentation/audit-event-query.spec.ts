@@ -1,5 +1,5 @@
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import { OrganizationAuditEventQuerySchema } from '@/contracts/organization/audit-event';
 import { encodeAuditCursor } from './audit-cursor';
 import { parseOrganizationAuditQuery as parseValidatedOrganizationAuditQuery } from './audit-event-query';

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import { isRequestId } from '@/common/request-context/request-id';
 import {
   DEFAULT_SANDBOX_DEMO_ENVIRONMENT,

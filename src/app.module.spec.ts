@@ -16,7 +16,7 @@ import {
 } from './catalog/public-api-majors';
 import { PUBLIC_ROUTES } from './catalog/public-routes';
 import { AppError } from './common/errors/app-error';
-import { registerBodySizeGuard } from './common/http/body-size.hook';
+import { registerBodySizeGuard } from './common/http/hooks/body-size.hook';
 import { isRecord } from './common/is-record';
 import { generateRequestId } from './common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from './modules/auth/accounts/application/user-account.port';

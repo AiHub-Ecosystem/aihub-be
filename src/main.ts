@@ -1,4 +1,4 @@
-import { GracefulFastifyAdapter } from './common/http/graceful-fastify-adapter';
+import { GracefulFastifyAdapter } from './common/http/transport/graceful-fastify-adapter';
 
 import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
@@ -7,14 +7,14 @@ import { Logger as PinoNestLogger } from 'nestjs-pino';
 
 import { isRecord } from '@/common/is-record';
 import { createAppFastifyProxyOptions } from './app-fastify-proxy-options';
-import { createAppFastifyErrorOptions } from './common/http/framework-error-responses';
+import { createAppFastifyErrorOptions } from './common/http/transport/framework-error-responses';
 import {
   CONNECTION_TIMEOUT_MS,
   REQUEST_TIMEOUT_MS,
-} from './common/http/server-timeouts';
-import { prepareSocketListener } from './common/http/unix-socket-listener';
-import { registerMetricsRoute } from './common/observability/metrics.route';
-import { createRequestLogging } from './common/observability/request-logger';
+} from './common/http/transport/server-timeouts';
+import { prepareSocketListener } from './common/http/transport/unix-socket-listener';
+import { createRequestLogging } from './common/observability/logging/request-logger';
+import { registerMetricsRoute } from './common/observability/metrics/metrics.route';
 import { generateRequestId } from './common/request-context/request-id';
 import {
   ConfigurationBootstrapError,
@@ -41,7 +41,7 @@ export async function bootstrap(): Promise<void> {
   bootstrapConfiguration();
   const [{ requestTracer, shutdownOpenTelemetry }, { AppModule }] =
     await Promise.all([
-      import('./common/observability/open-telemetry'),
+      import('./common/observability/tracing/open-telemetry'),
       import('./app.module'),
     ]);
   const configuration = getRuntimeConfiguration();

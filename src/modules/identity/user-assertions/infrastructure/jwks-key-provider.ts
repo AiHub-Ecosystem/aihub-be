@@ -1,7 +1,7 @@
 import {
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import type { PublicJsonWebKeySet } from '@/modules/identity/organization-identity-configuration/application/organization-identity-config-repository.port';
 import {
   putBounded,

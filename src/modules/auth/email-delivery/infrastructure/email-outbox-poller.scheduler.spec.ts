@@ -1,4 +1,4 @@
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import { RetiredKeyVersionLiveError } from '@/modules/auth/shared/infrastructure/address-window-counter';
 import { ScriptedPrisma } from '@/modules/persistence/testing/query-fake-client';

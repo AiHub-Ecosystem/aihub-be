@@ -6,7 +6,7 @@ import {
   getMetricsContentType,
 } from './metrics';
 import './redis-unavailable-metric';
-import './trace-export-metrics';
+import '@/common/observability/tracing/trace-export-metrics';
 
 /**
  * The scrape endpoint. Registered directly on the raw Fastify instance the

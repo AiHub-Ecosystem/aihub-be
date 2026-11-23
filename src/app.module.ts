@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
-import { RejectUnstorableTextPipe } from './common/http/reject-unstorable-text.pipe';
-import { RequestLogContextInterceptor } from './common/observability/request-log-context.interceptor';
-import { createNestPinoOptions } from './common/observability/request-logger';
+import { RejectUnstorableTextPipe } from './common/http/parsing/reject-unstorable-text.pipe';
+import { RequestLogContextInterceptor } from './common/observability/logging/request-log-context.interceptor';
+import { createNestPinoOptions } from './common/observability/logging/request-logger';
 import type { RuntimeConfiguration } from './config/runtime-configuration';
 import { RuntimeConfigurationModule } from './config/runtime-configuration.module';
 import { HealthModule } from './health/health.module';

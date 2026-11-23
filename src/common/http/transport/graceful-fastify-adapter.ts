@@ -1,7 +1,10 @@
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyServerOptions } from 'fastify';
 
-import { beginShutdown, waitForBackgroundWork } from './background-work-drain';
+import {
+  beginShutdown,
+  waitForBackgroundWork,
+} from '@/common/http/runtime/background-work-drain';
 
 export class GracefulFastifyAdapter extends FastifyAdapter {
   constructor(

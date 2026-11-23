@@ -4,7 +4,7 @@ import {
   observeDispatchDeadlineMsRemaining,
   recordDispatchCancelledByDeadline,
   registry,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import type { DispatchObserverPort } from '@/modules/gateway/application/dispatch/dispatch-observer.port';
 
 const downstreamRetryEventsTotal = new Counter({

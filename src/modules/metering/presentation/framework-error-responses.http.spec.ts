@@ -13,9 +13,9 @@ import { AppError } from '@/common/errors/app-error';
 import {
   clientErrorResponse,
   createAppFastifyErrorOptions,
-} from '@/common/http/framework-error-responses';
+} from '@/common/http/transport/framework-error-responses';
 import { isRecord } from '@/common/is-record';
-import { createRequestLogging } from '@/common/observability/request-logger';
+import { createRequestLogging } from '@/common/observability/logging/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import { CONCURRENCY_LIMITER } from '@/modules/gateway/application/concurrency-limiter.port';

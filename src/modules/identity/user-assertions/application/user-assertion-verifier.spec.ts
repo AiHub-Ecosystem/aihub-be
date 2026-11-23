@@ -9,7 +9,7 @@ import {
 } from 'jose';
 
 import { isRecord } from '@/common/is-record';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import type {
   PublicJsonWebKey,
   PublicJsonWebKeySet,

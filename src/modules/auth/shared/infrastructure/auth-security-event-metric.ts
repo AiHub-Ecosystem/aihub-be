@@ -1,7 +1,7 @@
 import { Counter } from '@prometheus-io/client';
 
 import { internalError } from '@/common/errors/app-error';
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import { AUTH_SECURITY_EVENT_NAMES } from '@/modules/auth/shared/application/auth-security-event.port';
 
 const eventNames = new Set<string>(AUTH_SECURITY_EVENT_NAMES);

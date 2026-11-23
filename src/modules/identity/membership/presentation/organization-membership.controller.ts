@@ -14,8 +14,8 @@ import {
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { parseRequestBody } from '@/common/http/parse-request-body';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import {
   EmptyOrganizationMembershipMutationRequestSchema,
   OrganizationMembershipListQuerySchema,

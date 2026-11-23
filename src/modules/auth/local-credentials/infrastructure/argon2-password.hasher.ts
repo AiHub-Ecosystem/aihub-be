@@ -5,7 +5,7 @@ import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
 import {
   recordArgon2QueueRefusal,
   recordArgon2QueueWait,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import { ARGON2ID_PARAMETERS } from '@/modules/auth/local-credentials/application/argon2id-parameters';
 import type { PasswordHasherPort } from '@/modules/auth/local-credentials/application/password-hasher.port';
 

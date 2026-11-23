@@ -7,7 +7,7 @@ import {
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { publicApiMajorOf } from '@/catalog/public-api-major';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
-import { routeTemplate } from '@/common/http/request-tracing.hook';
+import { routeTemplate } from '@/common/http/hooks/request-tracing.hook';
 import type {
   PublicApiCallerKind,
   PublicApiMajorUsageSample,

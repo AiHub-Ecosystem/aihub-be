@@ -8,11 +8,11 @@ import type { FastifyInstance } from 'fastify';
 
 import { createAppFastifyProxyOptions } from '@/app-fastify-proxy-options';
 import { AppModule } from '@/app.module';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import {
   type RequestLogStream,
   createRequestLogging,
-} from '@/common/observability/request-logger';
+} from '@/common/observability/logging/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import type {

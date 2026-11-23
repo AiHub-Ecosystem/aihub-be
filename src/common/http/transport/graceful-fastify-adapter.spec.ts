@@ -3,7 +3,9 @@ describe('GracefulFastifyAdapter', () => {
     const { GracefulFastifyAdapter } = await import(
       './graceful-fastify-adapter'
     );
-    const { isShuttingDown } = await import('./background-work-drain');
+    const { isShuttingDown } = await import(
+      '@/common/http/runtime/background-work-drain'
+    );
     const seenWhileClosing: boolean[] = [];
     const adapter = new GracefulFastifyAdapter(undefined, async () => {
       seenWhileClosing.push(isShuttingDown());

@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import {
   API_KEY_LAST_USED_TOUCH_TRACKING_LIMIT,
   AUTH_FAILURE_LIMIT,

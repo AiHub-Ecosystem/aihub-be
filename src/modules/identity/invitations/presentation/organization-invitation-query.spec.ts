@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import { ListOpenOrganizationInvitationsQuerySchema } from '@/contracts/organization/invitation';
 import {
   DEFAULT_COLLECTION_PAGE_SIZE,

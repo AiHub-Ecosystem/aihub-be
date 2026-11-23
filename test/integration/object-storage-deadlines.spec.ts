@@ -9,7 +9,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { isRecord } from '@/common/is-record';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { S3AvatarStorage } from '@/modules/avatar/infrastructure/s3-avatar.storage';
 import { createSeaweedFsS3Client } from '@/modules/secrets/infrastructure/seaweedfs-s3-client.factory';
 import { S3SpeakingAudioAssetStorage } from '@/modules/speaking/infrastructure/s3-speaking-audio-asset.storage';

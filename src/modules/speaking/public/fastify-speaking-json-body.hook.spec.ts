@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { AppError } from '@/common/errors/app-error';
-import { registerRequestLifecycle } from '@/common/http/request-lifecycle.hook';
+import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { registerSpeakingJsonBodyCancellation } from './fastify-speaking-json-body.hook';
 
 const JSON_PATH = OPERATION_CATALOG['speaking.grading-json'].path;

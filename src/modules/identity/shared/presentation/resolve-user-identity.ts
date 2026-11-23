@@ -1,4 +1,4 @@
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import { invalidUserIdentity } from '@/modules/identity/user-assertions/application/user-identity-errors';
 import type {
   ResolvedUserIdentity,

@@ -7,7 +7,7 @@ import { isDownstreamCredentialRejection } from '@/common/errors/downstream-faul
 import type { ErrorCode } from '@/common/errors/error-code';
 import { parseRetryAfter } from '@/common/http/retry-after';
 import { isRecord } from '@/common/is-record';
-import { recordDownstreamCredentialRejection } from '@/common/observability/metrics';
+import { recordDownstreamCredentialRejection } from '@/common/observability/metrics/metrics';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';

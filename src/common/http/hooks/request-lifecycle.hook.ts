@@ -1,12 +1,12 @@
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { isRecord } from '@/common/is-record';
+import { pathnameOf } from '@/common/http/request-path';
 import {
   type DisconnectableRequest,
   createClientDisconnectSignal,
-} from './client-disconnect-signal';
-import { pathnameOf } from './request-path';
+} from '@/common/http/runtime/client-disconnect-signal';
+import { isRecord } from '@/common/is-record';
 
 const OPERATION_TIMEOUT_BY_PATH: ReadonlyMap<string, number> = new Map(
   Object.values(OPERATION_CATALOG).map((operation) => [

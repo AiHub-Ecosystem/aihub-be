@@ -16,7 +16,7 @@ import {
   clientSecretMissingOrInvalid,
 } from '@/common/errors/auth-boundary-errors';
 import type { ClientIpSource } from '@/common/http/client-ip-source';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import { constantTimeEquals } from '@/common/security/constant-time-equals';
 import { clientSecretFrom } from '@/modules/auth/public/client-secret-header';
 import {

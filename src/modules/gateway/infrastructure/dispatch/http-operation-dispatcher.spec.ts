@@ -4,7 +4,7 @@ import { MockAgent } from 'undici/index.js';
 import { AppError } from '@/common/errors/app-error';
 import { createInternalErrorEnvelope } from '@/common/errors/error-envelope';
 import { isRecord } from '@/common/is-record';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import type { SpeakingGradeJsonInput } from '@/contracts/speaking/grading';
 import type {

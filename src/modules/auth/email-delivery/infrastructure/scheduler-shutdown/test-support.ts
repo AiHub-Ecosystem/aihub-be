@@ -106,9 +106,11 @@ export async function withApp(
   shutdownBeforeInit = false,
 ): Promise<void> {
   const { GracefulFastifyAdapter } = await import(
-    '@/common/http/graceful-fastify-adapter'
+    '@/common/http/transport/graceful-fastify-adapter'
   );
-  const { beginShutdown } = await import('@/common/http/background-work-drain');
+  const { beginShutdown } = await import(
+    '@/common/http/runtime/background-work-drain'
+  );
   const { EmailOutboxPollerScheduler } = await import(
     '@/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler'
   );

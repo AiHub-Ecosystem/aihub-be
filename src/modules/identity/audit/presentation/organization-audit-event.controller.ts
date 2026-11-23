@@ -10,7 +10,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { parseRequestQuery } from '@/common/http/parse-request-query';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import {
   type ListOrganizationAuditEventsResponse,
   OrganizationAuditEventQuerySchema,

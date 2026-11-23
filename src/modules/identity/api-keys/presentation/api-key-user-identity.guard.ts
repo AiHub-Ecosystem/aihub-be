@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import {
   API_KEY_AUTHENTICATOR,
   type ApiKeyAuthenticatorPort,

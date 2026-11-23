@@ -2,7 +2,7 @@ import { Value } from '@sinclair/typebox/value';
 import { ulid } from 'ulid';
 
 import { internalError } from '@/common/errors/app-error';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 import type { RequestContext } from '@/common/request-context/request-context';
 import {
   type SpeakingGradingJobAcceptedData,

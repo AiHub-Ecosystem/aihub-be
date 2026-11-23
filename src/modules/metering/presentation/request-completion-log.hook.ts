@@ -10,19 +10,19 @@ import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { clientIpSource } from '@/common/http/client-ip-source';
-import { isHealthProbe } from '@/common/http/request-path';
 import {
   requestAdmissionMs,
   requestDurationMs,
-} from '@/common/http/request-timing.hook';
+} from '@/common/http/hooks/request-timing.hook';
 import {
   UNMATCHED_ROUTE,
   routeTemplate,
-} from '@/common/http/request-tracing.hook';
+} from '@/common/http/hooks/request-tracing.hook';
+import { isHealthProbe } from '@/common/http/request-path';
 import {
   METRICS_ROUTE_PATH,
   recordCompletedRequest,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import {
   type MeteringEvidence,
   getMeteringEvidence,

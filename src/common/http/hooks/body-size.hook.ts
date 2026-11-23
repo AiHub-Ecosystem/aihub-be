@@ -2,9 +2,9 @@ import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { matchesPathTemplate } from '@/catalog/path-template';
 import type { ErrorCode } from '@/common/errors/error-code';
 import { createErrorEnvelope } from '@/common/errors/error-envelope';
+import { recordRequestFailure } from '@/common/http/request-failure.recorder';
+import { pathnameOf } from '@/common/http/request-path';
 import { isRequestId } from '@/common/request-context/request-id';
-import { recordRequestFailure } from './request-failure.recorder';
-import { pathnameOf } from './request-path';
 import { markRequestAdmission } from './request-timing.hook';
 
 /**

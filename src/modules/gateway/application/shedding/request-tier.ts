@@ -3,7 +3,7 @@ import { compilePathTemplate } from '@/catalog/path-template';
 import { PUBLIC_ROUTES, type PublicRouteId } from '@/catalog/public-routes';
 import { PUBLIC_ROUTE_TIERS, type RequestTier } from '@/catalog/request-tiers';
 import { isHealthProbe, pathnameOf } from '@/common/http/request-path';
-import { METRICS_ROUTE_PATH } from '@/common/observability/metrics';
+import { METRICS_ROUTE_PATH } from '@/common/observability/metrics/metrics';
 
 export type { RequestTier };
 

@@ -11,7 +11,7 @@ import {
   backgroundWorkStarted,
 } from '@/common/background-work-tracker';
 import { AppError } from '@/common/errors/app-error';
-import { isShuttingDown } from '@/common/http/background-work-drain';
+import { isShuttingDown } from '@/common/http/runtime/background-work-drain';
 import { JitteredTimer, jitteredDelayMs } from '@/common/jittered-timer';
 import { postgresTimeoutKind } from '@/common/postgres/postgres-timeout-error';
 import { isPostgresUnavailable } from '@/common/postgres/postgres-unavailable-error';

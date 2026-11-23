@@ -1,6 +1,6 @@
 import { Counter } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 import { registerEmailDailySendBudgetMetric } from './email-daily-send-budget-metric';
 import {
   type EmailOutboxBacklogSample,

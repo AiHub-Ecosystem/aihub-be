@@ -747,7 +747,7 @@ of care at each call site:
   integration spec checks its committed contents, so email data cannot be added
   to the dispatch signal unnoticed.
 - **The counter has one bounded label**, `kind`, whose five values are fixed in
-  `src/common/observability/metrics.ts`. A recipient cannot become a series.
+  `src/common/observability/metrics/metrics.ts`. A recipient cannot become a series.
 - **`last_error_code` and `cancel_reason` are CHECK-constrained** to
   `^[a-z0-9_]{1,64}$` in `prisma/migrations/0027_email_delivery_requests/migration.sql`.
   Free-text provider output cannot be stored even by mistake.

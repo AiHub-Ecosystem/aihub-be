@@ -1,6 +1,6 @@
 import { Gauge } from '@prometheus-io/client';
 
-import { registry } from '@/common/observability/metrics';
+import { registry } from '@/common/observability/metrics/metrics';
 
 let shedLevelValue = 0;
 

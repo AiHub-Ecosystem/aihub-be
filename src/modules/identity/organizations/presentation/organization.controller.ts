@@ -15,7 +15,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
-import { parseRequestBody } from '@/common/http/parse-request-body';
+import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
 import {
   type CreateOrganizationRequest,
   CreateOrganizationRequestSchema,

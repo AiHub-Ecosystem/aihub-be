@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import { recordRejected } from '@/common/observability/rejected-metric';
+import { recordRejected } from '@/common/observability/metrics/rejected-metric';
 
 /** A header that is not a usable string, before the mode is known. */
 export function invalidUserIdentity(): AppError {

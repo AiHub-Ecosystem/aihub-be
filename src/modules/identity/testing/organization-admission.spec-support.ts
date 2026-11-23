@@ -4,7 +4,7 @@ import {
 } from '@nestjs/platform-fastify';
 import type { TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
 import {
   USER_ACCOUNT_REPOSITORY,
   type UserAccountRepositoryPort,

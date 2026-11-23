@@ -1,12 +1,12 @@
 import type { Tracer } from '@opentelemetry/api';
 import type { FastifyInstance } from 'fastify';
 
-import { registerBodySizeGuard } from './common/http/body-size.hook';
-import { registerRequestIdResponseHeader } from './common/http/request-id-response-header.hook';
-import { registerRequestLifecycle } from './common/http/request-lifecycle.hook';
-import { registerRequestTiming } from './common/http/request-timing.hook';
-import { registerRequestTracing } from './common/http/request-tracing.hook';
-import { registerSecurityHeaders } from './common/http/security-headers.hook';
+import { registerBodySizeGuard } from './common/http/hooks/body-size.hook';
+import { registerRequestIdResponseHeader } from './common/http/hooks/request-id-response-header.hook';
+import { registerRequestLifecycle } from './common/http/hooks/request-lifecycle.hook';
+import { registerRequestTiming } from './common/http/hooks/request-timing.hook';
+import { registerRequestTracing } from './common/http/hooks/request-tracing.hook';
+import { registerSecurityHeaders } from './common/http/hooks/security-headers.hook';
 import type { SheddingLevelPort } from './modules/gateway/application/shedding/shedding-level.port';
 import {
   type RequestTier,

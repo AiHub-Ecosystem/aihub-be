@@ -13,8 +13,8 @@ import {
 } from '@opentelemetry/sdk-trace';
 
 import { AppModule } from '@/app.module';
-import { GracefulFastifyAdapter } from '@/common/http/graceful-fastify-adapter';
-import { registerMetricsRoute } from '@/common/observability/metrics.route';
+import { GracefulFastifyAdapter } from '@/common/http/transport/graceful-fastify-adapter';
+import { registerMetricsRoute } from '@/common/observability/metrics/metrics.route';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { appConfig } from '@/config/runtime-configuration';
 import {

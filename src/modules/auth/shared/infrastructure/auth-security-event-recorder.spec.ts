@@ -4,11 +4,11 @@ import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import { LoggerModule, PinoLogger } from 'nestjs-pino';
 
-import { getMetrics, registry } from '@/common/observability/metrics';
 import {
   type RequestLogStream,
   createNestPinoOptions,
-} from '@/common/observability/request-logger';
+} from '@/common/observability/logging/request-logger';
+import { getMetrics, registry } from '@/common/observability/metrics/metrics';
 import {
   AUTH_SECURITY_EVENT_NAMES,
   type AuthSecurityEvent,

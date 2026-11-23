@@ -7,8 +7,8 @@ import { Test } from '@nestjs/testing';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 
 import { AppModule } from '@/app.module';
-import { registerSecurityHeaders } from '@/common/http/security-headers.hook';
-import { createRequestLogging } from '@/common/observability/request-logger';
+import { registerSecurityHeaders } from '@/common/http/hooks/security-headers.hook';
+import { createRequestLogging } from '@/common/observability/logging/request-logger';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {

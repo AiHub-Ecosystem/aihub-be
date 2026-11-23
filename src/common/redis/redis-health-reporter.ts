@@ -1,7 +1,7 @@
 import {
   type RedisProtectionSeam,
   recordRedisUnavailable,
-} from '@/common/observability/redis-unavailable-metric';
+} from '@/common/observability/metrics/redis-unavailable-metric';
 
 interface LoggerLike {
   warn(fields: Record<string, unknown>): void;

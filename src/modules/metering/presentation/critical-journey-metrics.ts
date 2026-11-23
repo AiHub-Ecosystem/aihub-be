@@ -1,6 +1,6 @@
 import { Counter, Histogram } from '@prometheus-io/client';
 
-import { registry, secondsOf } from '@/common/observability/metrics';
+import { registry, secondsOf } from '@/common/observability/metrics/metrics';
 
 const requests = new Counter({
   name: 'aihub_critical_journey_requests_total',

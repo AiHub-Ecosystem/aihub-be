@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import type {
   SandboxAllowanceSnapshot,
   SandboxDispatchBudgetPort,

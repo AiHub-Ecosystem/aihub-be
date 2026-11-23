@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { AppError } from '@/common/errors/app-error';
-import { recordRedisUnavailable } from '@/common/observability/redis-unavailable-metric';
+import { recordRedisUnavailable } from '@/common/observability/metrics/redis-unavailable-metric';
 import type {
   DpopReplayCachePort,
   DpopReplayKey,

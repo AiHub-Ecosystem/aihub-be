@@ -70,12 +70,12 @@ Every consumer of the shared client seam:
   cache, endpoint identity (redis-endpoint-compatibility.ts).
 - Test DB lane `test/db/shared/database.ts`: direct `new Redis`,
   createSandboxTestRedis (loopback DB 14).
-- OTel `src/common/observability/open-telemetry.ts`: IORedisInstrumentation
+- OTel `src/common/observability/tracing/open-telemetry.ts`: IORedisInstrumentation
   with dbStatementSerializer redisOperationName, requireParentSpan true.
 
 The request-path surface is aihub_redis_unavailable_total with 13 seam
 labels; its meaning is producer-defined in
-`src/common/observability/redis-unavailable-metric.ts` and must not
+`src/common/observability/metrics/redis-unavailable-metric.ts` and must not
 change with the client.
 
 ## API differences that touch this seam
@@ -222,7 +222,7 @@ adapted):
   (including increment-with-expiry and number-reply).
 - Auth rate limiter and email send-rate limiter specs (fallback and
   script constants).
-- `src/common/observability/span-sanitizers.spec.ts` (command-name
+- `src/common/observability/tracing/span-sanitizers.spec.ts` (command-name
   normalization contract for spans).
 - `docs/operations/redis-round-trip.md` margin rule and the seam meaning
   of aihub_redis_unavailable_total.

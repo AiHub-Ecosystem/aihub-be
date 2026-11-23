@@ -4,7 +4,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 
-import { setDispatchAttemptUnresolvedSource } from '@/common/observability/metrics';
+import { setDispatchAttemptUnresolvedSource } from '@/common/observability/metrics/metrics';
 import { PostgresDispatchAttemptRepository } from './postgres-dispatch-attempt.repository';
 
 @Injectable()

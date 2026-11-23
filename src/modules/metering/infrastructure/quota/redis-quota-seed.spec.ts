@@ -1,4 +1,4 @@
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { QUOTA_TTL_SECONDS } from './redis-quota-counter';
 import { RedisQuotaSeeder } from './redis-quota-seed';
 

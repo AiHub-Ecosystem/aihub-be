@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import { sanitizeWritingChartImage } from './writing-chart-image-verifier';
 import {
   WRITING_CHART_MAX_BYTES,

@@ -1,4 +1,4 @@
-import type { ApiKeyCacheInvalidationSeam } from '@/common/observability/redis-unavailable-metric';
+import type { ApiKeyCacheInvalidationSeam } from '@/common/observability/metrics/redis-unavailable-metric';
 
 export interface ApiKeyCredential {
   readonly value: string;

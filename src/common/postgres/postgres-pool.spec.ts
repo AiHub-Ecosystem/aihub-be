@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient, type TransactionStatus } from 'pg';
 
-import { getMetrics } from '@/common/observability/metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 import {
   POSTGRES_ACQUISITION_TIMEOUT_MS,
   POSTGRES_CONNECT_TIMEOUT_MS,

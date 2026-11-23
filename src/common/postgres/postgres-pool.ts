@@ -8,14 +8,14 @@ import {
   type PostgresPoolStatsSample,
   recordPostgresPoolError,
   setPostgresPoolStatsSource,
-} from '@/common/observability/metrics';
+} from '@/common/observability/metrics/metrics';
 import {
   type PostgresBreakerState,
   observePostgresConnectRetry,
   observePostgresConnectRetryLatency,
   recordPostgresBreakerTransition,
   recordPostgresPoolShed,
-} from '@/common/observability/postgres-pool-resilience-metrics';
+} from '@/common/observability/metrics/postgres-pool-resilience-metrics';
 import {
   PoolStarvationBreaker,
   isRetryableConnectError,
