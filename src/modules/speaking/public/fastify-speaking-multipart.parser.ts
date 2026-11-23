@@ -100,7 +100,7 @@ function schemaFailures(
   // The parser already refused every unknown field, so a path is one of the
   // schema's own property names. The guard keeps #1213 closed if that changes:
   // anything else falls back to the base token rather than reaching the log.
-  const named = paths.every((path) => /^(\/|[a-z0-9_]+)+$/.test(path));
+  const named = paths.every(isSchemaPath);
   return {
     diagnostic: named
       ? `multipart:schema${paths.map((path) => `:${path}`).join('')}`
@@ -112,6 +112,19 @@ function schemaFailures(
       ]),
     ),
   };
+}
+
+function isSchemaPath(path: string): boolean {
+  if (path === '/') {
+    return true;
+  }
+  return (
+    path.startsWith('/') &&
+    path
+      .slice(1)
+      .split('/')
+      .every((segment) => /^[a-z0-9_]+$/.test(segment))
+  );
 }
 
 function payloadTooLarge(): AppError {
