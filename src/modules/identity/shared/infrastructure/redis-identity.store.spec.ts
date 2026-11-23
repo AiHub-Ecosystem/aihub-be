@@ -300,6 +300,24 @@ describe('RedisIdentityStore', () => {
     }
   });
 
+  it('does not retain an entry after a stall during freshness calculation', async () => {
+    let monotonicNow = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => monotonicNow);
+    jest.spyOn(Date, 'now').mockImplementation(() => {
+      monotonicNow += 2_000;
+      return 29_000;
+    });
+
+    try {
+      const store = createKeylessStore(DEAD_REDIS);
+      await store.set('b'.repeat(64), record, 30_000);
+
+      await expect(store.get('b'.repeat(64))).resolves.toBeUndefined();
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   it('authenticates from the repository when a forged API-key cache entry is read', async () => {
     const redis = new FakeRedis();
     const store = createStore(redis);

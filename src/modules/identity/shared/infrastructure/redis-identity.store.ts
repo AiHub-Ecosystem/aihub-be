@@ -256,10 +256,11 @@ export class RedisIdentityStore
     record: ApiKeyRecord,
     freshUntil = this.newPositiveFreshUntil(),
   ): Promise<void> {
+    const lifetimeStartedAt = performance.now();
     const remainingMs = freshUntil - Date.now();
     if (remainingMs <= 0) return;
     const ttlSeconds = Math.ceil(remainingMs / 1_000);
-    this.rememberApiKey(hashHex, record, performance.now() + remainingMs);
+    this.rememberApiKey(hashHex, record, lifetimeStartedAt + remainingMs);
     if (this.client === undefined || this.hmacKey === undefined) return;
 
     const cacheKey = apiKeyCacheKey(hashHex);
