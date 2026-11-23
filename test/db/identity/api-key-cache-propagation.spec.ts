@@ -99,7 +99,7 @@ class MutableRepository implements ApiKeyRepositoryPort {
 
 beforeAll(async () => {
   redis = await openFlushedSandboxRedis();
-  readerRedis = redis.duplicate();
+  readerRedis = redis.duplicate({ enableOfflineQueue: true });
   await readerRedis.ping();
 });
 
