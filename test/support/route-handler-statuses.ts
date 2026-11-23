@@ -145,6 +145,11 @@ function servedHandlers(
   return served;
 }
 
+/** Every method + Nest path shape served by a controller reachable from AppModule. */
+export function servedRouteShapes(): string[] {
+  return [...servedHandlers(registeredControllers()).keys()];
+}
+
 /** Every `PublicRouteDef` and catalog operation, with the statuses it declares. */
 export function declaredRoutes(): readonly DeclaredRoute[] {
   const publicRoutes = Object.entries(PUBLIC_ROUTES) as [
