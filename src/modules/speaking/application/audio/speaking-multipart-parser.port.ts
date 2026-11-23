@@ -42,9 +42,11 @@ export interface SpeakingMultipartParserPort {
   parse(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
+    authenticated?: boolean,
   ): Promise<SpeakingGradeInput>;
   parseQuestionV2(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
+    authenticated?: boolean,
   ): Promise<SpeakingV2QuestionGradeInput>;
 }

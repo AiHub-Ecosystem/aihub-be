@@ -868,6 +868,34 @@ describe('Speaking grading HTTP flow', () => {
     expectError(response, 'INVALID_REQUEST');
   });
 
+  it('names the refused field back to an authenticated caller', async () => {
+    const request = multipartPayload(
+      {
+        part: '1',
+        question_id: 'p1_hometown',
+        part_result_id: 'v2-only',
+      },
+      Buffer.alloc(200, 1),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/ielts/speaking/grading',
+      headers: { 'content-type': request.contentType },
+      payload: request.payload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(responseBody(response)).toMatchObject({
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Request failed validation',
+        details: { '/part_result_id': 'Unexpected property' },
+      },
+    });
+    expect(response.payload).not.toContain('multipart:');
+  });
+
   it('rejects missing required grading metadata before downstream dispatch', async () => {
     const request = multipartPayload(
       { question_id: 'p1_hometown' },

@@ -46,12 +46,57 @@ interface MultipartRegistrableInstance {
   addHook(...args: never[]): unknown;
 }
 
-function invalidRequest(message = 'Request failed validation'): AppError {
-  return new AppError({
-    code: 'INVALID_REQUEST',
-    message,
-    retryable: false,
-  });
+type Reject = (
+  diagnostic: string,
+  details?: Readonly<Record<string, unknown>>,
+  message?: string,
+) => AppError;
+
+/**
+ * Fixed tokens naming the multipart branch that refused a request. They reach
+ * the operator log, so one must never carry a field name, value, or file name
+ * a caller supplied (#2014, #1213).
+ */
+const FRAMEWORK_TOKENS = new Map<string, string>([
+  ['FST_INVALID_MULTIPART_CONTENT_TYPE', 'multipart:not-multipart'],
+  ['FST_INVALID_JSON_FIELD_ERROR', 'multipart:field-json'],
+  ['FST_MP_PREMATURE_CLOSE', 'multipart:incomplete-body'],
+  ['FST_PROTO_VIOLATION', 'multipart:prototype-field'],
+  ['FST_FIELDS_LIMIT', 'multipart:fields-limit'],
+  ['FST_PARTS_LIMIT', 'multipart:parts-limit'],
+  ['FST_FILES_LIMIT', 'multipart:files-limit'],
+]);
+
+function frameworkToken(error: unknown): string | undefined {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+  const code = error['code'];
+  return typeof code === 'string' ? FRAMEWORK_TOKENS.get(code) : undefined;
+}
+
+/** The diagnostic is for the log; `details` names the refused field back to an
+ * authenticated caller only, the split `parseRequestBody` already makes. */
+function rejectionFor(authenticated: boolean): Reject {
+  return (diagnostic, details, message = 'Request failed validation') =>
+    new AppError({
+      code: 'INVALID_REQUEST',
+      message,
+      retryable: false,
+      ...(authenticated && details !== undefined ? { details } : {}),
+      diagnostic,
+    });
+}
+
+function schemaDetails(
+  errors: readonly { readonly path: string; readonly message: string }[],
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    errors.map((error) => [
+      error.path === '' ? '/' : error.path,
+      error.message,
+    ]),
+  );
 }
 
 function payloadTooLarge(): AppError {
@@ -113,13 +158,18 @@ async function readAudio(
 
 function parseFields(
   fields: ReadonlyMap<string, string>,
+  reject: Reject,
 ): Omit<SpeakingGradeInput, 'audio'> {
   for (const [field, value] of fields) {
     if (!ALLOWED_FIELDS.has(field)) {
-      throw invalidRequest();
+      throw reject('multipart:unknown-field', {
+        [`/${field}`]: 'Unexpected property',
+      });
     }
     if (containsUnstorableText(value)) {
-      throw invalidRequest();
+      throw reject('multipart:unstorable-field', {
+        [`/${field}`]: 'Unstorable character',
+      });
     }
   }
 
@@ -140,7 +190,12 @@ function parseFields(
   };
 
   if (!Value.Check(SpeakingGradeRequestSchema, boundaryValue)) {
-    throw invalidRequest();
+    throw reject(
+      'multipart:schema',
+      schemaDetails([
+        ...Value.Errors(SpeakingGradeRequestSchema, boundaryValue),
+      ]),
+    );
   }
 
   return {
@@ -164,13 +219,18 @@ const QUESTION_FIELDS_V2 = new Set([
 
 function parseQuestionFieldsV2(
   fields: ReadonlyMap<string, string>,
+  reject: Reject,
 ): Omit<SpeakingV2QuestionGradeInput, 'audio'> {
   for (const [field, value] of fields) {
     if (!QUESTION_FIELDS_V2.has(field)) {
-      throw invalidRequest();
+      throw reject('multipart:unknown-field', {
+        [`/${field}`]: 'Unexpected property',
+      });
     }
     if (containsUnstorableText(value)) {
-      throw invalidRequest();
+      throw reject('multipart:unstorable-field', {
+        [`/${field}`]: 'Unstorable character',
+      });
     }
   }
 
@@ -190,7 +250,12 @@ function parseQuestionFieldsV2(
   };
 
   if (!Value.Check(SpeakingV2QuestionGradeRequestSchema, boundaryValue)) {
-    throw invalidRequest();
+    throw reject(
+      'multipart:schema',
+      schemaDetails([
+        ...Value.Errors(SpeakingV2QuestionGradeRequestSchema, boundaryValue),
+      ]),
+    );
   }
 
   return {
@@ -212,22 +277,34 @@ export class FastifySpeakingMultipartParser
   parse(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
+    authenticated = false,
   ): Promise<SpeakingGradeInput> {
-    return this.readMultipart(source, signal, parseFields);
+    return this.readMultipart(source, signal, authenticated, parseFields);
   }
 
   parseQuestionV2(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
+    authenticated = false,
   ): Promise<SpeakingV2QuestionGradeInput> {
-    return this.readMultipart(source, signal, parseQuestionFieldsV2);
+    return this.readMultipart(
+      source,
+      signal,
+      authenticated,
+      parseQuestionFieldsV2,
+    );
   }
 
   private async readMultipart<TFields>(
     source: SpeakingMultipartSource,
     signal: AbortSignal,
-    parseFieldValues: (fields: ReadonlyMap<string, string>) => TFields,
+    authenticated: boolean,
+    parseFieldValues: (
+      fields: ReadonlyMap<string, string>,
+      reject: Reject,
+    ) => TFields,
   ): Promise<TFields & { readonly audio: SpeakingAudio }> {
+    const reject = rejectionFor(authenticated);
     const fields = new Map<string, string>();
     let audio: SpeakingAudio | undefined;
     const abort = (): void => source.abort();
@@ -237,10 +314,18 @@ export class FastifySpeakingMultipartParser
       for await (const part of source.parts(MULTIPART_LIMITS)) {
         if (part.type === 'file') {
           if (audio !== undefined || part.fieldname !== 'audio') {
-            throw invalidRequest('Exactly one audio field is required');
+            throw reject(
+              'multipart:audio-field',
+              { '/audio': 'Exactly one audio field is required' },
+              'Exactly one audio field is required',
+            );
           }
           if (!ALLOWED_EXTENSIONS.has(extensionOf(part.filename))) {
-            throw invalidRequest('Audio format is not supported');
+            throw reject(
+              'multipart:audio-format',
+              { '/audio': 'Audio format is not supported' },
+              'Audio format is not supported',
+            );
           }
 
           const blob = await readAudio(part, signal);
@@ -253,13 +338,17 @@ export class FastifySpeakingMultipartParser
         }
 
         if (fields.has(part.fieldname)) {
-          throw invalidRequest();
+          throw reject('multipart:duplicate-field', {
+            [`/${part.fieldname}`]: 'Field sent more than once',
+          });
         }
         if (part.truncated) {
           throw payloadTooLarge();
         }
         if (typeof part.value !== 'string') {
-          throw invalidRequest();
+          throw reject('multipart:non-text-field', {
+            [`/${part.fieldname}`]: 'Expected text',
+          });
         }
         fields.set(part.fieldname, part.value);
       }
@@ -273,16 +362,28 @@ export class FastifySpeakingMultipartParser
       if (signal.aborted) {
         throw timeoutError();
       }
-      throw invalidRequest();
+      const token = frameworkToken(error);
+      throw reject(token ?? 'multipart:unreadable-body');
     } finally {
       signal.removeEventListener('abort', abort);
     }
 
-    if (audio === undefined || audio.blob.size < 100) {
-      throw invalidRequest('Audio must be at least 100 bytes');
+    if (audio === undefined) {
+      throw reject(
+        'multipart:audio-missing',
+        { '/audio': 'An audio file is required' },
+        'Audio must be at least 100 bytes',
+      );
+    }
+    if (audio.blob.size < 100) {
+      throw reject(
+        'multipart:audio-too-small',
+        { '/audio': 'Audio must be at least 100 bytes' },
+        'Audio must be at least 100 bytes',
+      );
     }
 
-    return { audio, ...parseFieldValues(fields) };
+    return { audio, ...parseFieldValues(fields, reject) };
   }
 }
 

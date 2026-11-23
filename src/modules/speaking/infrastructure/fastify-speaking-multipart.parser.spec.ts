@@ -1,3 +1,4 @@
+import { AppError } from '@/common/errors/app-error';
 import type {
   SpeakingMultipartFieldPart,
   SpeakingMultipartFilePart,
@@ -287,5 +288,141 @@ describe('FastifySpeakingMultipartParser rejection branches', () => {
       code: 'AI_SERVICE_TIMEOUT',
       retryable: true,
     });
+  });
+});
+
+describe('FastifySpeakingMultipartParser rejection diagnostics (#2014)', () => {
+  async function rejectionOf(
+    parts: readonly SpeakingMultipartPart[],
+    options: Readonly<{
+      authenticated?: boolean;
+      onPartsError?: () => unknown;
+      parseQuestionV2?: boolean;
+    }> = {},
+  ): Promise<Record<string, unknown>> {
+    const instance = parser();
+    const method =
+      options.parseQuestionV2 === true
+        ? instance.parseQuestionV2.bind(instance)
+        : instance.parse.bind(instance);
+    try {
+      await method(
+        sourceOf(parts, options.onPartsError),
+        neverAborted(),
+        options.authenticated ?? false,
+      );
+    } catch (error) {
+      if (error instanceof AppError) {
+        return error as unknown as Record<string, unknown>;
+      }
+      throw error;
+    }
+    throw new Error('Expected the parser to reject');
+  }
+
+  const validFields = [fieldPart('part', '1'), fieldPart('question_id', 'q_1')];
+
+  it.each([
+    [
+      'an unknown field',
+      'multipart:unknown-field',
+      [...validFields, fieldPart('candidate_name', 'someone'), audioPart()],
+    ],
+    [
+      'unstorable text',
+      'multipart:unstorable-field',
+      [
+        fieldPart('part', '1'),
+        fieldPart('question_id', 'q_\u00001'),
+        audioPart(),
+      ],
+    ],
+    [
+      'a duplicate field',
+      'multipart:duplicate-field',
+      [
+        fieldPart('part', '1'),
+        fieldPart('part', '2'),
+        fieldPart('question_id', 'q_1'),
+        audioPart(),
+      ],
+    ],
+    [
+      'a non-text field',
+      'multipart:non-text-field',
+      [...validFields, fieldPart('transcript', { nested: true }), audioPart()],
+    ],
+    [
+      'a schema mismatch',
+      'multipart:schema',
+      [fieldPart('question_id', 'q_1'), audioPart()],
+    ],
+    [
+      'a second file part',
+      'multipart:audio-field',
+      [...validFields, audioPart(), audioPart({ filename: 'again.wav' })],
+    ],
+    [
+      'an unsupported extension',
+      'multipart:audio-format',
+      [...validFields, audioPart({ filename: 'answer.flac' })],
+    ],
+    [
+      'audio below the minimum',
+      'multipart:audio-too-small',
+      [...validFields, audioPart({ bytes: Buffer.alloc(99, 1) })],
+    ],
+    ['a missing audio file', 'multipart:audio-missing', validFields],
+  ])('names %s with its own token', async (_label, token, parts) => {
+    const rejection = await rejectionOf(parts);
+
+    expect(rejection['diagnostic']).toBe(token);
+    expect(rejection['diagnostic']).toMatch(/^multipart:[a-z-]+$/);
+  });
+
+  it('names a framework limit error with its own token', async () => {
+    const rejection = await rejectionOf([], {
+      onPartsError: () => ({ code: 'FST_FIELDS_LIMIT', message: 'limit' }),
+    });
+
+    expect(rejection['diagnostic']).toBe('multipart:fields-limit');
+  });
+
+  it('gives every token a fixed shape and no caller-supplied text', async () => {
+    const rejection = await rejectionOf([
+      ...validFields,
+      fieldPart('secret_caller_key', 'secret_caller_value'),
+      audioPart(),
+    ]);
+    const diagnostic = String(rejection['diagnostic']);
+
+    expect(diagnostic).not.toContain('secret_caller_key');
+    expect(diagnostic).not.toContain('secret_caller_value');
+  });
+
+  it('names the refused field back only to an authenticated caller', async () => {
+    const parts = [
+      ...validFields,
+      fieldPart('candidate_name', 'someone'),
+      audioPart(),
+    ];
+
+    const authenticated = await rejectionOf(parts, { authenticated: true });
+    expect(authenticated['details']).toEqual({
+      '/candidate_name': 'Unexpected property',
+    });
+
+    const anonymous = await rejectionOf(parts);
+    expect(anonymous['details']).toBeUndefined();
+  });
+
+  it('reports a bad v2 question body against the v2 schema', async () => {
+    const rejection = await rejectionOf(
+      [fieldPart('part', '4'), fieldPart('question_id', 'q_1'), audioPart()],
+      { parseQuestionV2: true, authenticated: true },
+    );
+
+    expect(rejection['diagnostic']).toBe('multipart:schema');
+    expect(Object.keys(rejection['details'] as object)).toEqual(['/part']);
   });
 });

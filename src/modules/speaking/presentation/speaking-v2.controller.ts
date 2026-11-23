@@ -12,7 +12,10 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
-import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
+import {
+  callerIsAuthenticated,
+  parseRequestBody,
+} from '@/common/http/parsing/parse-request-body';
 import { parseRequestParams } from '@/common/http/parsing/parse-request-params';
 import type { SpeakingV2PartResult } from '@/contracts/speaking/v2/part-result';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
@@ -77,6 +80,7 @@ export class SpeakingV2Controller {
           const input = await this.multipartParser.parseQuestionV2(
             source,
             signal,
+            callerIsAuthenticated(request),
           );
           return { input };
         },

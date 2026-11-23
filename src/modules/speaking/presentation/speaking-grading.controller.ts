@@ -11,7 +11,10 @@ import type { FastifyReply } from 'fastify';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { invalidRequest } from '@/common/errors/invalid-request';
-import { parseRequestBody } from '@/common/http/parsing/parse-request-body';
+import {
+  callerIsAuthenticated,
+  parseRequestBody,
+} from '@/common/http/parsing/parse-request-body';
 import {
   type SpeakingGradeJsonInput,
   SpeakingGradeJsonRequestSchema,
@@ -130,7 +133,11 @@ export class SpeakingGradingController {
         const release = this.uploadCeiling.enter();
         try {
           const source = createFastifySpeakingMultipartSource(request);
-          const input = await this.multipartParser.parse(source, signal);
+          const input = await this.multipartParser.parse(
+            source,
+            signal,
+            callerIsAuthenticated(request),
+          );
           return { input, release };
         } catch (error) {
           release();

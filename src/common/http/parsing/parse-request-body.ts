@@ -5,6 +5,16 @@ import type { FastifyRequest } from 'fastify';
 
 import { containsUnstorableText } from './unstorable-text';
 
+/**
+ * Whether the caller proved an identity, which decides if a rejection may name
+ * the failing field back to it.
+ */
+export function callerIsAuthenticated(request?: FastifyRequest): boolean {
+  return (
+    request?.aihubAuth !== undefined || request?.aihubIdentity !== undefined
+  );
+}
+
 export function parseRequestBody<S extends TSchema>(
   schema: S,
   body: unknown,
@@ -12,8 +22,7 @@ export function parseRequestBody<S extends TSchema>(
 ): StaticDecode<S> {
   const candidate = body === undefined ? {} : body;
 
-  const authenticated =
-    request?.aihubAuth !== undefined || request?.aihubIdentity !== undefined;
+  const authenticated = callerIsAuthenticated(request);
 
   if (!Value.Check(schema, candidate) || containsUnstorableText(candidate)) {
     const errors = [...Value.Errors(schema, candidate)];

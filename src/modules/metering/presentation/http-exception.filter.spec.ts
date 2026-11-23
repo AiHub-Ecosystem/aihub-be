@@ -1,6 +1,7 @@
 import {
   type ArgumentsHost,
   HttpException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -250,5 +251,32 @@ describe('HttpExceptionFilter for a retired Public API major', () => {
     );
 
     expect(status).toHaveBeenCalledWith(404);
+  });
+
+  it('keeps the diagnostic on the log line and details on the envelope', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    try {
+      const { body } = await catchException(
+        new AppError({
+          code: 'INVALID_REQUEST',
+          message: 'Request failed validation',
+          retryable: false,
+          details: { '/candidate_name': 'Unexpected property' },
+          diagnostic: 'multipart:unknown-field',
+        }),
+      );
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'invalid_request',
+          diagnostic: 'multipart:unknown-field',
+        }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('candidate_name');
+      expect(JSON.stringify(body)).not.toContain('multipart:unknown-field');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
