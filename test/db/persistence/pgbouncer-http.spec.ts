@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import {
   FastifyAdapter,
@@ -13,6 +16,10 @@ import {
 } from '@/modules/persistence/persistence.module';
 import { ulid } from 'ulid';
 
+import {
+  type ConnectQueryTimeouts,
+  connectQueryTimeouts,
+} from '../../../scripts/ci/boot/render-pgbouncer-config';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 
 const PGBOUNCER_URL = process.env['AIHUB_PGBOUNCER_TEST_URL']?.trim();
@@ -20,6 +27,17 @@ const HTTP_PROBE_SQL = 'aihub_pgbouncer_http_probe';
 const BACKEND_HOLDER_SQL = 'aihub_pgbouncer_backend_wait_probe';
 const POOLER_APPLICATION_NAME = 'aihub_pgbouncer_http_test';
 const SLEEP_SECONDS = 1.25;
+
+/**
+ * #1868: what the production template's `connect_query` sets, read from the
+ * template itself. The old copy in this file let CI and production drift.
+ */
+const TEMPLATE_TIMEOUTS: ConnectQueryTimeouts = connectQueryTimeouts(
+  readFileSync(
+    join(__dirname, '../../../ops/vault/templates/pgbouncer.ini.ctmpl'),
+    'utf8',
+  ),
+);
 
 @Controller('__test/pgbouncer')
 class PgBouncerProbeController {
@@ -32,7 +50,7 @@ class PgBouncerProbeController {
   async prepared(@Param('value') value: string): Promise<{
     value: string;
     prepared: boolean;
-    timeouts: { statement: string; lock: string; idleTransaction: string };
+    timeouts: ConnectQueryTimeouts;
   }> {
     return this.runtime.prisma.$transaction(async (transaction) => {
       const rows = await transaction.$queryRaw<{ value: string }[]>`
@@ -43,12 +61,10 @@ class PgBouncerProbeController {
         FROM pg_prepared_statements
         WHERE statement LIKE '%SELECT $1::text AS value%'
       `;
-      const [timeouts] = await transaction.$queryRaw<
-        { statement: string; lock: string; idleTransaction: string }[]
-      >`
-        SELECT current_setting('statement_timeout') AS statement,
-               current_setting('lock_timeout') AS lock,
-               current_setting('idle_in_transaction_session_timeout') AS "idleTransaction"
+      const [timeouts] = await transaction.$queryRaw<ConnectQueryTimeouts[]>`
+        SELECT (EXTRACT(EPOCH FROM current_setting('statement_timeout')::interval) * 1000)::int AS statement,
+               (EXTRACT(EPOCH FROM current_setting('lock_timeout')::interval) * 1000)::int AS lock,
+               (EXTRACT(EPOCH FROM current_setting('idle_in_transaction_session_timeout')::interval) * 1000)::int AS "idleTransaction"
       `;
       return {
         value: rows[0]?.value ?? '',
@@ -145,12 +161,12 @@ describePgBouncer('PgBouncer transaction pooling over HTTP', () => {
     expect(preparedOne.json()).toEqual({
       value: 'first',
       prepared: true,
-      timeouts: { statement: '4s', lock: '1s', idleTransaction: '10s' },
+      timeouts: TEMPLATE_TIMEOUTS,
     });
     expect(preparedTwo.json()).toEqual({
       value: 'second',
       prepared: true,
-      timeouts: { statement: '4s', lock: '1s', idleTransaction: '10s' },
+      timeouts: TEMPLATE_TIMEOUTS,
     });
 
     const holderId = ulid();

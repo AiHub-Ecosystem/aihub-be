@@ -232,6 +232,12 @@ and the dedicated exporter credential into a separate host directory. Set
 the shared runtime directory; the pooler templates render to the separate
 PgBouncer directory.
 
+CI renders its database-lane PgBouncer config from
+`templates/pgbouncer.ini.ctmpl` with `scripts/ci/boot/render-pgbouncer-config.ts`,
+so the lane runs the production `connect_query` and its request timeouts instead
+of a second copy. The database-lane probe reads those timeouts from the template,
+so a template edit either reaches CI or fails the renderer.
+
 The rendered file must be readable only by the AIHUB service account. Its
 directory must not be world-readable, and the file must not be copied into
 application logs, images, backups, or source control.

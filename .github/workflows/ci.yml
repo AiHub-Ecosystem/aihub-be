@@ -800,8 +800,11 @@ jobs:
           POSTGRES_DB: aihub
         ports:
           - 5432:5432
+        # #1868: the request timeouts come only from PgBouncer's
+        # `connect_query`, rendered from the production template below, so CI
+        # exercises what production sets instead of a second copy.
         options: >-
-          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1; ALTER ROLE aihub SET statement_timeout TO 4000; ALTER ROLE aihub SET lock_timeout TO 1000; ALTER ROLE aihub SET idle_in_transaction_session_timeout TO 10000' >/dev/null"
+          --health-cmd "pg_isready -U aihub -d aihub && psql -U aihub -d aihub -q -v ON_ERROR_STOP=1 -c 'ALTER DATABASE aihub SET aihub.test_lane_marker TO aihub_db_lane_v1' >/dev/null"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -811,25 +814,6 @@ jobs:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli SET aihub:test-lane:owner aihub-db-lane-v1 >/dev/null && redis-cli ping"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 20
-      pgbouncer:
-        image: edoburu/pgbouncer:v1.26.1-p0
-        env:
-          DATABASE_URL: postgres://aihub:change-me@postgres:5432/aihub_db_lane
-          AUTH_TYPE: scram-sha-256
-          POOL_MODE: transaction
-          MAX_CLIENT_CONN: "64"
-          DEFAULT_POOL_SIZE: "20"
-          MAX_DB_CONNECTIONS: "2"
-          MAX_PREPARED_STATEMENTS: "100"
-          QUERY_WAIT_TIMEOUT: "0.25"
-          LISTEN_PORT: "5432"
-        ports:
-          - 6432:5432
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -p 5432 -U aihub -d aihub_db_lane"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 20
@@ -860,6 +844,42 @@ jobs:
 
       - name: Enable bounded logical WAL for the database lane
         uses: ./.github/actions/enable-bounded-logical-wal
+
+      # #1868: the lane's PgBouncer runs the production template itself, so the
+      # `connect_query` that sets the request timeouts is exercised before
+      # deploy. Nothing sets those timeouts another way.
+      - name: Render the PgBouncer configuration from the production template
+        run: >-
+          node --import tsx scripts/ci/boot/render-pgbouncer-config.ts
+          --out temp/ci/pgbouncer/pgbouncer.ini
+          --userlist temp/ci/pgbouncer/userlist.txt
+
+      - name: Start PgBouncer from the rendered configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Host networking lets the rendered alias reach the Postgres service
+          # on localhost, exactly as the lane's client URL does.
+          docker run --detach --name aihub-ci-pgbouncer --network host \
+            --health-cmd "pg_isready -h 127.0.0.1 -p 6432 -U aihub -d aihub_db_lane" \
+            --health-interval 1s \
+            --health-timeout 2s \
+            --health-retries 20 \
+            --volume "$PWD/temp/ci/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro" \
+            --volume "$PWD/temp/ci/pgbouncer/userlist.txt:/run/secrets/pgbouncer/userlist.txt:ro" \
+            edoburu/pgbouncer:v1.26.1-p0
+          for _ in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' aihub-ci-pgbouncer)"
+            if [ "$status" = healthy ]; then
+              exit 0
+            fi
+            if [ "$status" = unhealthy ]; then
+              break
+            fi
+            sleep 0.5
+          done
+          docker logs aihub-ci-pgbouncer
+          exit 1
 
       # The operator CLI smoke test spawns `scripts/cli/cli.mjs`, which loads its
       # API-key generator and command runners from the build.

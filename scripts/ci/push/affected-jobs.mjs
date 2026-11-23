@@ -162,6 +162,14 @@ export const AREAS = [
     checks: ['check:doc-drift', 'check:nginx-headers'],
   },
   {
+    // #1868: the database lane renders its PgBouncer config from this template,
+    // so a template-only change must run the lane that exercises it.
+    area: 'the PgBouncer template CI renders',
+    pattern: /^ops\/vault\/templates\/pgbouncer\.ini\.ctmpl$/,
+    jobs: ['static', 'test', 'database'],
+    checks: ['check:doc-drift'],
+  },
+  {
     area: 'ops',
     pattern: /^ops\//,
     jobs: ['static', 'image'],

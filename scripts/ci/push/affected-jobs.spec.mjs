@@ -96,6 +96,19 @@ await test('a path no row claims runs every job instead of skipping', () => {
   for (const job of CI_JOBS) assert.equal(jobs[job], true, job);
 });
 
+await test('the PgBouncer template change runs the database lane (#1868)', () => {
+  // The lane renders its PgBouncer config from this template, so the change
+  // that can break the lane must run it.
+  const { jobs, fallback } = plan(['ops/vault/templates/pgbouncer.ini.ctmpl']);
+  assert.equal(fallback, undefined);
+  assert.equal(jobs.database, true);
+  // Another Vault template stays off the database lane: only this one is read.
+  assert.equal(
+    plan(['ops/vault/templates/runtime-secrets.json.ctmpl']).jobs.database,
+    false,
+  );
+});
+
 await test('an empty change set runs every job', () => {
   const { jobs, fallback } = plan([]);
   assert.ok(fallback);

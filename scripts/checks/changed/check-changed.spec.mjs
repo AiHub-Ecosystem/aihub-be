@@ -942,10 +942,18 @@ await test('Vault policies and templates select no local gate and say so (#1767)
     'ops/vault/policies/aihub-production-runtime.hcl',
     'ops/vault/agent/aihub-runtime.hcl',
     'ops/vault/templates/runtime-secrets.json.ctmpl',
-    'ops/vault/templates/pgbouncer.ini.ctmpl',
   ]) {
     assert.deepEqual(planChangedFiles([path]).gates, ['check:doc-drift']);
   }
+});
+
+await test('the PgBouncer template CI renders runs the renderer spec (#1868)', () => {
+  // The unit lane's renderer spec reads this template, so a template edit is
+  // the one Vault input that can break a local gate.
+  assert.deepEqual(
+    planChangedFiles(['ops/vault/templates/pgbouncer.ini.ctmpl']).gates,
+    ['check:doc-drift', 'test'],
+  );
 });
 
 await test('a Vault template change does not force the full loop onto its mixed diff (#1767)', () => {

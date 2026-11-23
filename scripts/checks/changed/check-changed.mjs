@@ -335,6 +335,12 @@ function classifyPathGates(p) {
   // #1767: provisioning is a deploy action, so no local gate reads a Vault
   // policy or template. Recorded as an explicit no-gate answer so a mixed
   // diff does not force the full loop.
+  if (path === 'ops/vault/templates/pgbouncer.ini.ctmpl') {
+    // #1868: CI renders its PgBouncer config from this template, and the unit
+    // lane's renderer spec pins the parts CI depends on, so a template-only
+    // diff runs that spec instead of only the documentation gate.
+    return ['test'];
+  }
   if (
     /^ops\/vault\/(?:agent|policies)\/.*\.hcl$/.test(path) ||
     /^ops\/vault\/templates\/.*\.ctmpl$/.test(path)
