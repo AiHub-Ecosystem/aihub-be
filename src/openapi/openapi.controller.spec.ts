@@ -129,7 +129,7 @@ describe('OpenApiController', () => {
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['content-security-policy']).toBe(
-      "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com",
+      "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-Z2Wz4L/5mCSEGTCpHPw3JIN6+eRxpIwq2sE2QfGtP+hmmwcgJKNVK9zBbfnbjlKN'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com",
     );
     expect(response.payload).toContain('name="version"');
     expect(response.payload).toContain('value="v2" selected');
@@ -137,7 +137,7 @@ describe('OpenApiController', () => {
     expect(versionedResponse.statusCode).toBe(200);
     expect(versionedResponse.payload).toContain('data-url="/openapi/v1.json"');
     expect(response.payload).toContain(
-      '<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1" integrity="sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY" crossorigin="anonymous"></script>',
+      '<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.83.0" integrity="sha384-Z2Wz4L/5mCSEGTCpHPw3JIN6+eRxpIwq2sE2QfGtP+hmmwcgJKNVK9zBbfnbjlKN" crossorigin="anonymous"></script>',
     );
   });
 

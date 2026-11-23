@@ -84,14 +84,14 @@ ${options}
     <button type="submit">View</button>
   </form>
   <script id="api-reference" data-url="/openapi/${version}.json"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1" integrity="sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.83.0" integrity="sha384-Z2Wz4L/5mCSEGTCpHPw3JIN6+eRxpIwq2sE2QfGtP+hmmwcgJKNVK9zBbfnbjlKN" crossorigin="anonymous"></script>
 </body>
 </html>
 `;
 }
 
 const DOCS_CONTENT_SECURITY_POLICY =
-  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-JezfTaoGe2t8F2YRYUQosjM0S21blpE8j3yOUgTEiTKCyLWx9K4lfwjKPd8Dp7WY'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
+  "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'sha384-Z2Wz4L/5mCSEGTCpHPw3JIN6+eRxpIwq2sE2QfGtP+hmmwcgJKNVK9zBbfnbjlKN'; style-src 'unsafe-inline'; connect-src 'self'; font-src https://fonts.scalar.com";
 
 /** Complete contracts are available to active AIHUB User Accounts via Bearer token. */
 @UseGuards(UserAccessJwtGuard)
