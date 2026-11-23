@@ -354,7 +354,7 @@ describe('FastifySpeakingMultipartParser rejection diagnostics (#2014)', () => {
     ],
     [
       'a schema mismatch',
-      'multipart:schema',
+      'multipart:schema:/part',
       [fieldPart('question_id', 'q_1'), audioPart()],
     ],
     [
@@ -377,7 +377,9 @@ describe('FastifySpeakingMultipartParser rejection diagnostics (#2014)', () => {
     const rejection = await rejectionOf(parts);
 
     expect(rejection['diagnostic']).toBe(token);
-    expect(rejection['diagnostic']).toMatch(/^multipart:[a-z-]+$/);
+    expect(rejection['diagnostic']).toMatch(
+      /^multipart:[a-z-]+(:\/[a-z0-9_]+)*$/,
+    );
   });
 
   it('names a framework limit error with its own token', async () => {
@@ -398,6 +400,17 @@ describe('FastifySpeakingMultipartParser rejection diagnostics (#2014)', () => {
 
     expect(diagnostic).not.toContain('secret_caller_key');
     expect(diagnostic).not.toContain('secret_caller_value');
+  });
+
+  it('names the failing schema path in the token, so a wrong value is locatable', async () => {
+    const rejection = await rejectionOf([
+      fieldPart('part', '1'),
+      fieldPart('question_id', 'q_1'),
+      fieldPart('test_type', 'practice'),
+      audioPart(),
+    ]);
+
+    expect(rejection['diagnostic']).toBe('multipart:schema:/test_type');
   });
 
   it('names the refused field back only to an authenticated caller', async () => {
@@ -422,7 +435,7 @@ describe('FastifySpeakingMultipartParser rejection diagnostics (#2014)', () => {
       { parseQuestionV2: true, authenticated: true },
     );
 
-    expect(rejection['diagnostic']).toBe('multipart:schema');
+    expect(rejection['diagnostic']).toBe('multipart:schema:/part');
     expect(Object.keys(rejection['details'] as object)).toEqual(['/part']);
   });
 });

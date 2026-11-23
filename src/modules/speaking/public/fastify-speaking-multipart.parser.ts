@@ -88,15 +88,30 @@ function rejectionFor(authenticated: boolean): Reject {
     });
 }
 
-function schemaDetails(
+function schemaFailures(
   errors: readonly { readonly path: string; readonly message: string }[],
-): Readonly<Record<string, string>> {
-  return Object.fromEntries(
-    errors.map((error) => [
-      error.path === '' ? '/' : error.path,
-      error.message,
-    ]),
-  );
+): {
+  readonly diagnostic: string;
+  readonly details: Readonly<Record<string, string>>;
+} {
+  const paths = [
+    ...new Set(errors.map((error) => (error.path === '' ? '/' : error.path))),
+  ].sort();
+  // The parser already refused every unknown field, so a path is one of the
+  // schema's own property names. The guard keeps #1213 closed if that changes:
+  // anything else falls back to the base token rather than reaching the log.
+  const named = paths.every((path) => /^(\/|[a-z0-9_]+)+$/.test(path));
+  return {
+    diagnostic: named
+      ? `multipart:schema${paths.map((path) => `:${path}`).join('')}`
+      : 'multipart:schema',
+    details: Object.fromEntries(
+      errors.map((error) => [
+        error.path === '' ? '/' : error.path,
+        error.message,
+      ]),
+    ),
+  };
 }
 
 function payloadTooLarge(): AppError {
@@ -190,12 +205,10 @@ function parseFields(
   };
 
   if (!Value.Check(SpeakingGradeRequestSchema, boundaryValue)) {
-    throw reject(
-      'multipart:schema',
-      schemaDetails([
-        ...Value.Errors(SpeakingGradeRequestSchema, boundaryValue),
-      ]),
-    );
+    const failure = schemaFailures([
+      ...Value.Errors(SpeakingGradeRequestSchema, boundaryValue),
+    ]);
+    throw reject(failure.diagnostic, failure.details);
   }
 
   return {
@@ -250,12 +263,10 @@ function parseQuestionFieldsV2(
   };
 
   if (!Value.Check(SpeakingV2QuestionGradeRequestSchema, boundaryValue)) {
-    throw reject(
-      'multipart:schema',
-      schemaDetails([
-        ...Value.Errors(SpeakingV2QuestionGradeRequestSchema, boundaryValue),
-      ]),
-    );
+    const failure = schemaFailures([
+      ...Value.Errors(SpeakingV2QuestionGradeRequestSchema, boundaryValue),
+    ]);
+    throw reject(failure.diagnostic, failure.details);
   }
 
   return {
