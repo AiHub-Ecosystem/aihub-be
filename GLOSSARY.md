@@ -32,6 +32,12 @@ rule recognises a seam by file path, so it exempts a whole file rather than one
 symbol within it (ADR-0066). Anything a module keeps to itself is its internals.
 _Avoid_: public API, exported surface, barrel
 
+**Dependency seam**:
+One AIHUB consumer or policy boundary that uses a dependency and has its own
+degraded behavior. A dependency can serve several seams, such as Redis-backed
+rate limiting, quota admission, and concurrency admission.
+_Avoid_: dependency row
+
 **Module internals**:
 A file inside another business module that is not part of that module's public
 seam. Importing one couples two modules that should be able to change apart.

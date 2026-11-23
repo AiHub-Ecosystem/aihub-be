@@ -142,6 +142,10 @@ Handled naturally via architecture documented in [04 — Redis](04-redis.md):
 
 ## I.7 Object storage degraded mode
 
+The [degraded-mode matrix](14-degraded-mode-matrix.md) is the canonical
+cross-dependency contract. The rows below retain the object-storage request and
+operator bounds used by that matrix.
+
 This is the object-storage row of the dependency matrix tracked in
 [#372](https://github.com/AiHub-Ecosystem/aihub-be/issues/372), implemented by
 [#747](https://github.com/AiHub-Ecosystem/aihub-be/issues/747). The remaining
@@ -170,6 +174,10 @@ and [socket-pool guidance](https://docs.aws.amazon.com/sdk-for-javascript/v3/dev
 than merely warn.
 
 ## I.8 Postgres degraded mode
+
+The [degraded-mode matrix](14-degraded-mode-matrix.md) is the canonical
+cross-dependency contract. The rows below retain the Postgres driver bounds and
+point to the distinct application seams that classify those failures.
 
 The Postgres row of the #372 matrix, decided in
 [ADR-0118](../../../adr/0118-postgres-outage-answers-retryable-503.md) and

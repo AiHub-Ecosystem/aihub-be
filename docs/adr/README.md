@@ -39,3 +39,6 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0177](0177-sanitize-and-bound-ai-service-grading-responses.md) | Sanitize and bound AI Service grading responses                         | Accepted; amends ADR-0143 and ADR-0172         |
 | [0178](0178-registration-may-confirm-an-active-account.md)      | Registration may confirm that an email has an active account            | Accepted; amends ADR-0022 and ADR-0123         |
 | [0179](0179-constrain-the-production-deploy-identity.md)        | Constrain the production deploy identity                                | Accepted; implementation pending               |
+| [0180](0180-speaking-priority-errors-in-v2.md)                  | Publish Speaking priority errors in `/v2`                               | Accepted                                       |
+| [0181](0181-scalar-renderer-1-83.md)                            | Scalar renderer 1.83.0                                                  | Accepted                                       |
+| [0182](0182-security-reads-use-postgres-writer.md)              | Keep security decisions on the PostgreSQL writer                        | Accepted; implementation pending               |

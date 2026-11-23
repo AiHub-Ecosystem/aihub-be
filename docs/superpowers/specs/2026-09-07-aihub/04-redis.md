@@ -10,18 +10,18 @@
 
 Prefix `aihub:v1:` — evolving the cache schema later only requires bumping to `v2`, avoiding manual cleanup of stale keys.
 
-| Key                             | Type    | TTL            | Source of Truth        | When Redis Dies                                                        |
-| ------------------------------- | ------- | -------------- | ---------------------- | ---------------------------------------------------------------------- |
-| `v1:key:<sha256hex>`            | JSON    | 60s            | Postgres               | Falls through directly to Postgres                                     |
-| `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                                                          |
-| `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)                                    |
-| `v1:authfail:<ip>`              | counter | 300s           | —                      | **Fail open** + emit alert                                             |
-| `v1:rl:<key_id>:<window>`       | counter | 120s           | —                      | Graded: **fail closed** (503); other: local backstop                   |
-| `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail closed** (503) until it recovers                                |
-| `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | Graded: **fail closed** (503); other: unverified, or 503 for hard stop |
-| `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                             |
-| `v1:org-retry:{org_id}:repeats` | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                             |
-| `v1:org-retry:{org_id}:seen`    | zset    | 24h, refreshed | —                      | **Fail closed** (refuse) until it recovers                             |
+| Key                             | Type    | TTL            | Source of Truth        | When Redis Dies                                                                                               |
+| ------------------------------- | ------- | -------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `v1:key:<sha256hex>`            | JSON    | 60s            | Postgres               | Falls through directly to Postgres                                                                            |
+| `v1:key:miss:<sha256hex>`       | `1`     | 30s            | Postgres               | Same as above                                                                                                 |
+| `v1:jwks:<org_id>`              | JSON    | 15m            | Customer JWKS endpoint | Fetches directly (with SSRF guards)                                                                           |
+| `v1:authfail:<ip>`              | counter | 300s           | —                      | Bounded process-local fallback (300s, 10,000 entries); see [degraded-mode matrix](14-degraded-mode-matrix.md) |
+| `v1:rl:<key_id>:<window>`       | counter | 120s           | —                      | Graded: **fail closed** (503); other: local backstop                                                          |
+| `v1:inflight:<org_id>`          | zset    | self-cleaning  | —                      | **Fail closed** (503) until it recovers                                                                       |
+| `v1:quota:<org_id>:<YYYY-MM>`   | counter | 40 days        | `usage_records`        | Graded: **fail closed** (503); other: unverified, or 503 for hard stop                                        |
+| `v1:org-retry:{org_id}:first`   | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                                                                    |
+| `v1:org-retry:{org_id}:repeats` | zset    | 120s           | —                      | **Fail closed** (refuse) until it recovers                                                                    |
+| `v1:org-retry:{org_id}:seen`    | zset    | 24h, refreshed | —                      | **Fail closed** (refuse) until it recovers                                                                    |
 
 **Zero keys dedicated to idempotency.** The brief suggested "Redis + durable fallback"; this design eliminates Redis from that path entirely. Postgres's `ON CONFLICT` handles race conditions natively ([03 §E.4](03-database.md#e4-handling-idempotency-race-conditions-without-distributed-locks)), and introducing Redis would create dual sources of truth for the one mechanism that must never desynchronize.
 
@@ -96,21 +96,20 @@ Exceeded quota → `429 QUOTA_EXCEEDED`, with `retry_after_ms` calculated to the
 <a id="f5-redis-chết-thì-sao--quyết-định-từng-mục"></a>
 <a id="f5-what-happens-when-redis-dies-item-by-item-decisions"></a>
 
-## F.5 What Happens When Redis Dies — Item-by-Item Decisions
+## F.5 What Happens When Redis Dies
 
-| Lost Capability          | Selected Behavior                                                                             | Rationale                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| API key cache            | Fallback to Postgres                                                                          | Completely correct, only slightly higher latency. Postgres easily handles 50 RPS           |
-| Brute-force protection   | **Allow through** + emit alert                                                                | 256-bit entropy keys cannot be brute-forced during a transient Redis outage                |
-| Rate limiting            | Graded: **refuse** 503; other: **allow through** + local backstop                             | ADR-0116 for graded routes; a non-graded route keeps a process-local ceiling               |
-| Concurrency limiting     | **Refuse** 503 `REDIS_UNAVAILABLE`                                                            | ADR-0116: no permit without a verified Redis decision; permits exist only on graded routes |
-| Quotas                   | Graded: **refuse** 503; other: **allow through** + `quota_unverified`, or 503 for a hard stop | See detailed justification below; #373 for the hard-stop answer                            |
-| JWKS cache               | Fetch directly from upstream                                                                  | Slower, but fully secure                                                                   |
-| **Auth & Authorization** | **Zero Redis dependency**                                                                     | No branch ever allows "Redis is down, so grant access"                                     |
+The [degraded-mode matrix](14-degraded-mode-matrix.md) is the canonical
+cross-dependency contract. This section keeps the Redis-specific rationale and
+implementation details; the matrix lists each Redis dependency seam and its
+test owner.
 
-The last line represents an absolute boundary: failing open on rate limiting risks _money_; failing open on authorization risks _customer data_.
+Redis is never an authorization source. Graded admission requires a verified
+Redis decision; non-graded rate and local-auth protections use their bounded
+process-local fallbacks. `consumeSandboxKeyLookup()` remains an explicit
+fail-open exception. Quota usage remains grounded in durable PostgreSQL
+records. The matrix owns the per-seam failure responses and signals.
 
-> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE`, whose `retry_after_ms` is 1000–1999 ms (`outageRetryAfterMs`, #1352) so refused callers do not return in one wave; no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and to local-auth rate limits. A post-result quota increment failure still marks usage `quota_unverified`. The fault-injection tests in `test/db/tenant-isolation/fault-injection/` (#328) cover every row of this table as amended.
+> **Amended for graded routes by [ADR-0116](../../../adr/0116-post-result-grading-completion-timing.md).** Grading admission (rate limit, Organization retry budget, quota) and the concurrency permit now run as verified Redis decisions. A Redis error or ambiguous result refuses with retryable `503 REDIS_UNAVAILABLE`, whose `retry_after_ms` is 1000–1999 ms (`outageRetryAfterMs`, #1352) so refused callers do not return in one wave; no local counter admits a graded request, so the per-process backstop below applies only to non-graded rate limiting and local-auth protections. A post-result quota increment failure still marks usage `quota_unverified`. The remaining matrix-driven fault-injection and recovery evidence is tracked by [#2019](https://github.com/AiHub-Ecosystem/aihub-be/issues/2019); #328 remains closed.
 
 ### Why Non-Graded Quotas Fail Open
 

@@ -23,6 +23,7 @@ Scaffold status: [Clean Architecture and agent workflow design](12-agent-workflo
 | [11-open-questions.md](11-open-questions.md)                                                             | 5 open questions, changes to feed back to D1, alignment with principles                                        | P             |
 | [12-agent-workflow-and-clean-architecture-design.md](12-agent-workflow-and-clean-architecture-design.md) | Agent workflow, source-of-truth hierarchy, clean architecture scaffold                                         | —             |
 | [13-quota-reconciliation.md](13-quota-reconciliation.md)                                                 | Issue #53: durable usage reconciliation for Redis quota counters                                               | —             |
+| [14-degraded-mode-matrix.md](14-degraded-mode-matrix.md)                                                 | Dependency/seam failure policy, recovery, metrics, and fault-test ownership                                    | —             |
 
 ## Executive Recommendation
 
