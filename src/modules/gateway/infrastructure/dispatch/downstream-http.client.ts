@@ -61,6 +61,7 @@ type DownstreamHeaders = Readonly<
 export const MAX_CONCURRENT_REQUESTS_PER_ORIGIN = 20;
 
 const definitelyNotDispatched = new WeakSet<AppError>();
+const retryablePreSendConnectionFailures = new WeakSet<AppError>();
 const downstreamPools = new Map<string, Set<Pool>>();
 
 setDownstreamPoolQueuedSource(() => {
@@ -87,8 +88,20 @@ export function isDefinitelyNotDispatched(error: unknown): boolean {
   return error instanceof AppError && definitelyNotDispatched.has(error);
 }
 
+export function isRetryablePreSendConnectionFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError && retryablePreSendConnectionFailures.has(error)
+  );
+}
+
 function markNotDispatched(error: AppError): AppError {
   definitelyNotDispatched.add(error);
+  return error;
+}
+
+function markRetryablePreSendConnectionFailure(error: AppError): AppError {
+  definitelyNotDispatched.add(error);
+  retryablePreSendConnectionFailures.add(error);
   return error;
 }
 
@@ -106,6 +119,16 @@ function configurationError(reason: string): AppError {
 function transportError(error: unknown, signalAborted = false): AppError {
   const name = errorName(error);
   const code = errorCode(error);
+  const preSendConnectionFailure =
+    !signalAborted &&
+    [
+      'UND_ERR_CONNECT_TIMEOUT',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+    ].includes(code);
 
   const timeout =
     signalAborted ||
@@ -114,25 +137,24 @@ function transportError(error: unknown, signalAborted = false): AppError {
     code === 'UND_ERR_HEADERS_TIMEOUT' ||
     code === 'UND_ERR_BODY_TIMEOUT' ||
     code === 'UND_ERR_CONNECT_TIMEOUT';
-  const mapped = timeout
-    ? timeoutError(error)
-    : new AppError({
+  const mapped = preSendConnectionFailure
+    ? new AppError({
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
         retryable: true,
         cause: error,
-      });
+      })
+    : timeout
+      ? timeoutError(error)
+      : new AppError({
+          code: 'AI_SERVICE_UNAVAILABLE',
+          message: 'AI service is temporarily unavailable',
+          retryable: true,
+          cause: error,
+        });
 
-  return !signalAborted &&
-    [
-      'UND_ERR_CONNECT_TIMEOUT',
-      'ECONNREFUSED',
-      'ENOTFOUND',
-      'EAI_AGAIN',
-      'EHOSTUNREACH',
-      'ENETUNREACH',
-    ].includes(code)
-    ? markNotDispatched(mapped)
+  return preSendConnectionFailure
+    ? markRetryablePreSendConnectionFailure(mapped)
     : mapped;
 }
 

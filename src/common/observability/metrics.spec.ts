@@ -7,7 +7,6 @@ import {
   recordArgon2QueueWait,
   recordCompletedRequest,
   recordDispatchCancelledByDeadline,
-  recordDownstreamRetryEvent,
   recordIdentityCacheCoalescedWait,
   recordJwksRefreshFailure,
   setDispatchAttemptUnresolvedSource,
@@ -18,32 +17,6 @@ import {
 const GRADE = 'writing.task1.grade';
 
 describe('request lifecycle metrics', () => {
-  it('counts safe downstream retries and budget exhaustion with bounded labels', async () => {
-    recordDownstreamRetryEvent(GRADE, 'connection');
-    recordDownstreamRetryEvent(GRADE, 'budget_exhausted');
-    recordDownstreamRetryEvent(GRADE, 'budget_unavailable');
-
-    expect(
-      await sample('aihub_downstream_retry_events_total', {
-        operation: GRADE,
-        reason: 'connection',
-      }),
-    ).toBeDefined();
-    expect(
-      await sample('aihub_downstream_retry_events_total', {
-        operation: GRADE,
-        reason: 'budget_exhausted',
-      }),
-    ).toBeDefined();
-    expect(
-      await sample('aihub_downstream_retry_events_total', {
-        operation: GRADE,
-        reason: 'budget_unavailable',
-      }),
-    ).toBeDefined();
-    expect(await getMetrics()).not.toContain('request_id');
-  });
-
   it('counts a completed request with its status and outcome', async () => {
     recordCompletedRequest({
       operation: GRADE,

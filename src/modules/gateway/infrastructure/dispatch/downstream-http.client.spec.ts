@@ -6,6 +6,7 @@ import type { AppError } from '@/common/errors/app-error';
 import {
   DownstreamHttpClient,
   isDefinitelyNotDispatched,
+  isRetryablePreSendConnectionFailure,
 } from './downstream-http.client';
 import { resolvePathParameters } from './http-operation-dispatcher';
 
@@ -58,6 +59,38 @@ describe('DownstreamHttpClient', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(responseBody);
+  });
+
+  it('maps a connect timeout to 503 and marks it as a safe pre-send retry', async () => {
+    const connectTimeout = Object.assign(new Error('connect timeout'), {
+      code: 'UND_ERR_CONNECT_TIMEOUT',
+    });
+    mockAgent
+      .get('https://ai-writing.test')
+      .intercept({ method: 'POST', path: '/grade' })
+      .replyWithError(connectTimeout);
+    const client = new DownstreamHttpClient(
+      'https://ai-writing.test',
+      mockAgent,
+    );
+
+    const error = await client
+      .request(
+        { method: 'POST', path: '/grade', body: {} },
+        {
+          requestId: 'req_connect_timeout',
+          deadlineMs: 1_000,
+          signal: AbortSignal.timeout(1_000),
+        },
+      )
+      .catch((failure: unknown) => failure);
+
+    expect(error).toMatchObject({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      httpStatus: 503,
+    });
+    expect(isDefinitelyNotDispatched(error)).toBe(true);
+    expect(isRetryablePreSendConnectionFailure(error)).toBe(true);
   });
 
   it('forwards trusted identity headers beside configured credentials', async () => {
@@ -274,6 +307,7 @@ describe('DownstreamHttpClient', () => {
         retryable: true,
       } satisfies Partial<AppError>);
       expect(isDefinitelyNotDispatched(bulkheadError)).toBe(true);
+      expect(isRetryablePreSendConnectionFailure(bulkheadError)).toBe(false);
       // A refused request never reaches the wire, so it settles without waiting
       // on anything. This bound is about the bulkhead, not the clock: it holds
       // on a loaded machine because nothing is awaited in between.

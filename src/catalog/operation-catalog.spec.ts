@@ -34,6 +34,16 @@ describe('operation catalog', () => {
     expect(entries.every((operation) => operation.timeoutMs > 0)).toBe(true);
   });
 
+  it('keeps downstream 503 replay disabled without an approved service contract', () => {
+    expect(
+      Object.values(OPERATION_CATALOG).some(
+        (operation) =>
+          'retryAfter503Safe' in operation &&
+          operation.retryAfter503Safe === true,
+      ),
+    ).toBe(false);
+  });
+
   it('allows Speaking JSON grading to finish within the public proxy budget', () => {
     expect(OPERATION_CATALOG['speaking.grading-json'].timeoutMs).toBe(60_000);
   });

@@ -547,6 +547,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     const observer: DispatchObserverPort = {
       deadlineMsRemaining: () => undefined,
       cancelledByDeadline: () => undefined,
+      downstreamRetryEvent: () => undefined,
     };
     const dispatcher = new GuardedOperationDispatcher(
       transport,

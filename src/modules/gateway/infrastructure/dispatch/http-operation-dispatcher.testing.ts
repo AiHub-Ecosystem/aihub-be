@@ -41,7 +41,9 @@ export function createHttpOperationDispatcher(
   );
   const policy = new DispatchAttemptPolicy(
     retryBudget,
-    (error) => transport.isUndelivered(error),
+    (error) => transport.isRetryablePreSendConnectionFailure(error),
+    (operation, reason) =>
+      metricsDispatchObserver.downstreamRetryEvent(operation, reason),
     random,
   );
   return new GuardedOperationDispatcher(

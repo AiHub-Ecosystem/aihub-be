@@ -26,6 +26,7 @@ import { DownstreamCircuitBreakers } from './downstream-circuit-breakers';
 import {
   type DownstreamHttpClient,
   isDefinitelyNotDispatched,
+  isRetryablePreSendConnectionFailure as isRetryablePreSendConnectionError,
 } from './downstream-http.client';
 
 function mapDownstreamStatus(status: number, retryAfterMs?: number): AppError {
@@ -214,6 +215,10 @@ export class HttpOperationTransport implements OperationTransportPort {
 
   isUndelivered(error: unknown): boolean {
     return isDefinitelyNotDispatched(error);
+  }
+
+  isRetryablePreSendConnectionFailure(error: unknown): boolean {
+    return isRetryablePreSendConnectionError(error);
   }
 
   async prepare<O extends OperationId>(

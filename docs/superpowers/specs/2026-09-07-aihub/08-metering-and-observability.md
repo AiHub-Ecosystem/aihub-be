@@ -177,6 +177,7 @@ aihub_tokens_total{operation}                       counter
 aihub_argon2_queue_waits_total                      counter
 aihub_argon2_queue_refusals_total                   counter
 aihub_breaker_state{operation}                     0 closed / 1 open / 2 half-open
+aihub_downstream_retry_events_total{operation,reason} counter
 aihub_rejected_total{reason}                         counter
 aihub_auth_security_events_total{event}               counter
 aihub_speaking_audio_url_rejected_total{reason}      counter
@@ -196,6 +197,13 @@ aihub_downstream_pool_queued{origin}
 The Argon2 counters record process-wide queue waits and refusals without
 request or tenant labels. Refusals use their own counter; `aihub_rejected_total`
 remains owned by #200.
+
+`aihub_downstream_retry_events_total{operation,reason}` counts retry-policy
+admissions after backoff and retry-budget refusals. Its fixed reasons are
+`connection`, `retry_after`, `server_error`, `budget_exhausted`, and
+`budget_unavailable`. It records policy decisions, not confirmed HTTP sends;
+the circuit breaker can refuse an admitted retry before the next request.
+Undici records each actual HTTP attempt as its own client span.
 
 `aihub_auth_security_events_total{event}` increments once per recorded Auth
 security event. Its complete fixed `event` values are `refresh_reuse`,

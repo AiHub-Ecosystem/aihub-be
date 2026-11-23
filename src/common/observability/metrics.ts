@@ -127,13 +127,6 @@ const dispatchCancelledByDeadlineTotal = new Counter({
   registers: [registry],
 });
 
-const downstreamRetryEventsTotal = new Counter({
-  name: 'aihub_downstream_retry_events_total',
-  help: 'Safe downstream retries and bounded-budget refusals by operation and reason.',
-  labelNames: ['operation', 'reason'],
-  registers: [registry],
-});
-
 // `downstream` is the adapter's fixed service name, never request input, so the
 // label set stays at operations x AI Services (#845).
 const downstreamCredentialFailuresTotal = new Counter({
@@ -368,17 +361,6 @@ export function recordDispatchCancelledByDeadline(
   operation: OperationId,
 ): void {
   dispatchCancelledByDeadlineTotal.inc({ operation });
-}
-
-export function recordDownstreamRetryEvent(
-  operation: OperationId,
-  reason:
-    | 'connection'
-    | 'retry_after'
-    | 'budget_exhausted'
-    | 'budget_unavailable',
-): void {
-  downstreamRetryEventsTotal.inc({ operation, reason });
 }
 
 export function recordDownstreamCredentialRejection(

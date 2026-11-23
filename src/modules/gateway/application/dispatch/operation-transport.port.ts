@@ -36,4 +36,6 @@ export interface OperationTransportPort {
   ): Promise<PreparedDispatch<O>>;
   /** True when `error` proves the request never left this process. */
   isUndelivered(error: unknown): boolean;
+  /** True only for connection failures that prove the request was never sent. */
+  isRetryablePreSendConnectionFailure(error: unknown): boolean;
 }

@@ -88,6 +88,8 @@ interface OperationDefBase {
   readonly timeoutMs: number;
   readonly downstream: DownstreamId;
   readonly downstreamPath: string;
+  /** Opt in only when the downstream contract proves replay cannot duplicate grading. */
+  readonly retryAfter503Safe?: true;
   readonly responseContract: ResponseContract;
   /**
    * Public codes this operation's adapter names from a provider failure body

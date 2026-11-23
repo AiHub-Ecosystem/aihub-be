@@ -194,7 +194,8 @@ export class GuardedOperationDispatcher implements OperationDispatcherPort {
       this.observer.cancelledByDeadline(run.operation);
     }
     const notDispatched =
-      !run.callStarted || this.transport.isUndelivered(error);
+      !run.callStarted ||
+      (run.responseStatus === undefined && this.transport.isUndelivered(error));
     if (run.attemptId !== undefined) {
       await this.record(
         run,

@@ -8,6 +8,7 @@ import type {
   DispatchAttemptRecordPort,
 } from '@/modules/metering/public/dispatch-attempts';
 import { DispatchAttemptPolicy } from './dispatch-attempt-policy';
+import type { DownstreamRetryBudgetPort } from './downstream-retry-budget.port';
 import { GuardedOperationDispatcher } from './guarded-operation-dispatcher';
 import type {
   DispatchResult,
@@ -48,6 +49,7 @@ function context(
 class FakeTransport implements OperationTransportPort {
   readonly calls: TransportCall[] = [];
   undelivered = false;
+  retryablePreSendFailure: unknown;
   behavior: (call: TransportCall) => Promise<typeof result> = async () =>
     result;
 
@@ -55,6 +57,7 @@ class FakeTransport implements OperationTransportPort {
     return {
       send: async (call) => {
         this.calls.push(call);
+        await call.onAttemptAdmitted?.();
         // The fake returns one canned result whatever the operation.
         return (await this.behavior(call)) as DispatchResult<ResponseFor<O>>;
       },
@@ -64,9 +67,19 @@ class FakeTransport implements OperationTransportPort {
   isUndelivered(): boolean {
     return this.undelivered;
   }
+
+  isRetryablePreSendConnectionFailure(error: unknown): boolean {
+    return error === this.retryablePreSendFailure;
+  }
 }
 
-function fixture(options: { admit?: boolean | Error } = {}) {
+function fixture(
+  options: {
+    admit?: boolean | Error;
+    retryBudget?: DownstreamRetryBudgetPort;
+    retryAfter503Safe?: boolean;
+  } = {},
+) {
   const transport = new FakeTransport();
   const outcomes: DispatchAttemptOutcome[] = [];
   const beginAttempt = jest.fn(async () => 'attempt-1');
@@ -95,9 +108,21 @@ function fixture(options: { admit?: boolean | Error } = {}) {
     transport,
     attempts,
     new SandboxAdmission(budget, warn),
-    { deadlineMsRemaining, cancelledByDeadline },
+    {
+      deadlineMsRemaining,
+      cancelledByDeadline,
+      downstreamRetryEvent: jest.fn(),
+    },
     warn,
-    new DispatchAttemptPolicy(undefined, () => false),
+    new DispatchAttemptPolicy(
+      options.retryBudget,
+      (error) => transport.isRetryablePreSendConnectionFailure(error),
+      undefined,
+      () => 0,
+      () => 0,
+      async () => true,
+      () => options.retryAfter503Safe === true,
+    ),
   );
   return {
     dispatcher,
@@ -229,6 +254,83 @@ describe('GuardedOperationDispatcher', () => {
         'org_test',
         'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
       );
+    });
+
+    it('keeps the reservation when a 503 retry is refused by its budget', async () => {
+      const retryBudget: DownstreamRetryBudgetPort = {
+        isEnabled: () => true,
+        expectedAttemptMs: () => 100,
+        recordFirstAttempt: async () => true,
+        reserveRetry: async () => 'exhausted',
+      };
+      const { dispatcher, transport, outcomes, release } = fixture({
+        retryBudget,
+        retryAfter503Safe: true,
+      });
+      transport.behavior = async (call) => {
+        call.onResponseReceived(503);
+        throw new AppError({
+          code: 'AI_SERVICE_ERROR',
+          message: 'downstream error',
+          retryable: true,
+          downstreamStatus: 503,
+          retryAfterMs: 0,
+        });
+      };
+
+      await expect(
+        dispatcher.dispatch(
+          'writing.task1.grade',
+          input,
+          context({ sandbox: true }),
+        ),
+      ).rejects.toMatchObject({ downstreamStatus: 503 });
+
+      expect(transport.calls).toHaveLength(1);
+      expect(outcomes).toEqual(['response_received']);
+      expect(release).not.toHaveBeenCalled();
+    });
+
+    it('keeps the reservation when a pre-send retry failure follows a 503 response', async () => {
+      const retryBudget: DownstreamRetryBudgetPort = {
+        isEnabled: () => true,
+        expectedAttemptMs: () => 100,
+        recordFirstAttempt: async () => true,
+        reserveRetry: async () => 'admitted',
+      };
+      const { dispatcher, transport, outcomes, release } = fixture({
+        retryBudget,
+        retryAfter503Safe: true,
+      });
+      const refused = new Error('connection refused');
+      transport.undelivered = true;
+      transport.retryablePreSendFailure = refused;
+      let sends = 0;
+      transport.behavior = async (call) => {
+        if (++sends === 1) {
+          call.onResponseReceived(503);
+          throw new AppError({
+            code: 'AI_SERVICE_ERROR',
+            message: 'downstream error',
+            retryable: true,
+            downstreamStatus: 503,
+            retryAfterMs: 0,
+          });
+        }
+        throw refused;
+      };
+
+      await expect(
+        dispatcher.dispatch(
+          'writing.task1.grade',
+          input,
+          context({ sandbox: true }),
+        ),
+      ).rejects.toBe(refused);
+
+      expect(transport.calls).toHaveLength(4);
+      expect(outcomes).toEqual(['response_received']);
+      expect(release).not.toHaveBeenCalled();
     });
 
     it('keeps the Sandbox reservation when the outcome is unknown', async () => {

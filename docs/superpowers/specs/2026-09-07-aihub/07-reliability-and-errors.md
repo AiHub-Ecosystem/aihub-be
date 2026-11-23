@@ -35,14 +35,14 @@ Timeout after request dispatch / connection reset mid-flight
   -> UNKNOWN whether the model began inference -> Default: DO NOT retry
 ```
 
-| Failure Scenario                         | Retry?                                                                         |
-| ---------------------------------------- | ------------------------------------------------------------------------------ |
-| Connection failure (`ECONNREFUSED`, DNS) | Yes, maximum 2 attempts                                                        |
-| `503` with valid `Retry-After`           | Yes, 1 attempt, if remaining deadline allows                                   |
-| `502`, `500`                             | 1 attempt for `GET` operations only; POST never retried blindly                |
-| Timeout after dispatch                   | **No** — see [§I.5](#i5-timeouts-and-idempotency-keys-avoiding-double-charges) |
-| Any `4xx` client error                   | Never — retrying client errors is useless                                      |
-| Circuit breaker open                     | No, fail immediately with 503                                                  |
+| Failure Scenario                         | Retry?                                                                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Connection failure (`ECONNREFUSED`, DNS) | Yes, maximum 2 attempts                                                                                                  |
+| `503` with valid `Retry-After`           | At most 1 retry only when the operation's AI Service contract proves replay cannot start duplicate grading; otherwise no |
+| `502`, `500`                             | At most 1 retry for `GET` operations only; POST never retried blindly                                                    |
+| Timeout after dispatch                   | **No** — see [§I.5](#i5-timeouts-and-idempotency-keys-avoiding-double-charges)                                           |
+| Any `4xx` client error                   | Never — retrying client errors is useless                                                                                |
+| Circuit breaker open                     | No, fail immediately with 503                                                                                            |
 
 ### Backoff Strategy: Full Jitter
 
@@ -52,6 +52,10 @@ if (Date.now() + delay + expectedMs > ctx.deadlineMs) throw lastError; // abando
 ```
 
 Full jitter (randomized uniformly **from 0**) instead of fixed exponential plus jitter: when AI Writing recovers from an outage, synchronous retries would hammer it back down. Randomizing from zero disperses retry spikes evenly.
+
+For an explicitly safe `503` replay, `Retry-After` is a minimum wait. Add bounded jitter of `random() * min(1_000, 0.1 * retryAfterMs)` and retry only when that whole delay plus the expected attempt fits the remaining deadline. The operation opts in only after its AI Service contract and a regression establish that the replay cannot duplicate grading or provider work. No current operation opts in.
+
+If cancellation or the deadline wins while Redis reserves a retry, stop the caller's wait and do not send another request. A Redis command already in flight may still consume its operation or service token; do not refund it or treat the reservation as proof of provider dispatch. The budget is conservative admission control, not dispatch evidence.
 
 Max 1–2 retries + circuit breakers limits downstream load amplification to at most 2x.
 

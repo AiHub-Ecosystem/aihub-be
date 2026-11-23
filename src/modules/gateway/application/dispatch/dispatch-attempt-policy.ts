@@ -1,7 +1,11 @@
+import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import type { OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
-import { recordDownstreamRetryEvent } from '@/common/observability/metrics';
-import type { DownstreamRetryBudgetPort } from './downstream-retry-budget.port';
+import type { DownstreamRetryEventReason } from './dispatch-observer.port';
+import type {
+  DownstreamRetryBudgetDecision,
+  DownstreamRetryBudgetPort,
+} from './downstream-retry-budget.port';
 import type { DispatchResult, ResponseFor } from './operation-dispatcher.port';
 import type { TransportCall } from './operation-transport.port';
 
@@ -13,8 +17,11 @@ interface RetryState {
   totalRetries: number;
   connectionRetries: number;
   retriedAfter: boolean;
+  serverErrorRetries: number;
   firstAttemptCounted: boolean;
 }
+
+type RetryReason = 'connection' | 'retry_after' | 'server_error';
 
 function waitForRetry(delayMs: number, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return Promise.resolve(false);
@@ -33,7 +40,7 @@ function waitForRetry(delayMs: number, signal: AbortSignal): Promise<boolean> {
 }
 
 function retryDelayMs(
-  reason: 'connection' | 'retry_after',
+  reason: RetryReason,
   retryNumber: number,
   random: () => number,
   error: unknown,
@@ -43,9 +50,47 @@ function retryDelayMs(
     error instanceof AppError &&
     error.retryAfterMs !== undefined
   ) {
-    return error.retryAfterMs;
+    return (
+      error.retryAfterMs + random() * Math.min(1_000, error.retryAfterMs * 0.1)
+    );
   }
   return random() * Math.min(2_000, 200 * 2 ** (retryNumber - 1));
+}
+
+function reserveRetryBeforeAbort(
+  budget: DownstreamRetryBudgetPort,
+  operation: OperationId,
+  requestId: string,
+  retryNumber: number,
+  signal: AbortSignal,
+): Promise<DownstreamRetryBudgetDecision | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (
+      decision: DownstreamRetryBudgetDecision | undefined,
+    ): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(decision);
+    };
+    const onAbort = (): void => finish(undefined);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    // Redis cannot cancel an admitted reservation; an abort stops this wait and
+    // the next send, while a command already in flight may still spend a token.
+    void Promise.resolve()
+      .then(() =>
+        signal.aborted
+          ? undefined
+          : budget.reserveRetry(operation, requestId, retryNumber),
+      )
+      .then(finish, () => finish('unavailable'));
+  });
 }
 
 /**
@@ -56,13 +101,28 @@ function retryDelayMs(
 export class DispatchAttemptPolicy {
   constructor(
     private readonly budget: DownstreamRetryBudgetPort | undefined,
-    private readonly isUndelivered: (error: unknown) => boolean,
+    private readonly isRetryablePreSendConnectionFailure: (
+      error: unknown,
+    ) => boolean,
+    private readonly observeRetryEvent: (
+      operation: OperationId,
+      reason: DownstreamRetryEventReason,
+    ) => void = () => undefined,
     private readonly random: () => number = Math.random,
     private readonly now: () => number = () => performance.now(),
     private readonly wait: (
       delayMs: number,
       signal: AbortSignal,
     ) => Promise<boolean> = waitForRetry,
+    private readonly retryAfter503Safe: (operation: OperationId) => boolean = (
+      operation,
+    ) => {
+      const definition = OPERATION_CATALOG[operation];
+      return (
+        'retryAfter503Safe' in definition &&
+        definition.retryAfter503Safe === true
+      );
+    },
   ) {}
 
   async execute<O extends OperationId>(
@@ -77,6 +137,7 @@ export class DispatchAttemptPolicy {
       totalRetries: 0,
       connectionRetries: 0,
       retriedAfter: false,
+      serverErrorRetries: 0,
       firstAttemptCounted: false,
     };
 
@@ -130,25 +191,36 @@ export class DispatchAttemptPolicy {
   ): Promise<boolean> {
     const budget = this.budget;
     const connectionFailure =
-      this.isUndelivered(error) && state.connectionRetries < 2;
+      this.isRetryablePreSendConnectionFailure(error) &&
+      state.connectionRetries < 2;
     const retryAfterFailure =
       !state.retriedAfter &&
+      this.retryAfter503Safe(operation) &&
       error instanceof AppError &&
       error.downstreamStatus === 503 &&
       error.retryAfterMs !== undefined;
+    const serverErrorFailure =
+      state.serverErrorRetries < 1 &&
+      OPERATION_CATALOG[operation].method === 'GET' &&
+      error instanceof AppError &&
+      (error.downstreamStatus === 500 || error.downstreamStatus === 502);
     if (
       !retryEnabled ||
       budget === undefined ||
-      (!connectionFailure && !retryAfterFailure)
+      (!connectionFailure && !retryAfterFailure && !serverErrorFailure)
     ) {
       return false;
     }
     if (!state.firstAttemptCounted) {
-      recordDownstreamRetryEvent(operation, 'budget_unavailable');
+      this.observeRetryEvent(operation, 'budget_unavailable');
       return false;
     }
 
-    const reason = connectionFailure ? 'connection' : 'retry_after';
+    const reason: RetryReason = connectionFailure
+      ? 'connection'
+      : retryAfterFailure
+        ? 'retry_after'
+        : 'server_error';
     const retryNumber = state.totalRetries + 1;
     const delayMs = retryDelayMs(reason, retryNumber, this.random, error);
     const expectedAttemptMs = budget.expectedAttemptMs(operation);
@@ -160,11 +232,16 @@ export class DispatchAttemptPolicy {
       return false;
     }
 
-    const decision = await budget
-      .reserveRetry(operation, requestId, retryNumber)
-      .catch(() => 'unavailable' as const);
+    const decision = await reserveRetryBeforeAbort(
+      budget,
+      operation,
+      requestId,
+      retryNumber,
+      call.signal,
+    );
+    if (decision === undefined) return false;
     if (decision !== 'admitted') {
-      recordDownstreamRetryEvent(
+      this.observeRetryEvent(
         operation,
         decision === 'exhausted' ? 'budget_exhausted' : 'budget_unavailable',
       );
@@ -182,8 +259,9 @@ export class DispatchAttemptPolicy {
 
     state.totalRetries += 1;
     if (connectionFailure) state.connectionRetries += 1;
-    else state.retriedAfter = true;
-    recordDownstreamRetryEvent(operation, reason);
+    else if (retryAfterFailure) state.retriedAfter = true;
+    else state.serverErrorRetries += 1;
+    this.observeRetryEvent(operation, reason);
     return true;
   }
 }

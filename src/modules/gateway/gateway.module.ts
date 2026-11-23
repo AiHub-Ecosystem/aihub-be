@@ -231,7 +231,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
     {
       provide: DOWNSTREAM_RETRY_BUDGET,
       useFactory: (client: RedisGatewayClient | undefined) => {
-        // Keep retries off until #273/#327 ground each service bucket.
+        // Keep retries off until #273 establishes each service's provider capacity.
         return new RedisDownstreamRetryBudget(client);
       },
       inject: [REDIS_GATEWAY_CLIENT],
@@ -286,7 +286,9 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         );
         const policy = new DispatchAttemptPolicy(
           retryBudget,
-          (error) => transport.isUndelivered(error),
+          (error) => transport.isRetryablePreSendConnectionFailure(error),
+          (operation, reason) =>
+            metricsDispatchObserver.downstreamRetryEvent(operation, reason),
           Math.random,
         );
         return new GuardedOperationDispatcher(

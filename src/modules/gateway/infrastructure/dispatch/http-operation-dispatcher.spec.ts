@@ -488,95 +488,57 @@ describe('HttpOperationDispatcher', () => {
     mockAgent.assertNoPendingInterceptors();
   });
 
-  it('retries 503 once only when Retry-After is valid and within the deadline', async () => {
-    const attempts = fakeDispatchAttempts();
-    const pool = mockAgent.get('https://ai-writing.test');
-    pool
-      .intercept({ method: 'POST', path: '/task-one' })
-      .reply(503, {}, { headers: { 'retry-after': '0' } });
-    pool
-      .intercept({ method: 'POST', path: '/task-one' })
-      .reply(200, { ok: true });
-    const httpClient = new DownstreamHttpClient(
-      'https://ai-writing.test',
-      mockAgent,
-    );
-    const request = jest.spyOn(httpClient, 'request');
-    const retryBudget = fakeDownstreamRetryBudget();
-    const dispatcher = createHttpOperationDispatcher(
-      httpClient,
-      new FakeTokenIssuer(),
-      [
-        {
-          ...fakeGradeAdapter('/task-one'),
-          parseResponse: () => gradeResponse,
-        },
-      ],
-      attempts.recorder,
-      undefined,
-      retryBudget.port,
-      () => 0,
-    );
-
-    await expect(
-      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
-    ).resolves.toMatchObject({ data: gradeResponse });
-
-    expect(retryBudget.reserveRetry).toHaveBeenCalledWith(
-      'writing.task1.grade',
-      'req_01J8QK3M7XW2P5NRTVA9BCDEFG',
-      1,
-    );
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(attempts.starts).toHaveLength(1);
-    mockAgent.assertNoPendingInterceptors();
-  });
-
   it.each([
+    ['zero delay', '0'],
     ['IMF-fixdate', 'Sun, 06 Nov 1994 08:49:37 GMT'],
     ['obsolete RFC 850 date', 'Sunday, 06-Nov-94 08:49:37 GMT'],
     ['obsolete asctime date', 'Sun Nov  6 08:49:37 1994'],
-  ])('accepts an elapsed %s Retry-After date', async (_format, retryAfter) => {
-    const attempts = fakeDispatchAttempts();
-    const pool = mockAgent.get('https://ai-writing.test');
-    pool.intercept({ method: 'POST', path: '/task-one' }).reply(
-      503,
-      {},
-      {
-        headers: { 'retry-after': retryAfter },
-      },
-    );
-    pool
-      .intercept({ method: 'POST', path: '/task-one' })
-      .reply(200, { ok: true });
-    const httpClient = new DownstreamHttpClient(
-      'https://ai-writing.test',
-      mockAgent,
-    );
-    const retryBudget = fakeDownstreamRetryBudget();
-    const request = jest.spyOn(httpClient, 'request');
-    const dispatcher = createHttpOperationDispatcher(
-      httpClient,
-      new FakeTokenIssuer(),
-      [
+  ])(
+    'does not replay an unapproved 503 with %s Retry-After',
+    async (_format, retryAfter) => {
+      const attempts = fakeDispatchAttempts();
+      const pool = mockAgent.get('https://ai-writing.test');
+      pool.intercept({ method: 'POST', path: '/task-one' }).reply(
+        503,
+        {},
         {
-          ...fakeGradeAdapter('/task-one'),
-          parseResponse: () => gradeResponse,
+          headers: { 'retry-after': retryAfter },
         },
-      ],
-      attempts.recorder,
-      undefined,
-      retryBudget.port,
-      () => 0,
-    );
+      );
+      const httpClient = new DownstreamHttpClient(
+        'https://ai-writing.test',
+        mockAgent,
+      );
+      const retryBudget = fakeDownstreamRetryBudget();
+      const request = jest.spyOn(httpClient, 'request');
+      const dispatcher = createHttpOperationDispatcher(
+        httpClient,
+        new FakeTokenIssuer(),
+        [
+          {
+            ...fakeGradeAdapter('/task-one'),
+            parseResponse: () => gradeResponse,
+          },
+        ],
+        attempts.recorder,
+        undefined,
+        retryBudget.port,
+        () => 0,
+      );
 
-    await expect(
-      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
-    ).resolves.toMatchObject({ data: gradeResponse });
+      await expect(
+        dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
+      ).rejects.toMatchObject({
+        code: 'AI_SERVICE_ERROR',
+        downstreamStatus: 503,
+        retryAfterMs: 0,
+      });
 
-    expect(request).toHaveBeenCalledTimes(2);
-    mockAgent.assertNoPendingInterceptors();
-  });
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(retryBudget.reserveRetry).not.toHaveBeenCalled();
+      mockAgent.assertNoPendingInterceptors();
+    },
+  );
 
   it.each(['1.5', 'tomorrow', '99999999999999999999'])(
     'does not retry 503 with invalid Retry-After value %s',
