@@ -49,8 +49,11 @@ export function listen(server: Server): Promise<string> {
 export async function startWorker(configuration: {
   readonly downstreamUrl: string;
   readonly redisUrl?: string;
+  /** Replaces every production-scope PostgreSQL URL, e.g. with a fault proxy. */
+  readonly databaseUrl?: string;
   readonly runtimeDatabaseScope?: 'production' | 'sandbox';
 }): Promise<TestWorker> {
+  const controlPlaneUrl = configuration.databaseUrl ?? testDatabaseUrl();
   const worker = spawn(
     process.execPath,
     [
@@ -72,9 +75,9 @@ export async function startWorker(configuration: {
         DATABASE_URL:
           configuration.runtimeDatabaseScope === 'sandbox'
             ? sandboxTestDatabaseUrl()
-            : testDatabaseUrl(),
-        CONTROL_PLANE_DATABASE_URL: testDatabaseUrl(),
-        CONTROL_PLANE_READ_DATABASE_URL: testDatabaseUrl(),
+            : controlPlaneUrl,
+        CONTROL_PLANE_DATABASE_URL: controlPlaneUrl,
+        CONTROL_PLANE_READ_DATABASE_URL: controlPlaneUrl,
         REDIS_URL: configuration.redisUrl ?? sandboxTestRedisUrl(),
         DOWNSTREAM_AI_WRITING_URL: configuration.downstreamUrl,
         DOWNSTREAM_AI_SPEAKING_URL: configuration.downstreamUrl,

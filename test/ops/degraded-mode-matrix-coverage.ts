@@ -259,8 +259,17 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         'jwks-dns-isolation.integration.spec.ts covers a silent DNS query only; no case for an unreachable or unusable source with and without a stale cache.',
     },
   [PROSE_OBLIGATIONS[0]]: {
-    pending:
-      'No case yet drives /ready 503 to 200 through a fault proxy in one app process.',
+    tests: [
+      {
+        file: `${FAULT}readiness-recovery-fault.spec.ts`,
+        titles: [
+          'turns ready only after PostgreSQL and Redis come up after startup',
+          'answers /ready 503 inside the bound, keeps /health, and recovers without a restart',
+          'stays ready while %s is slow inside its bounds',
+        ],
+      },
+    ],
+    gaps: 'RECOVERY_BOUND_MS (10 s) is provisional; #749 and #645 own the same-process recovery bounds it must match.',
   },
   [PROSE_OBLIGATIONS[1]]: {
     pending:
