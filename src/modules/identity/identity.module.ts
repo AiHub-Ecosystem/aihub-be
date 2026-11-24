@@ -239,9 +239,7 @@ type IdentityTransactionClient = ReturnType<
     },
     {
       provide: IDENTITY_READ_CLIENT,
-      inject: [CONTROL_PLANE_READ_PRISMA_CLIENT],
-      useFactory: (controlPlaneRead: PrismaClientHolder) =>
-        createIdentityTransactionRunner(controlPlaneRead.prisma),
+      useExisting: IDENTITY_TRANSACTION_CLIENT,
     },
     // Auth dispatches the near-expiry notice but cannot import this module, so
     // the resolver is handed to Auth's slot when it is built (ADR-0120).
