@@ -149,4 +149,31 @@ describe('Writing chart upload sweep', () => {
     expect(bucket.staged.has(stagingKey)).toBe(true);
     expect(await uploadStatus(assetId)).toBe('open');
   });
+
+  it('keeps the row of an object storage could not delete mid-run, and deletes it on the next run', async () => {
+    const bucket = new ChartBucket();
+    const uploads = [
+      await openUpload(bucket),
+      await openUpload(bucket),
+      await openUpload(bucket),
+    ];
+    const [, stuck] = uploads;
+    if (stuck === undefined) throw new Error('expected three uploads');
+    bucket.failingDeletes.add(stuck.stagingKey);
+    const later = new Date(Date.now() + PAST_THE_GRACE_PERIOD_MS);
+
+    const failedRun = await sweepAt(bucket, later);
+
+    // The failure stops neither the run nor the other deletions.
+    expect(failedRun).toMatchObject({ eligible: 3, deleted: 2, failed: 1 });
+    expect(await uploadStatus(stuck.assetId)).toBe('open');
+    expect(bucket.staged.has(stuck.stagingKey)).toBe(true);
+
+    bucket.failingDeletes.clear();
+    const retry = await sweepAt(bucket, later);
+
+    expect(retry).toMatchObject({ eligible: 1, deleted: 1, failed: 0 });
+    expect(await uploadStatus(stuck.assetId)).toBeUndefined();
+    expect(bucket.staged.has(stuck.stagingKey)).toBe(false);
+  });
 });

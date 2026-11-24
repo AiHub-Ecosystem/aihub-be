@@ -75,3 +75,41 @@ describe('fetchRemoteJwks IP pinning (#1867)', () => {
     expect(fetchInit?.dispatcher).toBe(dispatcher);
   });
 });
+
+describe('fetchRemoteJwks against a hung source', () => {
+  it('gives up at the 3 s fetch deadline with a retryable IDENTITY_JWKS_SOURCE_UNAVAILABLE', async () => {
+    jest
+      .mocked(Agent)
+      .mockImplementation(
+        () => ({ close: async () => undefined }) as unknown as Agent,
+      );
+    let aborted: unknown;
+    // A source that accepts the request and never answers: only the fetch
+    // deadline can end it.
+    const hung: Parameters<typeof fetchRemoteJwks>[1] = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          aborted = init.signal?.reason;
+          reject(init.signal?.reason);
+        });
+      });
+
+    const startedAt = performance.now();
+    // real-timer-ok: the deadline under test is AbortSignal.timeout, which fake timers do not drive
+    const failure = await fetchRemoteJwks(
+      'https://id.acme.edu/.well-known/jwks.json',
+      hung,
+      resolverFactory,
+    ).catch((error: unknown) => error);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(failure).toMatchObject({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+    expect(aborted).toMatchObject({ name: 'TimeoutError' });
+    expect(elapsedMs).toBeGreaterThanOrEqual(2_900);
+    expect(elapsedMs).toBeLessThan(3_500);
+  }, 10_000);
+});

@@ -14,6 +14,8 @@ export class ChartBucket {
   publishes = 0;
   /** Writes the object, then loses the acknowledgement. */
   loseNextAck = false;
+  /** Keys whose deletion fails, like a store that refuses or times out. */
+  readonly failingDeletes = new Set<string>();
   /** Holds the next public write until released. */
   gate: Promise<void> | undefined;
   private reportPublishStarted: (() => void) | undefined;
@@ -46,9 +48,15 @@ export class ChartBucket {
       publicUrl: (input) =>
         `https://s3.wispace.app/${BUCKET}/${input.publishedKey}`,
       deleteStagingObject: async (input) => {
+        if (this.failingDeletes.has(input.stagingKey)) {
+          throw new Error('object storage request timed out');
+        }
         this.staged.delete(input.stagingKey);
       },
       deletePublishedObject: async (input) => {
+        if (this.failingDeletes.has(input.publishedKey)) {
+          throw new Error('object storage request timed out');
+        }
         this.published.delete(input.publishedKey);
       },
     };
