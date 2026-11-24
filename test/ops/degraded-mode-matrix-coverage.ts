@@ -268,12 +268,39 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         'The writer-read target is a code gap tracked by #2020: CONTROL_PLANE_READ wiring still exists. Add a case proving these reads use the writer when #2020 lands.',
     },
   'PostgreSQL / Speaking result-ownership write fails': {
-    pending:
-      'No fault-proxy case for a failed Speaking result-ownership write.',
+    tests: [
+      {
+        file: `${FAULT}postgres-result-write-fault.spec.ts`,
+        titles: [
+          'fails the write as a retryable 503 DATABASE_UNAVAILABLE and records nothing when PostgreSQL is %s',
+        ],
+      },
+      {
+        file: 'src/modules/speaking/presentation/speaking-v2.controller.spec.ts',
+        titles: [
+          'fails closed with retryable DATABASE_UNAVAILABLE when a successful grade cannot be recorded',
+          'fails closed without metering when an aggregation at %s cannot be recorded',
+        ],
+      },
+      {
+        file: 'src/modules/speaking/application/grading-jobs/process-speaking-grading-job.spec.ts',
+        titles: [
+          'suppresses metering and fails the job when result ownership recording fails',
+        ],
+      },
+    ],
   },
   'PostgreSQL / Metering write fails after an otherwise successful result': {
-    pending:
-      'admission-postgres-fault.spec.ts covers a stalled usage write releasing permits, not the preserved client result or aihub_metering_incomplete_total.',
+    tests: [
+      {
+        file: `${FAULT}postgres-result-write-fault.spec.ts`,
+        titles: [
+          'keeps the successful result inside the write bound and counts the lost write when PostgreSQL is %s',
+          'records usage again once PostgreSQL returns',
+        ],
+      },
+    ],
+    gaps: 'The matrix names aihub_metering_incomplete_total and a durable incomplete outcome for reconciliation. The code counts a lost write in aihub_metering_write_failed_total{reason} and a log line; aihub_metering_incomplete_total counts only missing_usage records, and no durable row marks the lost write (its dispatch attempt reads response_received, so the unresolved-attempt gauge skips it). #372 decides which side moves.',
   },
   'PostgreSQL / Audit/UX read uses a replica': {
     untestable:
