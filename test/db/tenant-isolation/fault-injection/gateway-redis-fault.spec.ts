@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
+import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   LEASE_REMOVAL_RETRY_MS,
   RedisConcurrencyLimiter,
@@ -11,8 +12,14 @@ import {
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { RedisRateLimiter } from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import {
+  RedisRateLimiter,
+  rateLimitKey,
+} from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import { createRedisMeteringClient } from '@/modules/metering/infrastructure/quota/redis-metering.client';
+import { RedisQuotaCounter } from '@/modules/metering/infrastructure/quota/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
+import { quotaKeyForMonth } from '@/modules/metering/public/quota-counter';
 
 import { createTenantIsolationRedis } from '../fixtures';
 
@@ -44,6 +51,7 @@ const REDIS_UNAVAILABLE = {
 
 let proxy: TcpFaultProxy;
 let client: RedisGatewayClient;
+let meteringClient: ReturnType<typeof createRedisMeteringClient>;
 let raw: Redis;
 
 function organizationId(): string {
@@ -80,6 +88,7 @@ beforeAll(async () => {
   const proxied = createRedisGatewayClient(target.url);
   if (proxied === undefined) throw new Error('Gateway Redis client missing');
   client = proxied;
+  meteringClient = createRedisMeteringClient(target.url);
   raw = createTenantIsolationRedis();
 });
 
@@ -90,6 +99,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await client.quit().catch(() => undefined);
+  await meteringClient?.quit().catch(() => undefined);
   await raw.quit();
   await proxy.close();
 });
@@ -236,3 +246,55 @@ it('frees a permit after Redis returns beyond the bounded retry attempts', async
   if (recovered.allowed) await recovered.lease.release();
   expect(await inflight(raw, organization)).toBe(0);
 }, 20_000);
+
+it('does not replay a rate-limit mutation when reconnect follows a lost reply', async () => {
+  const now = 61_234;
+  const keyId = `ak_${randomUUID()}`;
+  const key = rateLimitKey(keyId, rateLimitWindow(keyId, now).index);
+  const limiter = new RedisRateLimiter('', client, () => now, NOOP_LOGGER);
+  await raw.del(key);
+
+  await proxy.setMode('slow');
+  const pending = timed(() => limiter.consume({ keyId, limit: 1 }));
+  await eventually(async () => (await raw.get(key)) === '1');
+  await proxy.setMode('refuse');
+
+  const result = await pending;
+  expect(rejection(result.result)).toMatchObject(REDIS_UNAVAILABLE);
+
+  await proxy.setMode('normal');
+  await redisAnswers(client);
+  // real-timer-ok: allow ioredis's reconnect handler to process pending commands
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  expect(await raw.get(key)).toBe('1');
+  await expect(limiter.consume({ keyId, limit: 1 })).resolves.toMatchObject({
+    allowed: false,
+  });
+}, 10_000);
+
+it('does not replay a quota increment when reconnect follows a lost reply', async () => {
+  if (meteringClient === undefined) throw new Error('Metering Redis missing');
+  const organization = organizationId();
+  const now = new Date();
+  const key = quotaKeyForMonth(organization, now.toISOString().slice(0, 7));
+  const counter = new RedisQuotaCounter(meteringClient);
+  await raw.set(key, '0');
+
+  await proxy.setMode('slow');
+  const pending = timed(() =>
+    counter.increment({ organizationId: organization, occurredAt: now }),
+  );
+  await eventually(async () => (await raw.get(key)) === '1');
+  await proxy.setMode('refuse');
+
+  const result = await pending;
+  expect(result.result.status).toBe('rejected');
+
+  await proxy.setMode('normal');
+  await redisAnswers(client);
+  // real-timer-ok: allow ioredis's reconnect handler to process pending commands
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  expect(await raw.get(key)).toBe('1');
+}, 10_000);
