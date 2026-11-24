@@ -263,9 +263,7 @@ it('does not replay a rate-limit mutation when reconnect follows a lost reply', 
   expect(rejection(result.result)).toMatchObject(REDIS_UNAVAILABLE);
 
   await proxy.setMode('normal');
-  await redisAnswers(client);
-  // real-timer-ok: allow ioredis's reconnect handler to process pending commands
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await eventually(async () => (await client.get(key)) === '1');
 
   expect(await raw.get(key)).toBe('1');
   await expect(limiter.consume({ keyId, limit: 1 })).resolves.toMatchObject({
@@ -274,11 +272,12 @@ it('does not replay a rate-limit mutation when reconnect follows a lost reply', 
 }, 10_000);
 
 it('does not replay a quota increment when reconnect follows a lost reply', async () => {
-  if (meteringClient === undefined) throw new Error('Metering Redis missing');
+  const redis = meteringClient;
+  if (redis === undefined) throw new Error('Metering Redis missing');
   const organization = organizationId();
   const now = new Date();
   const key = quotaKeyForMonth(organization, now.toISOString().slice(0, 7));
-  const counter = new RedisQuotaCounter(meteringClient);
+  const counter = new RedisQuotaCounter(redis);
   await raw.set(key, '0');
 
   await proxy.setMode('slow');
@@ -292,9 +291,7 @@ it('does not replay a quota increment when reconnect follows a lost reply', asyn
   expect(result.result.status).toBe('rejected');
 
   await proxy.setMode('normal');
-  await redisAnswers(client);
-  // real-timer-ok: allow ioredis's reconnect handler to process pending commands
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await eventually(async () => (await redis.get(key)) === '1');
 
   expect(await raw.get(key)).toBe('1');
 }, 10_000);
