@@ -14,6 +14,11 @@ import {
   RedisConcurrencyLimiter,
 } from './redis-concurrency-limiter';
 
+// What ioredis rejects with when the socket is not writable and the offline
+// queue is off: the command never reached Redis, so no lease can exist.
+const COMMAND_NOT_SENT =
+  "Stream isn't writeable and enableOfflineQueue options is false";
+
 class FakeRedis implements RedisConcurrencyClient {
   readonly evaluations: Array<{
     readonly script: string;
@@ -218,6 +223,90 @@ describe('RedisConcurrencyLimiter', () => {
       retryAfterMs: expect.closeTo(1_499.5, -3) as number,
     } satisfies Partial<AppError>);
     await limiter.onModuleDestroy();
+  });
+
+  it('leaves no cleanup work when Redis refuses the acquire before writing it', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    const evalCommand = jest.fn(() =>
+      Promise.reject(new Error(COMMAND_NOT_SENT)),
+    );
+    redis.eval = evalCommand;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      await expect(
+        limiter.acquire({
+          organizationId: 'org_refused',
+          maxConcurrent: 1,
+          requestId: 'req_01JREFUSED00000000000000000000',
+        }),
+      ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE', retryable: true });
+
+      // Fake timers inject the clock; nothing may be scheduled or held open.
+      expect(jest.getTimerCount()).toBe(0);
+      await expect(waitForBackgroundWork()).resolves.toBeUndefined();
+      await jest.advanceTimersByTimeAsync(CONCURRENCY_STALE_LEASE_MS);
+      expect(evalCommand).toHaveBeenCalledTimes(1);
+      expect(redis.removals).toEqual([]);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps cleanup bounded under a burst of pre-write refusals', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    const evalCommand = jest.fn(() =>
+      Promise.reject(new Error(COMMAND_NOT_SENT)),
+    );
+    redis.eval = evalCommand;
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      await Promise.all(
+        Array.from({ length: 100 }, (_, index) =>
+          limiter
+            .acquire({
+              organizationId: 'org_burst',
+              maxConcurrent: 1,
+              requestId: 'req_01JBURST' + String(index).padStart(12, '0'),
+            })
+            .catch((error: unknown) => error),
+        ),
+      );
+
+      expect(jest.getTimerCount()).toBe(0);
+      await expect(waitForBackgroundWork()).resolves.toBeUndefined();
+      await jest.advanceTimersByTimeAsync(CONCURRENCY_STALE_LEASE_MS);
+      expect(evalCommand).toHaveBeenCalledTimes(100);
+      expect(redis.removals).toEqual([]);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
+  });
+
+  it('still schedules cleanup when the acquire may have written its lease', async () => {
+    jest.useFakeTimers();
+    const redis = new FakeRedis();
+    redis.eval = jest.fn(() => Promise.reject(new Error('Command timed out')));
+    const limiter = new RedisConcurrencyLimiter(redis);
+
+    try {
+      await expect(
+        limiter.acquire({
+          organizationId: 'org_ambiguous',
+          maxConcurrent: 1,
+          requestId: 'req_01JAMBIGUOUS0000000000000000',
+        }),
+      ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
+      expect(jest.getTimerCount()).toBe(1);
+    } finally {
+      await limiter.onModuleDestroy();
+      jest.useRealTimers();
+    }
   });
 
   it('returns retryable unavailable when releasing a permit has an ambiguous result', async () => {
