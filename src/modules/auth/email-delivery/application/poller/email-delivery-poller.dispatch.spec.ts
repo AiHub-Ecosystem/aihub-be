@@ -8,11 +8,6 @@ import {
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import { EMAIL_PROVIDER_RATE_LIMIT_RETRY_MS } from '@/modules/auth/email-delivery/application/send-policy/email-provider-retry-after.policy';
 import {
-  DEFER_RETRY_MS,
-  EmailDeliveryPoller,
-  MAX_CREDENTIAL_LIFETIME_MS,
-} from './email-delivery-poller';
-import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
   FakeEmailSendRateLimiter,
@@ -30,7 +25,12 @@ import {
   sealed,
   unknownKeyVersionCipher,
   unreadableCipher,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import {
+  DEFER_RETRY_MS,
+  EmailDeliveryPoller,
+  MAX_CREDENTIAL_LIFETIME_MS,
+} from './email-delivery-poller';
 
 describe('EmailDeliveryPoller', () => {
   it('claims only request IDs from committed WAL messages', async () => {

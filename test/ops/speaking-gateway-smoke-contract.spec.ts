@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
+import { publicApiMajorV1 } from '../support/catalog/public-api-major-v1';
 
 import { isRecord } from '@/common/is-record';
 import { ALLOWED_EXTENSIONS } from '@/modules/speaking/public/fastify-speaking-multipart.parser';

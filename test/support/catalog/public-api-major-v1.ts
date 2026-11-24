@@ -1,7 +1,7 @@
 import {
   type PublicApiMajorDef,
   findPublicApiMajor,
-} from './public-api-majors';
+} from '@/catalog/public-api-majors';
 
 /**
  * The released `/v1` major for specs that assert the `/v1` contract. The

@@ -8,8 +8,8 @@ import { ulid } from 'ulid';
 
 import { PostgresEmailDeliveryRequestRepository } from '@/modules/auth/email-delivery/infrastructure/postgres-email-delivery-request.repository';
 import { EmailDeliveryTransactionAdapter } from '@/modules/auth/shared/infrastructure/email-delivery-transaction.adapter';
-import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 interface CommittedMessage {
   readonly id: string;

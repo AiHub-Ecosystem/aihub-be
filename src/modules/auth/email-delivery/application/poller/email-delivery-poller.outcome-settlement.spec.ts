@@ -1,4 +1,3 @@
-import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeEmailProviderOutageCircuit,
   NOW,
@@ -6,7 +5,8 @@ import {
   RecordingSender,
   claimed,
   harness,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 function clock(): { now: () => Date; advanceMs: (ms: number) => void } {
   let currentMs = NOW.getTime();

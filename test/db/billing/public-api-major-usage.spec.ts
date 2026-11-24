@@ -5,9 +5,9 @@ import type {
   PublicApiMajorUsageWrite,
 } from '@/modules/metering/application/billing/public-api-major-usage';
 import { PostgresPublicApiMajorUsageRepository } from '@/modules/metering/infrastructure/billing/postgres-public-api-major-usage.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { createPostgresMeteringClient } from '../shared/postgres-metering.fixture-client';
 
 let pool: Pool;
 let client: PrismaMeteringClient;

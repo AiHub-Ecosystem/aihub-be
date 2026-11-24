@@ -31,8 +31,6 @@ import type {
   PrismaClient,
 } from '@prisma-client/client';
 
-export { createSpeakingAudioQueryClient } from './postgres-speaking-audio-upload.fixture-client';
-
 function requiredEnvironment(value: string): SpeakingAudioEnvironment {
   if (value !== 'production' && value !== 'sandbox') {
     throw storeUnavailable(

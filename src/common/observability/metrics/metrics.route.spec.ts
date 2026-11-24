@@ -1,9 +1,9 @@
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { publicApiMajorV1 } from '../../../../test/support/catalog/public-api-major-v1';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';

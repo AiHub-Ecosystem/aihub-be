@@ -1,6 +1,5 @@
 import type { LightMyRequestResponse } from 'fastify';
 
-import { sample } from '@/common/observability/metrics/metric-sample.testing';
 import {
   type AlternateCredential,
   CLIENT_SECRET,
@@ -8,6 +7,7 @@ import {
   createWebSessionTestSuite,
 } from '@/modules/auth/testing/web-session.spec-support';
 import { registerRequestCompletionLog } from '@/modules/metering/presentation/request-completion-log.hook';
+import { sample } from '../../../../../test/support/metrics/metric-sample';
 
 const URL = '/v1/auth/web-sessions';
 const LOGOUT_URL = '/v1/auth/web-sessions/logout';

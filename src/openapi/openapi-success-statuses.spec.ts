@@ -1,8 +1,8 @@
 import type { TSchema } from '@sinclair/typebox';
 
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { findPublicApiMajor } from '@/catalog/public-api-majors';
 import { PUBLIC_ROUTES, type PublicRouteDef } from '@/catalog/public-routes';
+import { publicApiMajorV1 } from '../../test/support/catalog/public-api-major-v1';
 import { answeredStatusesByRoute } from '../../test/support/route-handler-statuses';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';

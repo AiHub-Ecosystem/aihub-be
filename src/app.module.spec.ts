@@ -1,4 +1,3 @@
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { Controller, Get } from '@nestjs/common';
 import {
   FastifyAdapter,
@@ -7,6 +6,7 @@ import {
 import { Test } from '@nestjs/testing';
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
+import { publicApiMajorV1 } from '../test/support/catalog/public-api-major-v1';
 
 import { AppModule } from './app.module';
 import { OPERATION_CATALOG } from './catalog/operation-catalog';

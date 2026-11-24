@@ -6,12 +6,12 @@ import { ulid } from 'ulid';
 import { calculateUsageRetentionCutoff } from '@/modules/metering/application/billing/usage-retention';
 import { PostgresUsageRetentionRepository } from '@/modules/metering/infrastructure/billing/postgres-usage-retention.repository';
 import { PostgresDispatchAttemptRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-dispatch-attempt.repository';
-import { createPostgresMeteringClient } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import {
   createSandboxTestRedis,
   createTestPool,
   testDatabaseUrl,
 } from '../shared/database';
+import { createPostgresMeteringClient } from '../shared/postgres-metering.fixture-client';
 import {
   type HttpAnswer,
   type TestWorker,

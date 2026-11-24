@@ -9,7 +9,6 @@ import type { GradeTask2Request } from '@/contracts/writing/grading';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { OperationDispatcherPort } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import {
   CONCURRENCY_RETRY_AFTER_MS,
   RedisConcurrencyLimiter,
@@ -18,6 +17,7 @@ import {
   type RedisGatewayClient,
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
+import { createHttpOperationDispatcher } from '../../../support/gateway/http-operation-dispatcher.testing';
 
 import { createTenantIsolationRedis } from '../fixtures';
 

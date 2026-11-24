@@ -1,13 +1,11 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import {
-  PostgresAvatarRepository,
-  createAvatarQueryClient,
-} from '@/modules/avatar/infrastructure/postgres-avatar.repository';
+import { PostgresAvatarRepository } from '@/modules/avatar/infrastructure/postgres-avatar.repository';
 import { avatarRepositoryContract } from '@/modules/avatar/testing/avatar.contract';
 
 import { createTestPool, resetIdentityTables } from '../shared/database';
+import { createAvatarQueryClient } from '../shared/postgres-avatar.fixture-client';
 
 const userId = `usr_${ulid()}`;
 

@@ -3,13 +3,13 @@ import {
   type ApiKeyNearExpiryNotificationPayload,
   type EmailNoticeResolvers,
 } from '@/modules/auth/email-delivery/application/email-delivery-request.port';
-import { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller';
 import {
   NOW,
   ROW_ID,
   claimed,
   harness,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { MAX_CREDENTIAL_LIFETIME_MS } from './email-delivery-poller';
 
 const PAYLOAD: ApiKeyNearExpiryNotificationPayload = {
   organizationId: 'org_123',

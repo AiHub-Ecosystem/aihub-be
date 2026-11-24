@@ -1,9 +1,9 @@
 import { ulid } from 'ulid';
 
-import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
 import type { SpeakingV2ResultOwner } from '@/modules/speaking/application/speaking-v2-result-ownership.port';
 import { PostgresSpeakingV2ResultOwnershipRepository } from '@/modules/speaking/infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 describe('Speaking v2 result ownership in PostgreSQL', () => {
   const client = createFixturePrismaClient(testDatabaseUrl());

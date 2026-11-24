@@ -33,8 +33,8 @@ import type {
   EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
 import type { EmailNoticeResolvers } from '@/modules/auth/email-delivery/application/payload/email-delivery-payload';
+import { EmailDeliveryPoller } from '@/modules/auth/email-delivery/application/poller/email-delivery-poller';
 import type { AuthRateLimiterPort } from '@/modules/auth/rate-limit/application/auth-rate-limiter.port';
-import { EmailDeliveryPoller } from './email-delivery-poller';
 
 export const NOW = new Date('2026-10-05T12:00:00.000Z');
 export const HOUR = 60 * 60 * 1000;

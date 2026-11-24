@@ -9,10 +9,9 @@ import {
   type SpeakingAudioUploadIntent,
   speakingAudioObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
-import {
-  PostgresSpeakingAudioUploadRepository,
-  createSpeakingAudioQueryClient,
-} from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
+import { PostgresSpeakingAudioUploadRepository } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
+
+import { createSpeakingAudioQueryClient } from '../shared/postgres-speaking-audio-upload.fixture-client';
 
 import {
   createSandboxTestPool,

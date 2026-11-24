@@ -1,4 +1,4 @@
-import { sample } from './metric-sample.testing';
+import { sample } from '../../../../test/support/metrics/metric-sample';
 import {
   METRICS_ROUTE_PATH,
   getMetrics,

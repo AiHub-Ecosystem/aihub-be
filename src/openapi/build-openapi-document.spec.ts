@@ -3,7 +3,6 @@ import {
   type OperationDef,
 } from '@/catalog/operation-catalog';
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import {
   type PublicApiMajorDef,
   findPublicApiMajor,
@@ -15,6 +14,7 @@ import {
 } from '@/catalog/public-routes';
 import { isRecord } from '@/common/is-record';
 import { Type } from '@sinclair/typebox';
+import { publicApiMajorV1 } from '../../test/support/catalog/public-api-major-v1';
 import { buildOpenApiDocument } from './build-openapi-document';
 import { toOpenApiPath } from './openapi-path';
 

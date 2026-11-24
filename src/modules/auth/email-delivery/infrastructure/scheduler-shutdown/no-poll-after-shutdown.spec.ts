@@ -1,4 +1,4 @@
-import { withApp } from './test-support';
+import { withApp } from '../../../../../../test/support/auth/scheduler-shutdown-test-support';
 
 describe('EmailOutboxPollerScheduler during shutdown', () => {
   it('starts no new pass once shutdown has begun, however many intervals pass', async () => {

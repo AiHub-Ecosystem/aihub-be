@@ -1,6 +1,6 @@
-import { sample } from '@/common/observability/metrics/metric-sample.testing';
 import { getMetrics } from '@/common/observability/metrics/metrics';
 import { metricsDispatchObserver } from '@/modules/gateway/infrastructure/dispatch/metrics-dispatch-observer';
+import { sample } from '../../../../../../test/support/metrics/metric-sample';
 
 describe('metricsDispatchObserver', () => {
   it('records retry admissions and budget refusals by bounded labels', async () => {

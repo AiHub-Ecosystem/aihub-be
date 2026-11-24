@@ -1,4 +1,4 @@
-import { withApp } from './test-support';
+import { withApp } from '../../../../../../test/support/auth/scheduler-shutdown-test-support';
 
 describe('EmailOutboxPollerScheduler during shutdown', () => {
   it('lets the recipient-counter prune finish before its connection closes', async () => {

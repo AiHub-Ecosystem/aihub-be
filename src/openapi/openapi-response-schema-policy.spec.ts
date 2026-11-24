@@ -1,5 +1,5 @@
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { isRecord } from '@/common/is-record';
+import { publicApiMajorV1 } from '../../test/support/catalog/public-api-major-v1';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 type JsonRecord = Record<string, unknown>;

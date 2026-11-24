@@ -19,8 +19,6 @@ import {
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { Prisma, PrismaClient, UserAvatar } from '@prisma-client/client';
 
-export { createAvatarQueryClient } from './postgres-avatar.fixture-client';
-
 // The unique constraint on the account is what keeps one Avatar per account,
 // including under two concurrent completions. The conflict target has to stay
 // `(user_account_id)`: a collision on the asset id or the object key is a bug

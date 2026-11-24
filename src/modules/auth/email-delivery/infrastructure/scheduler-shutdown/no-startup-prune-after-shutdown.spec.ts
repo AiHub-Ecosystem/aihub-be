@@ -1,4 +1,4 @@
-import { withApp } from './test-support';
+import { withApp } from '../../../../../../test/support/auth/scheduler-shutdown-test-support';
 
 describe('EmailOutboxPollerScheduler during shutdown', () => {
   it('starts no prune after shutdown has already begun', async () => {

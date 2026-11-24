@@ -1,4 +1,4 @@
-import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
+import { createFixturePrismaClient } from './fixture-prisma-client';
 
 /** Test-only factory retained for the unchanged database-lane fixtures. */
 export function createSpeakingAudioQueryClient(

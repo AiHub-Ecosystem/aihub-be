@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { publicApiMajorV1 } from '@/catalog/public-api-major-v1.fixture';
 import { PUBLIC_API_MAJORS } from '@/catalog/public-api-majors';
+import { publicApiMajorV1 } from '../../test/support/catalog/public-api-major-v1';
 import { buildOpenApiDocument } from './build-openapi-document';
 
 const REPO_ROOT = join(__dirname, '../..');

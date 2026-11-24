@@ -3,12 +3,12 @@ import { ulid } from 'ulid';
 
 import { runWritingChartRevokeCommand } from '@/cli/writing-chart-revoke';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
 import type { WritingChartUploadRepositoryPort } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/chart-uploads/application/writing-chart-upload.service';
 import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 import { BUCKET, CHART_PNG, ChartBucket } from './support/chart-bucket';
 
 // An operator revocation fences the upload from publishing again (#1206). The

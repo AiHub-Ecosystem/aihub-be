@@ -1,4 +1,4 @@
-import { withApp } from './test-support';
+import { withApp } from '../../../../../../test/support/auth/scheduler-shutdown-test-support';
 
 describe('EmailOutboxPollerScheduler during startup', () => {
   it('prunes recipient limits on a fresh runtime', async () => {

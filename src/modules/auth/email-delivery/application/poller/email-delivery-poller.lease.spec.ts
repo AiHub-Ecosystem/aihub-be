@@ -1,4 +1,3 @@
-import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
@@ -11,7 +10,8 @@ import {
   harness,
   sealed,
   worstCaseBatchMs,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 describe('EmailDeliveryPoller', () => {
   it('claims a lease that outlives the whole default batch', async () => {

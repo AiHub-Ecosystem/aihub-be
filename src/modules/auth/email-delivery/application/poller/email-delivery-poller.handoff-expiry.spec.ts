@@ -5,7 +5,7 @@ import {
   VERIFICATION_PAYLOAD,
   claimed,
   harness,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
 
 const EXPIRES_AT = Date.parse(VERIFICATION_PAYLOAD.expiresAt);
 const ENTRY_MS = EXPIRES_AT - 1_000;

@@ -8,8 +8,8 @@ import type {
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import type { DownstreamRequest } from '@/downstream/downstream.types';
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/dispatch/internal-token-issuer.port';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import { createHttpOperationDispatcher } from '../../../../../test/support/gateway/http-operation-dispatcher.testing';
 import { DownstreamHttpClient } from './downstream-http.client';
 
 const gradeInput: GradeTask1Request = {

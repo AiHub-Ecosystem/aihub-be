@@ -5,7 +5,7 @@ import {
   VERIFICATION_PAYLOAD,
   claimed,
   harness,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
 
 describe('terminal failure reporting', () => {
   it('reports a request that used its last attempt', async () => {

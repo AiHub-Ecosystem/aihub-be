@@ -23,8 +23,8 @@ import type {
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/public/dispatch-attempts';
+import { createHttpOperationDispatcher } from '../../../../../test/support/gateway/http-operation-dispatcher.testing';
 import { DownstreamHttpClient } from './downstream-http.client';
-import { createHttpOperationDispatcher } from './http-operation-dispatcher.testing';
 
 const SPEAKING_URL = 'https://ai-speaking.test';
 const CLIENT_ID = 'speaking-client';

@@ -6,7 +6,7 @@ import {
   RecordingSender,
   claimed,
   harness,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
 
 /** A slow limiter: the clock moves on while the reservation is in flight. */
 class SlowRateLimiter extends FakeEmailSendRateLimiter {

@@ -24,7 +24,7 @@ import type {
   SpeakingAudioUploadIntent,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 
-import { fixtureJson } from '../../../../test/support/json-fixtures';
+import { fixtureJson } from '../json-fixtures';
 
 export const JOB_ID = 'sgj_01J00000000000000000000001';
 export const ASSET_ID = 'aud_01J00000000000000000000001';

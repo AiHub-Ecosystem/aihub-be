@@ -8,7 +8,7 @@ import {
   claimed,
   sealed,
   unknownKeyVersionCipher,
-} from '@/modules/auth/email-delivery/application/poller/email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
 import { readEmailPayload } from './email-delivery-payload.reader';
 
 function cipherThrowing(error: Error): EmailPayloadCipherPort {

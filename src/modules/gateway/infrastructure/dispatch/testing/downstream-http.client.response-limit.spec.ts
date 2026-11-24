@@ -7,7 +7,7 @@ import { Pool } from 'undici/index.js';
 
 import { AppError } from '@/common/errors/app-error';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
-import { tlsStubCredentials } from './downstream-tls-stub.testing';
+import { tlsStubCredentials } from '../../../../../../test/support/gateway/downstream-tls-stub.testing';
 
 const LIMIT = 64 * 1024;
 const CHUNK = 'a'.repeat(1024);

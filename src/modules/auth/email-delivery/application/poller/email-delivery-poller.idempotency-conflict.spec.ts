@@ -9,7 +9,6 @@ import {
   EmailProviderTransportError,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
@@ -21,7 +20,8 @@ import {
   claimed,
   harness,
   sealed,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 describe('EmailDeliveryPoller idempotency conflicts (#441)', () => {
   it('retries a concurrent-request conflict on a bounded attempt instead of rejecting it', async () => {

@@ -6,6 +6,7 @@ import {
   createSandboxTestPool,
   sandboxTestDatabaseUrl,
 } from '../shared/database';
+import { createPostgresSandboxDispatchBudgetClient } from '../shared/postgres-sandbox-dispatch-budget.fixture-client';
 
 const ORGANIZATION_ID = 'org_budget_customer';
 const NOW = new Date('2026-09-27T12:00:00.000Z');
@@ -18,7 +19,7 @@ let budget: PostgresSandboxDispatchBudget;
 beforeAll(() => {
   pool = createSandboxTestPool();
   budget = new PostgresSandboxDispatchBudget(
-    sandboxTestDatabaseUrl(),
+    createPostgresSandboxDispatchBudgetClient(sandboxTestDatabaseUrl()),
     () => NOW,
   );
 });
@@ -117,7 +118,7 @@ describe('Postgres Sandbox dispatch budget', () => {
     ).resolves.toBe(false);
 
     const octoberBudget = new PostgresSandboxDispatchBudget(
-      sandboxTestDatabaseUrl(),
+      createPostgresSandboxDispatchBudgetClient(sandboxTestDatabaseUrl()),
       () => new Date('2026-10-01T00:00:01.000Z'),
     );
     try {
@@ -201,7 +202,7 @@ describe('migration 0037 deployment-month seed', () => {
 
   async function allowanceAt(now: string, organizationId: string) {
     const instance = new PostgresSandboxDispatchBudget(
-      sandboxTestDatabaseUrl(),
+      createPostgresSandboxDispatchBudgetClient(sandboxTestDatabaseUrl()),
       () => new Date(now),
     );
     try {

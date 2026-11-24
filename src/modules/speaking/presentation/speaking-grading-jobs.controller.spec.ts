@@ -52,7 +52,6 @@ import {
 } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.port';
 import { SpeakingGradingJobSweep } from '@/modules/speaking/application/grading-jobs/speaking-grading-job.sweep';
 import { SubmitSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/submit-speaking-grading-job';
-import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
 import {
   ASSET_ID,
   FakeAudioRepository,
@@ -63,7 +62,8 @@ import {
   REQUEST_BODY,
   seededJob,
   speakingAsset,
-} from './speaking-grading-jobs.test-fixtures';
+} from '../../../../test/support/speaking/speaking-grading-jobs.fixtures';
+import { SpeakingGradingJobsController } from './speaking-grading-jobs.controller';
 
 function json(response: { readonly payload: string }): unknown {
   return JSON.parse(response.payload);

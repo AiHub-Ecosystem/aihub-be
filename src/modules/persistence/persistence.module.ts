@@ -93,10 +93,7 @@ export {
   type PrismaPool,
   RUNTIME_PRISMA_CLIENT,
 } from './infrastructure/persistence-client';
-export {
-  createFixturePrismaClient,
-  createPrismaClient,
-} from './infrastructure/prisma-client';
+export { createPrismaClient } from './infrastructure/prisma-client';
 export {
   isLifecycleProperty,
   isRowlessWrite,

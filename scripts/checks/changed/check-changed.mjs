@@ -32,6 +32,7 @@ const TS_GATES = [
   'arch-check',
   'build',
   'check:app-errors',
+  'check:build-output',
   'check:data-ownership',
   'check:deprecation',
   'check:duplication',
@@ -81,6 +82,7 @@ export const GATE_COMMANDS = {
   'coverage:unit': 'coverage:unit',
   'check:data-dictionary': 'check:data-dictionary',
   'check:app-errors': 'check:app-errors',
+  'check:build-output': 'check:build-output',
   'check:deprecation': 'check:deprecation',
   'check:duplication': 'check:duplication',
   'check:domain-globals': 'check:domain-globals',
@@ -392,6 +394,7 @@ function classifyPathGates(p) {
   ) {
     return [
       'build',
+      'check:build-output',
       'check:data-dictionary',
       'check:imports:dist',
       'check:migrations',

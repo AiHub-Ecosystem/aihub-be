@@ -8,14 +8,14 @@ import type { InternalTokenIssuerPort } from '@/modules/gateway/application/disp
 import type { OperationDispatcherPort } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { SandboxAdmission } from '@/modules/gateway/application/sandbox-admission';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
-import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
-import { DownstreamCircuitBreakers } from './downstream-circuit-breakers';
-import type { DownstreamHttpClient } from './downstream-http.client';
+import { DownstreamCircuitBreakers } from '@/modules/gateway/infrastructure/dispatch/downstream-circuit-breakers';
+import type { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import {
   DISPATCHER_LOG_CONTEXT,
   HttpOperationTransport,
-} from './http-operation-dispatcher';
-import { metricsDispatchObserver } from './metrics-dispatch-observer';
+} from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher';
+import { metricsDispatchObserver } from '@/modules/gateway/infrastructure/dispatch/metrics-dispatch-observer';
+import type { DispatchAttemptRecordPort } from '@/modules/metering/public/dispatch-attempts';
 
 /**
  * The dispatcher `GatewayModule` provides, wired by hand for a test: the same

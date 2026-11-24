@@ -11,7 +11,6 @@ import type {
 import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type { PrismaClient } from '@prisma-client/client';
-import { createPostgresSandboxDispatchBudgetClient } from './postgres-sandbox-dispatch-budget.fixture-client';
 
 type PersistenceClient = PrismaClient & { close?: () => Promise<void> };
 type AllowanceReader = Pick<
@@ -49,13 +48,10 @@ export class PostgresSandboxDispatchBudget
   private readonly client: PersistenceClient;
 
   constructor(
-    clientOrDatabaseUrl: PersistenceClient | string,
+    client: PersistenceClient,
     private readonly now: () => Date = () => new Date(),
   ) {
-    this.client =
-      typeof clientOrDatabaseUrl === 'string'
-        ? createPostgresSandboxDispatchBudgetClient(clientOrDatabaseUrl)
-        : clientOrDatabaseUrl;
+    this.client = client;
   }
 
   async reserve(input: SandboxDispatchReservation): Promise<boolean> {

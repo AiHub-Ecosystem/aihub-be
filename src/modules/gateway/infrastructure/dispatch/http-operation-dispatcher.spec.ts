@@ -21,13 +21,13 @@ import type {
 import type { InternalTokenIssuerPort } from '@/modules/gateway/application/dispatch/internal-token-issuer.port';
 import type { SandboxDispatchBudgetPort } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { DownstreamCircuitBreakers } from '@/modules/gateway/infrastructure/dispatch/downstream-circuit-breakers';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 import type {
   DispatchAttemptOutcome,
   DispatchAttemptRecordPort,
   DispatchAttemptStart,
 } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
+import { createHttpOperationDispatcher } from '../../../../../test/support/gateway/http-operation-dispatcher.testing';
 import { DownstreamHttpClient } from './downstream-http.client';
 import { MAX_RETRY_AFTER_MS } from './http-operation-dispatcher';
 

@@ -9,7 +9,6 @@ import {
   EmailProviderTransportError,
   type EmailSenderPort,
 } from '@/modules/auth/email-delivery/application/email-sender.port';
-import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
@@ -19,7 +18,8 @@ import {
   ROW_ID,
   claimed,
   sealed,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 /** Resend documents idempotency-key retention of 24 hours. */
 const RESEND_IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1000;

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { withApp } from './test-support';
+import { withApp } from '../../../../../../test/support/auth/scheduler-shutdown-test-support';
 
 describe('EmailOutboxPollerScheduler during normal shutdown', () => {
   afterEach(() => {

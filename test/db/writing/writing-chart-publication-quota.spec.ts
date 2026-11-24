@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
-import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
 import type { WritingChartUploadOwner } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import {
   PostgresWritingChartUploadRepository,
   writingChartPublicationLockKey,
 } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 // The Organization's hourly publication limit holds while another publication
 // moves from publishing to published (#1000). markPublished takes the same

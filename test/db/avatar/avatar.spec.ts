@@ -11,12 +11,10 @@ import type {
 } from '@/modules/avatar/application/avatar-storage.port';
 import { AvatarUploadService } from '@/modules/avatar/application/avatar-upload.service';
 import { type Avatar, avatarObjectKey } from '@/modules/avatar/domain/avatar';
-import {
-  PostgresAvatarRepository,
-  createAvatarQueryClient,
-} from '@/modules/avatar/infrastructure/postgres-avatar.repository';
+import { PostgresAvatarRepository } from '@/modules/avatar/infrastructure/postgres-avatar.repository';
 
 import { createTestPool, resetIdentityTables } from '../shared/database';
+import { createAvatarQueryClient } from '../shared/postgres-avatar.fixture-client';
 
 let pool: Pool;
 let client: ReturnType<typeof createAvatarQueryClient>;

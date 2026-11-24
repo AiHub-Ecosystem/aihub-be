@@ -2,12 +2,12 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
 import type { WritingChartUploadOwner } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/chart-uploads/application/writing-chart-upload.service';
 import { WritingChartUploadSweep } from '@/modules/writing/chart-uploads/application/writing-chart-upload.sweep';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 import { CHART_PNG, ChartBucket } from './support/chart-bucket';
 
 // The sweep deletes the public object of every upload it removes, whatever the

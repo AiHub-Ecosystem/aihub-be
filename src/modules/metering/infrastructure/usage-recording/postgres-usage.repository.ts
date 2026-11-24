@@ -6,8 +6,6 @@ import { Prisma } from '@prisma-client/client';
 
 import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type { PrismaMeteringClient } from './prisma-metering.client';
-
-export { createPostgresMeteringClient } from './postgres-metering.fixture-client';
 export type { PrismaMeteringClient } from './prisma-metering.client';
 
 export class PostgresUsageRepository implements UsageRepositoryPort {

@@ -1,10 +1,10 @@
 import { ulid } from 'ulid';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
-import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
 import type { NewSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import { PostgresSpeakingGradingJobRepository } from '@/modules/speaking/infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { testDatabaseUrl } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 const client = createFixturePrismaClient(testDatabaseUrl());
 const repository = new PostgresSpeakingGradingJobRepository(client);

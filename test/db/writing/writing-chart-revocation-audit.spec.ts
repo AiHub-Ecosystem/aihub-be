@@ -3,7 +3,6 @@ import { ulid } from 'ulid';
 
 import { runUsagePruneCommand } from '@/cli/usage-prune';
 import type { UsageRetentionPort } from '@/modules/metering/application/billing/usage-retention';
-import { createFixturePrismaClient } from '@/modules/persistence/infrastructure/prisma-client';
 import { calculateWritingChartRevocationAuditCutoff } from '@/modules/writing/chart-uploads/application/writing-chart-revocation-audit-retention';
 import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import {
@@ -12,6 +11,7 @@ import {
   sandboxTestDatabaseUrl,
   testDatabaseUrl,
 } from '../shared/database';
+import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 const ACTIVE_AT = new Date('2026-10-01T00:00:00.000Z');
 

@@ -1,4 +1,4 @@
-import { getMetrics } from './metrics';
+import { getMetrics } from '@/common/observability/metrics/metrics';
 
 /**
  * The value of one sample, or undefined when the series is absent. Prometheus

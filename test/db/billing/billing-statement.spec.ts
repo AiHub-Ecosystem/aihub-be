@@ -8,16 +8,15 @@ import {
 import { MeteringService } from '@/modules/metering/application/usage-recording/metering.service';
 import { PostgresBillingStatementRepository } from '@/modules/metering/infrastructure/billing/postgres-billing-statement.repository';
 import { PostgresMonthlyBillableUsage } from '@/modules/metering/infrastructure/billing/postgres-monthly-billable-usage';
-import {
-  PostgresUsageRepository,
-  createPostgresMeteringClient,
-} from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
+
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import {
   createTestPool,
   resetIdentityTables,
   testDatabaseUrl,
 } from '../shared/database';
+import { createPostgresMeteringClient } from '../shared/postgres-metering.fixture-client';
 
 const ORG = 'org_billing';
 const OTHER = 'org_other';

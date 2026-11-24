@@ -42,11 +42,11 @@ import { SPEAKING_AUDIO_MAX_BYTES } from '@/modules/speaking/domain/speaking-aud
 import { registerSpeakingJsonBodyCancellation } from '@/modules/speaking/public/fastify-speaking-json-body.hook';
 import { registerSpeakingMultipartParser } from '@/modules/speaking/public/fastify-speaking-multipart.parser';
 import { aiSpeakingFixture } from '../../../../test/support/json-fixtures';
-import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 import {
   FakeAudioRepository,
   speakingAsset,
-} from './speaking-grading-jobs.test-fixtures';
+} from '../../../../test/support/speaking/speaking-grading-jobs.fixtures';
+import { useTestRuntimeConfiguration } from '../../../../test/support/test-runtime-configuration';
 
 const speakingResponseSchema = Type.Object({
   meta: Type.Object({ operation: Type.String() }),

@@ -1,4 +1,4 @@
-import { createFixturePrismaClient } from '@/modules/persistence/persistence.module';
+import { createFixturePrismaClient } from './fixture-prisma-client';
 
 /** Test-only Prisma client used by the unchanged database-lane specs. */
 export function createPostgresSandboxDispatchBudgetClient(

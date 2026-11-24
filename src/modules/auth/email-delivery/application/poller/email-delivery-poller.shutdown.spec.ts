@@ -1,4 +1,3 @@
-import { EmailDeliveryPoller } from './email-delivery-poller';
 import {
   FakeCredentials,
   FakeEmailProviderOutageCircuit,
@@ -10,7 +9,8 @@ import {
   VERIFICATION_PAYLOAD,
   claimed,
   sealed,
-} from './email-delivery-poller.spec-support';
+} from '../../../../../../test/support/auth/email-delivery-poller.spec-support';
+import { EmailDeliveryPoller } from './email-delivery-poller';
 
 function pollerStoppedBy(
   shouldStop: () => boolean,
