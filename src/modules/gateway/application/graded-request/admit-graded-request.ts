@@ -9,12 +9,10 @@ import type {
 import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
 import { quotaExceededError } from '@/modules/metering/public/quota-counter';
 
-/**
- * How long a same-key repeat is refused for: one window of first attempts. The
- * graded admission script counts first attempts and admitted repeats over the
- * same window.
- */
-export const RETRY_BUDGET_WINDOW_MS = 60_000;
+import {
+  ORGANIZATION_RETRY_BUDGET_POLICY,
+  type OrganizationRetryBudgetPolicy,
+} from './retry-budget-policy';
 
 /**
  * The operations whose same-key repeats count against the Organization retry
@@ -55,6 +53,8 @@ export interface GradedAdmissionPolicy {
   readonly quota: number | null;
   /** Whether the request counts against a monthly quota. */
   readonly quotaTracked: boolean;
+  /** The retry-budget values the admission adapter applies. */
+  readonly retryBudgetPolicy: OrganizationRetryBudgetPolicy;
 }
 
 /**
@@ -80,6 +80,7 @@ export function gradedAdmissionPolicy(
     retryBudget: retryBudgetKey === undefined ? 'none' : 'keyed_writing',
     quota,
     quotaTracked: quota !== null,
+    retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
   };
 }
 
@@ -105,6 +106,7 @@ export function admitGradedRequest(
       : { idempotencyKey: policy.retryBudgetKey }),
     monthlyRequestQuota: policy.quota,
     hardStopOnQuota: input.hardStopOnQuota,
+    retryBudgetPolicy: policy.retryBudgetPolicy,
   });
 }
 

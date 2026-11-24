@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
+import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
@@ -42,6 +43,7 @@ function request(
     idempotencyKey: `key_${randomUUID()}`,
     monthlyRequestQuota: null,
     hardStopOnQuota: false,
+    retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
     ...overrides,
   };
 }

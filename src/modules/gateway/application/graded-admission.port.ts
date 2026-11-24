@@ -1,5 +1,6 @@
 import type { OperationId } from '@/catalog/operation-id';
 
+import type { OrganizationRetryBudgetPolicy } from './graded-request/retry-budget-policy';
 import type { RateLimitStanding } from './rate-limiter.port';
 
 export interface GradedAdmissionRequest {
@@ -11,6 +12,7 @@ export interface GradedAdmissionRequest {
   readonly idempotencyKey?: string;
   readonly monthlyRequestQuota: number | null;
   readonly hardStopOnQuota: boolean;
+  readonly retryBudgetPolicy: OrganizationRetryBudgetPolicy;
 }
 
 export type GradedAdmissionDecision =

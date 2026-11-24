@@ -13,7 +13,6 @@ import type {
   GradedAdmissionPort,
   GradedAdmissionRequest,
 } from '@/modules/gateway/application/graded-admission.port';
-import { RETRY_BUDGET_WINDOW_MS } from '@/modules/gateway/application/graded-request/admit-graded-request';
 import {
   rateLimitStanding,
   rateLimitWindow,
@@ -27,30 +26,13 @@ import {
 import type { RedisGatewayClient } from './redis-gateway.client';
 import { rateLimitKey } from './redis-rate-limiter';
 
-/**
- * How many distinct Idempotency-Keys one Organization's retry budget remembers.
- *
- * A safety bound, not a capacity promise: without it the ledger tracks the
- * Organization's first-attempt volume for a rolling day, so one busy tenant
- * could grow the shared Redis by hundreds of megabytes. The gateway's quota
- * counter, rate limit, and concurrency leases share that instance and AIHUB
- * requires `noeviction` (#371), so an unbounded ledger would turn every Redis
- * write into an error, not only this one.
- *
- * At the ceiling the oldest remembered keys are dropped, so a dropped key's
- * next request counts as a first attempt. That direction is deliberate: the
- * budget may become more permissive for an old key, but it never refuses a
- * first attempt it could not classify.
- */
-export const ORGANIZATION_RETRY_SEEN_CAP = 10_000;
-
 const QUOTA_COUNTER_MISSING = 5;
 
 // Returns {result, rate_count}: the count feeds the RateLimit header fields.
 export const GRADED_ADMISSION_SCRIPT = `
 local rate_count = 0
 local function admit()
-if ARGV[6] ~= '' and redis.call('EXISTS', KEYS[5]) == 0 then return 5 end
+if ARGV[11] ~= '' and redis.call('EXISTS', KEYS[5]) == 0 then return 5 end
 
 rate_count = redis.call('INCR', KEYS[1])
 if rate_count == 1 then redis.call('EXPIRE', KEYS[1], 120) end
@@ -59,41 +41,41 @@ if rate_count > tonumber(ARGV[1]) then return 1 end
 if ARGV[2] == '1' then
   local clock = redis.call('TIME')
   local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
-  local cutoff = now - ${RETRY_BUDGET_WINDOW_MS}
+  local cutoff = now - tonumber(ARGV[6])
   redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', cutoff)
   redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', cutoff)
   redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now)
   local seen = redis.call('ZSCORE', KEYS[4], ARGV[3])
   if not seen then
-    redis.call('ZADD', KEYS[4], now + 86400000, ARGV[3])
+    redis.call('ZADD', KEYS[4], now + tonumber(ARGV[8]), ARGV[3])
     local cap = tonumber(ARGV[5])
     if cap and cap > 0 then
       redis.call('ZREMRANGEBYRANK', KEYS[4], 0, -(cap + 1))
     end
     redis.call('ZADD', KEYS[2], now, ARGV[4])
-    redis.call('EXPIRE', KEYS[2], 120)
-    redis.call('EXPIRE', KEYS[3], 120)
-    redis.call('EXPIRE', KEYS[4], 86460)
+    redis.call('EXPIRE', KEYS[2], tonumber(ARGV[7]))
+    redis.call('EXPIRE', KEYS[3], tonumber(ARGV[7]))
+    redis.call('EXPIRE', KEYS[4], tonumber(ARGV[9]))
   else
     local first_attempts = redis.call('ZCARD', KEYS[2])
     local admitted_repeats = redis.call('ZCARD', KEYS[3])
-    local allowance = math.max(1, math.floor(0.10 * first_attempts))
+    local allowance = math.max(1, math.floor(tonumber(ARGV[10]) * first_attempts))
     if admitted_repeats >= allowance then
-      redis.call('EXPIRE', KEYS[2], 120)
-      redis.call('EXPIRE', KEYS[3], 120)
-      redis.call('EXPIRE', KEYS[4], 86460)
+      redis.call('EXPIRE', KEYS[2], tonumber(ARGV[7]))
+      redis.call('EXPIRE', KEYS[3], tonumber(ARGV[7]))
+      redis.call('EXPIRE', KEYS[4], tonumber(ARGV[9]))
       return 2
     end
     redis.call('ZADD', KEYS[3], now, ARGV[4])
-    redis.call('EXPIRE', KEYS[2], 120)
-    redis.call('EXPIRE', KEYS[3], 120)
-    redis.call('EXPIRE', KEYS[4], 86460)
+    redis.call('EXPIRE', KEYS[2], tonumber(ARGV[7]))
+    redis.call('EXPIRE', KEYS[3], tonumber(ARGV[7]))
+    redis.call('EXPIRE', KEYS[4], tonumber(ARGV[9]))
   end
 end
 
-if ARGV[6] ~= '' then
+if ARGV[11] ~= '' then
   local count = tonumber(redis.call('GET', KEYS[5]))
-  local quota = tonumber(ARGV[6])
+  local quota = tonumber(ARGV[11])
   if not count or count < 0 or count ~= math.floor(count) or not quota then return 4 end
   if count >= quota then return 3 end
 end
@@ -205,7 +187,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
         return {
           stage: 'retry_budget',
           retryAfterMs: jitteredRetryAfterMs(
-            RETRY_BUDGET_WINDOW_MS,
+            request.retryBudgetPolicy.windowMs,
             this.random,
           ),
           rate,
@@ -231,6 +213,7 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
   ): Promise<readonly [number, number]> {
     const retryPrefix = `aihub:v1:org-retry:{${digest(request.organizationId)}}`;
     const applyRetryBudget = request.idempotencyKey !== undefined;
+    const policy = request.retryBudgetPolicy;
     let reply: readonly number[];
     try {
       reply = await client.evalNumbers(
@@ -250,7 +233,12 @@ export class RedisGradedAdmission implements GradedAdmissionPort {
           ? digest(`${request.operation}\u0000${request.idempotencyKey}`)
           : '',
         request.requestId,
-        String(ORGANIZATION_RETRY_SEEN_CAP),
+        String(policy.seenKeyCap),
+        String(policy.windowMs),
+        String(policy.windowTtlSeconds),
+        String(policy.retentionMs),
+        String(policy.retentionTtlSeconds),
+        String(policy.repeatAllowanceRatio),
         quota === null ? '' : String(quota),
       );
     } catch (cause) {
