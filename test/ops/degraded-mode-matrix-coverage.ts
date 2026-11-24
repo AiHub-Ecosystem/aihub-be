@@ -185,8 +185,19 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     ],
   },
   'Redis / User Access JWT revocation publish or subscriber is down': {
-    pending:
-      'Unit coverage only (bloom-filter-user-access-token-revocation.adapter.spec.ts); no fault-proxy case for a down publish or subscriber.',
+    tests: [
+      {
+        file: `${FAULT}token-revocation-fault.spec.ts`,
+        titles: [
+          'commits the revocation and rejects the token everywhere when the publish fails because Redis is %s',
+          'keeps rejecting revoked tokens from PostgreSQL while the subscriber is down, and resubscribes once Redis returns',
+        ],
+      },
+      {
+        file: 'src/modules/auth/user-access-tokens/infrastructure/bloom-filter/bloom-filter-user-access-token-revocation.adapter.spec.ts',
+        titles: ['stops retrying after the attempt bound and says so once'],
+      },
+    ],
   },
   'Redis / Gateway shared load-shedding level is down, slow, or unavailable': {
     tests: [
