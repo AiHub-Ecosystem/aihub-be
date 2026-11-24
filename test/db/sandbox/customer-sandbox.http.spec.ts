@@ -46,6 +46,7 @@ import {
 import { RUNTIME_CONNECTION_CONFIGURATION } from '@/modules/secrets/application/runtime-connection-configuration.port';
 import { flushOwnedRedisDatabase } from '../../../scripts/checks/db-lane/ownership';
 import { fixtureJson } from '../../support/json-fixtures';
+import { TcpFaultProxy } from '../../support/tcp-fault-proxy';
 import {
   createSandboxTestPool,
   createSandboxTestRedis,
@@ -55,7 +56,6 @@ import {
   testDatabaseUrl,
 } from '../shared/database';
 import { openFlushedSandboxRedis } from '../shared/flushed-sandbox-redis';
-import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-proxy';
 import {
   createTenantIdentity,
   signUserAssertion,

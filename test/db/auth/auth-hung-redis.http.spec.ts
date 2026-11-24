@@ -1,5 +1,6 @@
 import { ulid } from 'ulid';
 
+import { TcpFaultProxy } from '../../support/tcp-fault-proxy';
 import {
   type HttpAnswer,
   type TestWorker,
@@ -7,7 +8,6 @@ import {
   startWorker,
 } from '../dispatch/app-worker';
 import { sandboxTestRedisUrl } from '../shared/database';
-import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-proxy';
 
 // Scenario 3 of #328 (2026-10-09): hang the Redis the auth rate limiters use
 // and assert that login, refresh, and registration still answer within a

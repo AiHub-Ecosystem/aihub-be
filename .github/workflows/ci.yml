@@ -29,6 +29,7 @@ on:
       - "docs/operations/deploy-vps.md"
       - "docs/operations/image-sbom-provenance.md"
       - "docs/operations/image-vulnerability-scanning.md"
+      - "docs/superpowers/specs/2026-09-07-aihub/14-degraded-mode-matrix.md"
       - "ops/vault/README.md"
 
   workflow_dispatch:

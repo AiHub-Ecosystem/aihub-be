@@ -21,6 +21,7 @@ import {
 
 import { createTenantIsolationRedis } from '../fixtures';
 
+import { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   inflight,
@@ -30,7 +31,6 @@ import {
   rejection,
   timed,
 } from './fault-targets';
-import { TcpFaultProxy } from './tcp-fault-proxy';
 
 const OPERATION = 'writing.task2.grade' as const;
 const DEADLINE_MS = 600;

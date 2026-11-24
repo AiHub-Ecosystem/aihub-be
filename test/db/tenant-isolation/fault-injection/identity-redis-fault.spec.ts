@@ -28,6 +28,10 @@ import {
   signUserAssertion,
 } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   redisThroughProxy,
   redisUnavailableCount,
@@ -35,7 +39,6 @@ import {
   resetAndSeedTenants,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // Identity Redis clients time out a command at 100 ms; the Postgres lookup
 // behind them is local to the lane.
