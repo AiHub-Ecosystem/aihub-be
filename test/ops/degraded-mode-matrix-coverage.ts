@@ -111,16 +111,52 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     ],
   },
   'Redis / API-key revoke cache invalidation fails': {
-    pending:
-      'Unit coverage only (organization-api-key-revoke.controller.spec.ts, redis-identity.store.spec.ts); no fault-proxy case.',
+    tests: [
+      {
+        file: `${FAULT}api-key-cache-invalidation-fault.spec.ts`,
+        titles: [
+          'never fails the committed change when Redis is %s, leaves at most the 60 s positive entry, and a repeat purge removes it',
+        ],
+      },
+      {
+        file: 'src/modules/identity/api-keys/presentation/organization-api-key-revoke.controller.spec.ts',
+        titles: [
+          'still succeeds when the cache purge fails',
+          'purges again on a repeated withdrawal, so a retry closes a window a failed purge left open',
+        ],
+      },
+    ],
   },
   'Redis / API-key rotation cache invalidation fails': {
-    pending:
-      'Unit coverage only (organization-api-key-rotate.controller.spec.ts); no fault-proxy case.',
+    tests: [
+      {
+        file: `${FAULT}api-key-cache-invalidation-fault.spec.ts`,
+        titles: [
+          'never fails the committed change when Redis is %s, leaves at most the 60 s positive entry, and a repeat purge removes it',
+        ],
+      },
+      {
+        file: 'src/modules/identity/api-keys/presentation/organization-api-key-rotate.controller.spec.ts',
+        titles: ['still returns the replacement when the cache purge fails'],
+      },
+    ],
   },
   'Redis / Organization suspension cache invalidation fails': {
-    pending:
-      'Unit coverage only (src/cli/organization-status.spec.ts); no fault-proxy case.',
+    tests: [
+      {
+        file: `${FAULT}api-key-cache-invalidation-fault.spec.ts`,
+        titles: [
+          'fails the operator purge inside its bound when Redis is %s, leaves at most the 60 s positive entry, and a repeat purges it',
+        ],
+      },
+      {
+        file: 'src/cli/organization-status.spec.ts',
+        titles: [
+          'persists a failed %s purge without changing the committed act',
+          'reports a repeat as unchanged and still purges',
+        ],
+      },
+    ],
   },
   'Redis / Customer JWKS cache is down, slow, corrupt, or missing': {
     tests: [
