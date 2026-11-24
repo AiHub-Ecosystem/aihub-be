@@ -287,8 +287,9 @@ describe('graded admission retry ledger', () => {
     keys: readonly string[],
     member: string,
     requestId: string,
-    cap = 10_000,
+    cap = ORGANIZATION_RETRY_BUDGET_POLICY.seenKeyCap,
   ): Promise<readonly number[]> {
+    const policy = ORGANIZATION_RETRY_BUDGET_POLICY;
     return client.evalNumbers(
       GRADED_ADMISSION_SCRIPT,
       5,
@@ -298,6 +299,11 @@ describe('graded admission retry ledger', () => {
       member,
       requestId,
       String(cap),
+      String(policy.windowMs),
+      String(policy.windowTtlSeconds),
+      String(policy.retentionMs),
+      String(policy.retentionTtlSeconds),
+      String(policy.repeatAllowanceRatio),
       '',
     );
   }
