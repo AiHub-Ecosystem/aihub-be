@@ -228,8 +228,16 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'grades again once the service returns',
           ],
         },
+        {
+          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          titles: [
+            'answers %s as a retryable 503 AI_SERVICE_UNAVAILABLE and counts a credential failure',
+            'answers 429 as a retryable 503 AI_SERVICE_THROTTLED that keeps the provider retry hint',
+            'opens the breaker after the failure threshold and refuses at once without calling the service',
+            'refuses past the per-origin bulkhead at once with a retryable 503 and counts the drop',
+          ],
+        },
       ],
-      gaps: 'Only refused connections and recovery are proven; credential 401/403, provider 429 (AI_SERVICE_THROTTLED), and breaker or bulkhead refusal have no fault case.',
     },
   'AI Services and legacy content backend / Configured AI Service returns 5xx, 408, or 425; returns another 4xx; or times out':
     {
@@ -240,13 +248,26 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'answers 504 AI_SERVICE_TIMEOUT inside the deadline when the service hangs, cancels the call, and releases the permit',
           ],
         },
+        {
+          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          titles: [
+            'answers %s as a retryable 502 AI_SERVICE_ERROR',
+            'answers %s as a non-retryable 502 AI_SERVICE_ERROR',
+            'keeps the breaker closed through ordinary 4xx answers',
+          ],
+        },
       ],
-      gaps: 'The 5xx/408/425 and other-4xx mappings to 502 AI_SERVICE_ERROR are unit-only.',
     },
   'AI Services and legacy content backend / AI Service returns an invalid/unparseable response':
     {
-      pending:
-        'Unit coverage only (speaking-grading-response.adapter.spec.ts); no fault-proxy case for an invalid response.',
+      tests: [
+        {
+          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          titles: [
+            'answers %s as a non-retryable 502 AI_SERVICE_CONTRACT_VIOLATION',
+          ],
+        },
+      ],
     },
   'AI Services and legacy content backend / Legacy content backend is down, slow, or returns a wrong response':
     {
