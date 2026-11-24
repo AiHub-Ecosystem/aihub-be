@@ -276,7 +276,14 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
       'No DNS cutover case yet; #749 and #645 set the recovery bounds it verifies.',
   },
   [PROSE_OBLIGATIONS[2]]: {
-    pending:
-      'No compound fault-under-load case yet asserting bounded queues and memory with no OOM or restart cascade.',
+    tests: [
+      {
+        file: `${FAULT}compound-fault-under-load.spec.ts`,
+        titles: [
+          'answers every caller retryably inside the deadline with bounded queues and heap, and recovers without a restart',
+        ],
+      },
+    ],
+    gaps: 'HEAP_GROWTH_BOUND_BYTES (200 MiB) is provisional; #398 owns the per-process capacity budget it must match.',
   },
 };
