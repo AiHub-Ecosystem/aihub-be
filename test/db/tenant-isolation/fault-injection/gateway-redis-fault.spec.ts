@@ -2,12 +2,17 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
+import type { OperationId } from '@/catalog/operation-id';
+import type { RequestContext } from '@/common/request-context/request-context';
+import type {
+  DispatchResult,
+  OperationDispatcherPort,
+  RequestFor,
+  ResponseFor,
+} from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
 import { GradedPipelineEngine } from '@/modules/gateway/application/graded-request/graded-pipeline-engine';
-import {
-  type GradedPipelineContext,
-  completeGradedPipelineResponse,
-} from '@/modules/gateway/application/graded-request/graded-pipeline.port';
-import type { BaseGradingCommand } from '@/modules/gateway/application/graded-request/grading-orchestrator.port';
+import { type GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
+import { GradingOrchestrator } from '@/modules/gateway/application/graded-request/grading-orchestrator';
 import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   LEASE_REMOVAL_RETRY_MS,
@@ -102,7 +107,8 @@ async function runOrganizationGradedRequest(
   const operation = 'writing.task1.grade' as const;
   const requestId = `req_${randomUUID()}`;
   const signal = new AbortController().signal;
-  let dispatched = false;
+  const dispatchReached = new Error('dispatch reached');
+  let admitted = false;
   const context: GradedPipelineContext<typeof operation> = {
     requestId,
     receivedAt: new Date(),
@@ -140,7 +146,9 @@ async function runOrganizationGradedRequest(
       markCompletionStarted: () => undefined,
       markCompletionSettled: () => undefined,
     },
-    markAdmission: () => undefined,
+    markAdmission: () => {
+      admitted = true;
+    },
     prepareInput: async () => ({
       input: {
         question: 'Describe the chart.',
@@ -150,17 +158,25 @@ async function runOrganizationGradedRequest(
       },
     }),
   };
-  const engine = new GradedPipelineEngine(
-    {
-      async execute<C extends BaseGradingCommand>(command: C) {
-        dispatched = true;
-        return {
-          operation: command.operation,
-          data: {} as never,
-          downstreamMs: 1,
-        };
-      },
+  const dispatcher: OperationDispatcherPort = {
+    async dispatch<O extends OperationId>(
+      _operation: O,
+      _input: RequestFor<O>,
+      _context: RequestContext,
+    ): Promise<DispatchResult<ResponseFor<O>>> {
+      throw dispatchReached;
     },
+  };
+  const idempotency: IdempotencyServicePort = {
+    async execute<T>(
+      input: IdempotencyExecutionInput,
+      work: IdempotencyWork<T>,
+    ): Promise<IdempotencyExecution<T>> {
+      return { result: await work(input), replay: false };
+    },
+  };
+  const engine = new GradedPipelineEngine(
+    new GradingOrchestrator(dispatcher, idempotency),
     { finalize: async () => undefined },
     new RedisGradedAdmission(
       client,
@@ -170,20 +186,17 @@ async function runOrganizationGradedRequest(
       new RedisQuotaSeeder(client, { billableCount: async () => 0 }),
     ),
     limiter,
-    {
-      async execute<T>(
-        input: IdempotencyExecutionInput,
-        work: IdempotencyWork<T>,
-      ): Promise<IdempotencyExecution<T>> {
-        return { result: await work(input), replay: false };
-      },
-    } satisfies IdempotencyServicePort,
+    idempotency,
     { count: async () => 0 },
   );
 
-  const result = await engine.execute(context);
-  await completeGradedPipelineResponse(result);
-  return dispatched;
+  try {
+    await engine.execute(context);
+  } catch (error) {
+    if (error === dispatchReached) return admitted;
+    throw error;
+  }
+  return false;
 }
 
 beforeAll(async () => {
@@ -242,7 +255,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
     });
 
     it.each(['production', 'sandbox'] as const)(
-      'refuses a %s concurrency permit without admitting locally and leaks no lease',
+      'admits a %s Organization request after concurrent outage attempts leave no leases',
       async (environment) => {
         const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
         const organization = organizationId();
@@ -250,12 +263,18 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         const before = await redisUnavailableCount('concurrency');
 
         await proxy.setMode(mode);
-        const outage = await timed(() =>
-          limiter.acquire(concurrencyRequest(organization, environment)),
+        const outages = await Promise.all(
+          Array.from({ length: 3 }, () =>
+            timed(() =>
+              limiter.acquire(concurrencyRequest(organization, environment)),
+            ),
+          ),
         );
 
-        expect(rejection(outage.result)).toMatchObject(REDIS_UNAVAILABLE);
-        expect(outage.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+        for (const outage of outages) {
+          expect(rejection(outage.result)).toMatchObject(REDIS_UNAVAILABLE);
+          expect(outage.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+        }
         expect(await redisUnavailableCount('concurrency')).toBeGreaterThan(
           before,
         );
