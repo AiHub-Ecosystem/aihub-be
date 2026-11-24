@@ -295,6 +295,7 @@ beforeAll(async () => {
   controlPlaneConfiguration = createAppConfiguration('production');
   controlPlaneConnectionConfiguration = createConnectionConfiguration(
     testDatabaseUrl(),
+    testDatabaseUrl(),
     controlPlaneReaderUrl.toString(),
     'production',
   );
@@ -347,6 +348,7 @@ beforeAll(async () => {
   appConfiguration = createAppConfiguration();
   appConnectionConfiguration = createConnectionConfiguration(
     sandboxTestDatabaseUrl(),
+    testDatabaseUrl(),
     controlPlaneReaderUrl.toString(),
     'sandbox',
   );
@@ -439,6 +441,7 @@ function createAppConfiguration(
 
 function createConnectionConfiguration(
   databaseUrl: string,
+  controlPlaneDatabaseUrl: string,
   controlPlaneReadDatabaseUrl: string,
   scope: 'production' | 'sandbox',
 ): MutableConnectionConfiguration {
@@ -452,7 +455,7 @@ function createConnectionConfiguration(
       'email-daily-budget': undefined,
     },
     databaseUrl,
-    controlPlaneDatabaseUrl: databaseUrl,
+    controlPlaneDatabaseUrl,
     controlPlaneReadDatabaseUrl,
     emailDailyBudgetDatabaseUrl: testDatabaseUrl(),
     emailWalDatabaseUrl: testDatabaseUrl(),
@@ -1230,7 +1233,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     expect(downstreamCalls).toBe(1);
   });
 
-  it('fails closed when the Sandbox control-plane reader cannot read API keys', async () => {
+  it('reads API keys from the writer when the control-plane reader cannot read them', async () => {
     await controlPlane.query(
       `REVOKE SELECT (key_hash) ON api_keys FROM ${controlPlaneReaderRole}`,
     );
@@ -1244,10 +1247,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       );
     }
 
-    expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({
-      error: { code: 'INTERNAL_ERROR' },
-    });
-    expect(downstreamCalls).toBe(0);
+    expect(response.statusCode).toBe(200);
+    expect(downstreamCalls).toBe(1);
   });
 });

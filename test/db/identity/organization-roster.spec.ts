@@ -1,40 +1,14 @@
-import { ulid } from 'ulid';
-
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { Pool } from 'pg';
 
-import { AppModule } from '@/app.module';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
-import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/membership/application/organization-membership.port';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
 import { rosterCursorScope } from '@/modules/identity/membership/presentation/organization-roster-query';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
 import { encodeCursor } from '@/modules/identity/shared/presentation/cursor-codec';
 
-import {
-  createTestPool,
-  resetIdentityTables,
-  testDatabaseUrl,
-} from '../shared/database';
+import { MembershipFixture, bearer } from './support/membership-fixture';
 
-const REQUEST_ID = 'req_01J00000000000000000000000';
-const NOW = new Date('2026-10-30T12:00:00.000Z');
 const ROSTER_URL = '/v1/organizations/me/members';
 
+let fixture: MembershipFixture;
 let app: NestFastifyApplication;
 let pool: Pool;
 let callerId: string;
@@ -53,28 +27,15 @@ interface RosterPage {
   };
 }
 
-function bearer(userId: string): string {
-  return `Bearer ${userId}.token.value`;
-}
-
 async function seedAccount(username: string): Promise<string> {
-  const id = `usr_${ulid()}`;
-  await pool.query(
-    `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
-     VALUES ($1, $2, 'active', $3, $3)`,
-    [id, username, NOW],
-  );
-  return id;
+  return fixture.seedAccount(username);
 }
 
 async function seedOrganization(
   id: string,
   status: 'active' | 'suspended' = 'active',
 ): Promise<void> {
-  await pool.query(
-    'INSERT INTO organizations (id, name, status) VALUES ($1, $2, $3)',
-    [id, `Name of ${id}`, status],
-  );
+  await fixture.seedOrganization(id, status);
 }
 
 async function seedMembership(
@@ -83,12 +44,7 @@ async function seedMembership(
   role: 'owner' | 'admin' | 'member' = 'member',
   status: 'active' | 'disabled' = 'active',
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO organization_members (
-       organization_id, user_account_id, role, status, created_at, updated_at
-     ) VALUES ($1, $2, $3, $4, $5, $5)`,
-    [organizationId, userAccountId, role, status, NOW],
-  );
+  await fixture.seedMembership(userAccountId, role, status, organizationId);
 }
 
 async function joinCaller(
@@ -117,47 +73,20 @@ function ids(page: RosterPage): readonly string[] {
 }
 
 beforeAll(async () => {
-  pool = createTestPool();
-  const membership = new PostgresOrganizationMembershipRepository(
-    createPostgresIdentityClient(testDatabaseUrl()),
-  );
-  const verifier: UserAccessTokenVerifierPort = {
-    verify: async (token) =>
-      verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_01'),
-  };
-  const userAccounts = userAccountStatus(async (userId) => {
-    const result = await pool.query<{ status: 'active' | 'disabled' }>(
-      'SELECT status FROM user_accounts WHERE id = $1',
-      [userId],
-    );
-    return result.rows[0]?.status;
+  fixture = new MembershipFixture({
+    now: new Date('2026-10-30T12:00:00.000Z'),
   });
-
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(ORGANIZATION_MEMBERSHIP)
-    .useValue(membership)
-    .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-    .useValue(verifier)
-    .overrideProvider(USER_ACCOUNT_REPOSITORY)
-    .useValue(userAccounts)
-    .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-    .compile();
-
-  app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-  );
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
+  await fixture.boot();
+  app = fixture.app;
+  pool = fixture.pool;
 });
 
 afterAll(async () => {
-  await app.close();
-  await pool.end();
+  await fixture.close();
 });
 
 beforeEach(async () => {
-  await resetIdentityTables(pool);
+  await fixture.reset();
   callerId = await seedAccount('owner');
 });
 

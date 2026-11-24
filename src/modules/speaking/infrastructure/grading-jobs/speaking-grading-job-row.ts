@@ -64,6 +64,17 @@ export interface InFlightCountInput {
  * dispatches, so its reservation must still count after the boundary. Active
  * reservations are short-lived (queue expiry, dispatch interrupt, settlement
  * sweep), so the unbounded range stays small.
+ *
+ * A job the meter has already counted is excluded even while its reservation
+ * stays active (#1950): the meter increments the live counter before it
+ * writes the record, so counting both would charge one request twice and a
+ * caller could be refused `QUOTA_EXCEEDED` with quota left. A billable record
+ * is the condition the finalizer uses to attempt that increment; an increment
+ * that throws is already fail-open there (ADR-0018), so this count takes the
+ * record at its word rather than second-guessing the counter. Releasing the
+ * reservation stays a separate, later step, so a release that failed no longer
+ * pins the count for the sweep's two-minute grace window either. A handoff that
+ * never wrote a record still counts until the sweep releases it.
  */
 export async function countInFlight(
   client: PrismaClient | Prisma.TransactionClient,
@@ -72,7 +83,14 @@ export async function countInFlight(
   const rows = await client.$queryRawUnsafe<
     readonly { readonly count: bigint }[]
   >(
-    `SELECT count(*) AS count FROM speaking_grading_jobs WHERE organization_id = $1 AND environment = $2 AND status IN ('queued', 'running', 'succeeded') AND quota_reservation_active = true`,
+    `SELECT count(*) AS count FROM speaking_grading_jobs j
+     WHERE j.organization_id = $1 AND j.environment = $2
+       AND j.status IN ('queued', 'running', 'succeeded')
+       AND j.quota_reservation_active = true
+       AND NOT EXISTS (
+         SELECT 1 FROM usage_records u
+         WHERE u.request_id = j.job_id AND u.billable_requests = 1
+       )`,
     input.organizationId,
     input.environment,
   );

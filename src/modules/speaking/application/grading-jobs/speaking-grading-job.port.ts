@@ -111,7 +111,7 @@ export interface SpeakingGradingJobRepositoryPort {
     readonly completedAt: Date;
   }): Promise<boolean>;
 
-  /** Active quota reservations (`queued`, `running`, or `succeeded` awaiting metering handoff) for the Organization and Environment, whatever month they were created in. */
+  /** Active quota reservations (`queued`, `running`, or `succeeded` whose meter has not counted it yet) for the Organization and Environment, whatever month they were created in. */
   countInFlight(input: {
     readonly organizationId: string;
     readonly environment: SpeakingAudioEnvironment;

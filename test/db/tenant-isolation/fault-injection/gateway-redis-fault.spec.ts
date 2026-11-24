@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
+import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
 import {
   LEASE_REMOVAL_RETRY_MS,
   RedisConcurrencyLimiter,
@@ -62,6 +63,7 @@ function gradedRequest(organization: string) {
     operation: 'writing.task2.grade' as const,
     monthlyRequestQuota: 1_000,
     hardStopOnQuota: false,
+    retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
   };
 }
 

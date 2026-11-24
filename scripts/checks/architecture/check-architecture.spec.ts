@@ -1375,6 +1375,8 @@ describe('cross-module table access', () => {
       'organization_invitations: auth + identity',
       // Metering reads the Organization an entitlement decision is about.
       'organizations: identity + metering',
+      // #1950: Speaking's in-flight quota count skips a job the meter charged.
+      'usage_records: metering + speaking',
       // Writing records the active operator account for #816 revocations.
       'user_accounts: auth + identity + writing',
     ]);

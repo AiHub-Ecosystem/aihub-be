@@ -1,44 +1,17 @@
-import { ulid } from 'ulid';
-
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import type { Pool } from 'pg';
 
-import { AppModule } from '@/app.module';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
-import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/membership/application/organization-membership.port';
-import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
-import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
-
-import {
-  createTestPool,
-  resetIdentityTables,
-  testDatabaseUrl,
+  MembershipFixture,
+  REQUEST_ID,
+  bearer,
   waitForBlockedBy,
-} from '../shared/database';
-import {
-  PausingIdentityClient,
   waitForQueryCapture,
-} from '../shared/pausing-identity-client';
+} from './support/membership-fixture';
 
 const ORGANIZATION_ID = 'org_membership_mutation';
-const REQUEST_ID = 'req_01J00000000000000000000000';
-const NOW = new Date('2026-09-24T12:00:00.000Z');
 
 const ROUTE_DENIAL = {
   change_role: 'Organization membership role change is forbidden',
@@ -66,30 +39,20 @@ function responseError(response: { json(): unknown }) {
 
 type MutationRoute = keyof typeof ROUTE_DENIAL;
 
+let fixture: MembershipFixture;
 let app: NestFastifyApplication;
 let pool: Pool;
-let identityClient: PausingIdentityClient;
 let ownerId: string;
 let secondOwnerId: string;
 let adminId: string;
 let secondAdminId: string;
 let memberId: string;
 
-function bearer(userId: string): string {
-  return `Bearer ${userId}.token.value`;
-}
-
 async function seedAccount(
   username: string,
   status: 'active' | 'disabled' = 'active',
 ): Promise<string> {
-  const id = `usr_${ulid()}`;
-  await pool.query(
-    `INSERT INTO user_accounts (id, username, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $4)`,
-    [id, username, status, NOW],
-  );
-  return id;
+  return fixture.seedAccount(username, status);
 }
 
 async function seedMembership(
@@ -97,12 +60,7 @@ async function seedMembership(
   role: 'owner' | 'admin' | 'member',
   status: 'active' | 'disabled',
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO organization_members (
-       organization_id, user_account_id, role, status, created_at, updated_at
-     ) VALUES ($1, $2, $3, $4, $5, $5)`,
-    [ORGANIZATION_ID, userAccountId, role, status, NOW],
-  );
+  await fixture.seedMembership(userAccountId, role, status);
 }
 
 function mutate(
@@ -135,6 +93,24 @@ async function auditEvents(): Promise<readonly AuditRow[]> {
      ORDER BY occurred_at, id`,
   );
   return result.rows;
+}
+
+async function expectRefused(
+  route: MutationRoute,
+  response: Awaited<ReturnType<typeof mutate>>,
+): Promise<void> {
+  const error = responseError(response);
+  expect({
+    status: response.statusCode,
+    code: error?.code,
+    message: error?.message,
+    audit: (await auditEvents()).length,
+  }).toEqual({
+    status: 403,
+    code: 'FORBIDDEN',
+    message: ROUTE_DENIAL[route],
+    audit: 0,
+  });
 }
 
 function activeOwners(): Promise<number> {
@@ -510,57 +486,20 @@ const CASES: Readonly<Record<MutationRoute, readonly Case[]>> = {
 };
 
 beforeAll(async () => {
-  pool = createTestPool();
-  identityClient = new PausingIdentityClient(
-    createPostgresIdentityClient(testDatabaseUrl()),
-  );
-  // The real repository over a real engine. ORGANIZATION_MEMBERSHIP_MUTATION is
-  // deliberately not overridden, so the composition root builds the real
-  // ManageOrganizationMembership on top of it.
-  const membership = new PostgresOrganizationMembershipRepository(
-    identityClient.asPrisma(),
-  );
-  const verifier: UserAccessTokenVerifierPort = {
-    verify: async (token) =>
-      verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_01'),
-  };
-  const userAccounts = userAccountStatus(async (userId) => {
-    const result = await pool.query<{ status: 'active' | 'disabled' }>(
-      'SELECT status FROM user_accounts WHERE id = $1',
-      [userId],
-    );
-    return result.rows[0]?.status;
+  fixture = new MembershipFixture({
+    primaryOrganization: { id: ORGANIZATION_ID, name: 'Membership Mutation' },
   });
-
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(ORGANIZATION_MEMBERSHIP)
-    .useValue(membership)
-    .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-    .useValue(verifier)
-    .overrideProvider(USER_ACCOUNT_REPOSITORY)
-    .useValue(userAccounts)
-    .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-    .compile();
-
-  app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-  );
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
+  await fixture.boot();
+  app = fixture.app;
+  pool = fixture.pool;
 });
 
 afterAll(async () => {
-  await app.close();
-  await pool.end();
+  await fixture.close();
 });
 
 beforeEach(async () => {
-  await resetIdentityTables(pool);
-  await pool.query(
-    'INSERT INTO organizations (id, name, status) VALUES ($1, $2, $3)',
-    [ORGANIZATION_ID, 'Membership Mutation', 'active'],
-  );
+  await fixture.reseedPrimaryOrganization();
   ownerId = await seedAccount('owner');
   secondOwnerId = await seedAccount('second-owner');
   adminId = await seedAccount('admin');
@@ -613,17 +552,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         const response = await mutate(route, outsiderId, 'member');
 
-        expect({
-          status: response.statusCode,
-          code: responseError(response)?.code,
-          message: responseError(response)?.message,
-          audit: (await auditEvents()).length,
-        }).toEqual({
-          status: 403,
-          code: 'FORBIDDEN',
-          message: ROUTE_DENIAL[route],
-          audit: 0,
-        });
+        await expectRefused(route, response);
       });
 
       it('gives a caller with a disabled membership the route denial, and records nothing', async () => {
@@ -634,17 +563,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         const response = await mutate(route, ownerId, 'member');
 
-        expect({
-          status: response.statusCode,
-          code: responseError(response)?.code,
-          message: responseError(response)?.message,
-          audit: (await auditEvents()).length,
-        }).toEqual({
-          status: 403,
-          code: 'FORBIDDEN',
-          message: ROUTE_DENIAL[route],
-          audit: 0,
-        });
+        await expectRefused(route, response);
       });
 
       it('refuses a suspended Organization, and records nothing', async () => {
@@ -655,17 +574,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
         const response = await mutate(route, ownerId, 'member');
 
-        expect({
-          status: response.statusCode,
-          code: responseError(response)?.code,
-          message: responseError(response)?.message,
-          audit: (await auditEvents()).length,
-        }).toEqual({
-          status: 403,
-          code: 'FORBIDDEN',
-          message: ROUTE_DENIAL[route],
-          audit: 0,
-        });
+        await expectRefused(route, response);
       });
 
       it('refuses a suspension that lands while the request is in flight, and records nothing', async () => {
@@ -674,7 +583,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
         // between the use case's own check and the transaction's re-read of the
         // Organization row. Naming the statement rather than the first one keeps
         // the test honest if the use case ever reads something else first.
-        const pause = identityClient.pauseAfterQueryContaining(
+        const pause = fixture.identityClient.pauseAfterQueryContaining(
           'organization_status',
         );
         const request = mutate(route, ownerId, 'member');
@@ -685,23 +594,13 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
             [ORGANIZATION_ID],
           );
         } finally {
-          identityClient.disarm();
+          fixture.identityClient.disarm();
           pause.release();
         }
 
         const response = await request;
 
-        expect({
-          status: response.statusCode,
-          code: responseError(response)?.code,
-          message: responseError(response)?.message,
-          audit: (await auditEvents()).length,
-        }).toEqual({
-          status: 403,
-          code: 'FORBIDDEN',
-          message: ROUTE_DENIAL[route],
-          audit: 0,
-        });
+        await expectRefused(route, response);
       });
     },
   );
@@ -834,7 +733,8 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
   it('keeps an owner when two owners demote each other at the same moment', async () => {
     // Held straight after the Organization row lock is taken, so the second
     // request can only be waiting on that lock and on nothing else.
-    const pause = identityClient.pauseAfterQueryContaining('FOR UPDATE');
+    const pause =
+      fixture.identityClient.pauseAfterQueryContaining('FOR UPDATE');
     const first = mutate('change_role', ownerId, 'second-owner');
     let second: ReturnType<typeof mutate> | undefined;
     try {
@@ -842,7 +742,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
 
       // The pid of the connection the hold is on, not whichever backend happens
       // to be inside a transaction.
-      const holder = await identityClient.heldBackend();
+      const holder = await fixture.identityClient.heldBackend();
       if (holder === undefined) {
         throw new Error('the held statement reported no backend');
       }
@@ -869,7 +769,7 @@ describe('Membership mutation over HTTP and PostgreSQL', () => {
     } finally {
       // A hold that outlives its test would stall every later statement and the
       // suite's own teardown.
-      identityClient.disarm();
+      fixture.identityClient.disarm();
       pause.release();
       await Promise.all(
         [first, second]

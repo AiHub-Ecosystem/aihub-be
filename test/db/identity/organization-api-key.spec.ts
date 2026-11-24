@@ -615,6 +615,33 @@ describe('organization API key rotation against PostgreSQL', () => {
     });
   }
 
+  /** Rotates with explicit allowlists, for cases that must not read them from storage. */
+  async function rotateWithAllowlists(options: {
+    readonly apiKeyId: string;
+    readonly retiredEnvironments: readonly string[];
+    readonly replacementEnvironments: readonly string[];
+    readonly replacementEnvironment: 'sandbox' | 'production' | 'staging';
+  }) {
+    const generated = generateOrganizationApiKey(
+      new Date(),
+      options.replacementEnvironment,
+    );
+    const result = await repository.rotateApiKey({
+      context: listContext(ORGANIZATION_ID),
+      organizationId: ORGANIZATION_ID,
+      actorUserId,
+      apiKeyId: options.apiKeyId,
+      replacementId: generated.id,
+      keyHash: generated.hash,
+      keyPrefix: generated.prefix,
+      retiredAllowedEnvironments: options.retiredEnvironments,
+      replacementAllowedEnvironments: options.replacementEnvironments,
+      rotatedByUsername: 'rotator',
+      now: new Date(),
+    });
+    return { result, replacement: generated };
+  }
+
   /** An empty cache, so the assertion is about durable state, not about Redis. */
   function emptyCache(): ApiKeyCachePort {
     return {
@@ -710,20 +737,11 @@ describe('organization API key rotation against PostgreSQL', () => {
       name: 'legacy shared key',
       environments: ['sandbox', 'production'],
     });
-    const replacement = generateOrganizationApiKey(new Date(), 'sandbox');
-
-    const result = await repository.rotateApiKey({
-      context: listContext(ORGANIZATION_ID),
-      organizationId: ORGANIZATION_ID,
-      actorUserId,
+    const { result, replacement } = await rotateWithAllowlists({
       apiKeyId: retired.id,
-      replacementId: replacement.id,
-      keyHash: replacement.hash,
-      keyPrefix: replacement.prefix,
-      retiredAllowedEnvironments: ['sandbox', 'production'],
-      replacementAllowedEnvironments: ['sandbox'],
-      rotatedByUsername: 'rotator',
-      now: new Date(),
+      retiredEnvironments: ['sandbox', 'production'],
+      replacementEnvironments: ['sandbox'],
+      replacementEnvironment: 'sandbox',
     });
 
     expect(result).toMatchObject({
@@ -757,20 +775,11 @@ describe('organization API key rotation against PostgreSQL', () => {
       name: 'production-only key',
       environments: ['production'],
     });
-    const replacement = generateOrganizationApiKey(new Date(), 'sandbox');
-
-    const result = await repository.rotateApiKey({
-      context: listContext(ORGANIZATION_ID),
-      organizationId: ORGANIZATION_ID,
-      actorUserId,
+    const { result } = await rotateWithAllowlists({
       apiKeyId: retired.id,
-      replacementId: replacement.id,
-      keyHash: replacement.hash,
-      keyPrefix: replacement.prefix,
-      retiredAllowedEnvironments: ['sandbox', 'production'],
-      replacementAllowedEnvironments: ['sandbox'],
-      rotatedByUsername: 'rotator',
-      now: new Date(),
+      retiredEnvironments: ['sandbox', 'production'],
+      replacementEnvironments: ['sandbox'],
+      replacementEnvironment: 'sandbox',
     });
 
     expect(result.kind).toBe('key_not_rotatable');

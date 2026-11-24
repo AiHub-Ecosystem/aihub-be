@@ -1,8 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { Value } from '@sinclair/typebox/value';
 import type { Pool } from 'pg';
@@ -13,17 +10,6 @@ import {
   type ListOpenOrganizationInvitationsResponse,
   ListOpenOrganizationInvitationsResponseSchema,
 } from '@/contracts/organization/invitation';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import {
   OPEN_ORGANIZATION_INVITATION_RECORD,
   type OpenOrganizationInvitationRecordPort,
@@ -41,9 +27,9 @@ import {
   resetIdentityTables,
   testDatabaseUrl,
 } from '../shared/database';
+import { buildIdentityApp } from './support/identity-app';
 
 const ORGANIZATION_ID = 'org_invitation_list';
-const REQUEST_ID = 'req_01J00000000000000000000000';
 const BASE_TIME = Date.now();
 const NOW = new Date(BASE_TIME);
 const EXPIRES_AT = new Date(BASE_TIME + 30 * 86400000);
@@ -151,36 +137,14 @@ beforeAll(async () => {
   const invitationRepo: OpenOrganizationInvitationRecordPort =
     new PostgresOrganizationInvitationReadRepository(identityClient);
 
-  const verifier: UserAccessTokenVerifierPort = {
-    verify: async (token) =>
-      verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_01'),
-  };
-  const userAccounts = userAccountStatus(async (userId) => {
-    const result = await pool.query<{ status: 'active' | 'disabled' }>(
-      'SELECT status FROM user_accounts WHERE id = $1',
-      [userId],
-    );
-    return result.rows[0]?.status;
+  app = await buildIdentityApp({
+    builder: Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(ORGANIZATION_MEMBERSHIP)
+      .useValue(membership)
+      .overrideProvider(OPEN_ORGANIZATION_INVITATION_RECORD)
+      .useValue(invitationRepo),
+    pool,
   });
-
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(ORGANIZATION_MEMBERSHIP)
-    .useValue(membership)
-    .overrideProvider(OPEN_ORGANIZATION_INVITATION_RECORD)
-    .useValue(invitationRepo)
-    .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-    .useValue(verifier)
-    .overrideProvider(USER_ACCOUNT_REPOSITORY)
-    .useValue(userAccounts)
-    .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-    .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-    .compile();
-
-  app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-  );
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
 });
 
 afterAll(async () => {
