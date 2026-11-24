@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
+import { GradedPipelineEngine } from '@/modules/gateway/application/graded-request/graded-pipeline-engine';
+import {
+  type GradedPipelineContext,
+  completeGradedPipelineResponse,
+} from '@/modules/gateway/application/graded-request/graded-pipeline.port';
+import type { BaseGradingCommand } from '@/modules/gateway/application/graded-request/grading-orchestrator.port';
 import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   LEASE_REMOVAL_RETRY_MS,
@@ -16,6 +22,12 @@ import {
   RedisRateLimiter,
   rateLimitKey,
 } from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import type {
+  IdempotencyExecution,
+  IdempotencyExecutionInput,
+  IdempotencyServicePort,
+  IdempotencyWork,
+} from '@/modules/idempotency/application/idempotency-service.port';
 import { createRedisMeteringClient } from '@/modules/metering/infrastructure/quota/redis-metering.client';
 import { RedisQuotaCounter } from '@/modules/metering/infrastructure/quota/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
@@ -80,6 +92,98 @@ function concurrencyRequest(
     requestId: `req_${randomUUID()}`,
     environment,
   };
+}
+
+async function runOrganizationGradedRequest(
+  organization: string,
+  environment: 'production' | 'sandbox',
+  limiter: RedisConcurrencyLimiter,
+): Promise<boolean> {
+  const operation = 'writing.task1.grade' as const;
+  const requestId = `req_${randomUUID()}`;
+  const signal = new AbortController().signal;
+  let dispatched = false;
+  const context: GradedPipelineContext<typeof operation> = {
+    requestId,
+    receivedAt: new Date(),
+    signal,
+    dispose: () => undefined,
+    operation,
+    authenticated: {
+      organizationId: organization,
+      apiKeyId: `ak_${organization}`,
+      environment,
+      scopes: ['writing.grade'],
+      rateLimitRpm: 600,
+      maxConcurrent: 2,
+      monthlyRequestQuota: 1_000,
+      hardStopOnQuota: false,
+      allowedEnvironments: ['production', 'sandbox'],
+    },
+    identity: {
+      userId: 'user_acme',
+      organizationId: organization,
+      scopes: [],
+      mode: 'declared_id',
+    },
+    idempotencyKey: `key-${randomUUID()}`,
+    metering: {
+      evidence: {
+        operation,
+        organizationId: organization,
+        apiKeyId: `ak_${organization}`,
+        environment,
+        settled: false,
+      },
+      setDimensions: () => undefined,
+      addEvidence: () => undefined,
+      markCompletionStarted: () => undefined,
+      markCompletionSettled: () => undefined,
+    },
+    markAdmission: () => undefined,
+    prepareInput: async () => ({
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Line Graph',
+        essay: 'A clear response.',
+        image_url: 'https://example.com/chart.png',
+      },
+    }),
+  };
+  const engine = new GradedPipelineEngine(
+    {
+      async execute<C extends BaseGradingCommand>(command: C) {
+        dispatched = true;
+        return {
+          operation: command.operation,
+          data: {} as never,
+          downstreamMs: 1,
+        };
+      },
+    },
+    { finalize: async () => undefined },
+    new RedisGradedAdmission(
+      client,
+      () => Date.now(),
+      Math.random,
+      NOOP_LOGGER,
+      new RedisQuotaSeeder(client, { billableCount: async () => 0 }),
+    ),
+    limiter,
+    {
+      async execute<T>(
+        input: IdempotencyExecutionInput,
+        work: IdempotencyWork<T>,
+      ): Promise<IdempotencyExecution<T>> {
+        return { result: await work(input), replay: false };
+      },
+    } satisfies IdempotencyServicePort,
+    { count: async () => 0 },
+  );
+
+  const result = await engine.execute(context);
+  await completeGradedPipelineResponse(result);
+  return dispatched;
 }
 
 beforeAll(async () => {
@@ -167,11 +271,9 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
           LEASE_REMOVAL_RETRY_MS * 3,
         );
 
-        const recovered = await limiter.acquire(
-          concurrencyRequest(organization, environment),
-        );
-        expect(recovered.allowed).toBe(true);
-        if (recovered.allowed) await recovered.lease.release();
+        await expect(
+          runOrganizationGradedRequest(organization, environment, limiter),
+        ).resolves.toBe(true);
         expect(await inflight(raw, organization)).toBe(0);
         expect(await sandboxInflight(raw)).toBe(0);
       },
