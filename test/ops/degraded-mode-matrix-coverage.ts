@@ -266,8 +266,16 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     },
   'PostgreSQL / API-key status or Organization Identity Configuration read could use a lagging replica':
     {
-      pending:
-        'The writer-read target is a code gap tracked by #2020: CONTROL_PLANE_READ wiring still exists. #2029 adds a case proving these reads use the writer once #2020 lands.',
+      // A wiring check, not a fault case: #2020 (PR #2031) removed the
+      // replica target, so there is no replica read left to fault.
+      tests: [
+        {
+          file: 'src/modules/identity/testing/identity.module.spec.ts',
+          titles: [
+            'uses the writer for durable reads and does not fall back to a replica',
+          ],
+        },
+      ],
     },
   'PostgreSQL / Speaking result-ownership write fails': {
     tests: [
@@ -305,8 +313,16 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     gaps: 'The matrix names aihub_metering_incomplete_total and a durable incomplete outcome for reconciliation. The code counts a lost write in aihub_metering_write_failed_total{reason} and a log line; aihub_metering_incomplete_total counts only missing_usage records, and no durable row marks the lost write (its dispatch attempt reads response_received, so the unresolved-attempt gauge skips it). #372 decides which side moves; #2029 applies it.',
   },
   'PostgreSQL / Audit/UX read uses a replica': {
-    untestable:
-      'The matrix forbids replica routing until a measured lag bound exists, so there is no replica read to fault. Whether these reads use the writer is a wiring check, not a fault case.',
+    // A wiring check, not a fault case: #2020 (PR #2031) removed the
+    // replica target, so there is no replica read left to fault.
+    tests: [
+      {
+        file: 'src/modules/identity/testing/identity.module.spec.ts',
+        titles: [
+          'uses the writer for durable reads and does not fall back to a replica',
+        ],
+      },
+    ],
   },
   'Vault and runtime secrets / Required secret is missing, malformed, or incomplete at startup':
     {
