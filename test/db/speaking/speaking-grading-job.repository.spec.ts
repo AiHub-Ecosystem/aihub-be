@@ -115,6 +115,22 @@ const RESULT: SpeakingV2QuestionResult = {
 describe('Speaking grading job repository in PostgreSQL', () => {
   afterAll(async () => client.close());
 
+  async function createClaimedSucceededJob(
+    organizationId: string,
+    completedAt: Date = NOW,
+  ): Promise<NewSpeakingGradingJob> {
+    const job = makeJob({ organizationId });
+    await repository.create(job);
+    await repository.claim({
+      jobId: job.jobId,
+      now: NOW,
+      leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+    });
+    await repository.succeed({ jobId: job.jobId, result: RESULT, completedAt });
+    return job;
+  }
+
   it('creates and returns a job only to its Organization, End-User ID and Environment', async () => {
     const job = makeJob();
     await repository.create(job);
@@ -340,19 +356,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
 
   it('keeps a successful job reserved until metering handoff completes', async () => {
     const organizationId = 'org_' + ulid();
-    const job = makeJob({ organizationId });
-    await repository.create(job);
-    await repository.claim({
-      jobId: job.jobId,
-      now: NOW,
-      leaseExpiresAt: new Date(NOW.getTime() + 60_000),
-      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
-    });
-    await repository.succeed({
-      jobId: job.jobId,
-      result: RESULT,
-      completedAt: NOW,
-    });
+    const job = await createClaimedSucceededJob(organizationId);
 
     const duringMetering = makeJob({ organizationId });
     await expect(
@@ -382,6 +386,60 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         }),
       }),
     ).resolves.toEqual({ created: true });
+  });
+
+  it('stops counting a succeeded job once its meter has charged it, before the release (#1950)', async () => {
+    const organizationId = 'org_' + ulid();
+    const job = await createClaimedSucceededJob(organizationId);
+
+    const admit = async (monthlyQuota: number | null) => ({
+      admitted: monthlyQuota !== null && monthlyQuota > 0,
+    });
+    const beforeMeter = makeJob({ organizationId });
+    await expect(
+      repository.createWithAdmission({
+        job: beforeMeter,
+        monthlyQuota: 1,
+        admit,
+      }),
+    ).resolves.toEqual({ created: false, existingJobId: beforeMeter.jobId });
+
+    // The meter increments the live counter before it writes this row, and the
+    // release can still fail and wait for the sweep, so admission must see the
+    // same remaining quota as if the release had already run.
+    await client.usageRecord.create({
+      data: {
+        requestId: job.jobId,
+        organizationId,
+        apiKeyId: 'key_' + ulid(),
+        service: 'speaking',
+        operation: 'speaking.v2.question-grading',
+        environment: 'production',
+        outcome: 'success',
+        httpStatus: 200,
+        billableRequests: 1,
+        meteringStatus: 'complete',
+        totalMs: 1,
+      },
+    });
+    // Inside the two-minute grace window, so the sweep has not released it.
+    await expect(
+      repository.releaseSettledQuotaReservations(
+        new Date(NOW.getTime() - 119_999),
+      ),
+    ).resolves.toBe(0);
+
+    const afterMeter = makeJob({ organizationId });
+    await expect(
+      repository.createWithAdmission({
+        job: afterMeter,
+        monthlyQuota: 1,
+        admit,
+      }),
+    ).resolves.toEqual({ created: true });
+    await expect(repository.releaseQuotaReservation(job.jobId)).resolves.toBe(
+      true,
+    );
   });
 
   it('releases a successful job whose metering handoff never completed once the grace window passes', async () => {
