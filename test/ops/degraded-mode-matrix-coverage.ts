@@ -5,7 +5,9 @@
  * so editing a row forces a review of its proof. A few keys name obligations the
  * matrix states in prose rather than in a table row.
  *
- * #2019 stays open while any proof is `pending` or a tested proof lists `gaps`.
+ * A `pending` proof or a tested proof with `gaps` names the issue that owns it:
+ * #2028 (DNS/IP cutover and recovery bounds), #2029 (matrix/code alignment),
+ * #2030 (test-only gaps), or #398 (the heap budget).
  */
 export interface MatrixSpec {
   /** Repo-relative path of the spec. */
@@ -61,7 +63,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
       ],
-      gaps: 'No case fails the durable-usage source during a rebuild: hard-stop Organizations failing closed and others admitted as quota_unverified are unproven.',
+      gaps: 'No case fails the durable-usage source during a rebuild: hard-stop Organizations failing closed and others admitted as quota_unverified are unproven (#2030).',
     },
   'Redis / Graded concurrency permit is down, slow, ambiguous, or malformed': {
     tests: [
@@ -96,7 +98,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
   },
   'Redis / Non-graded rate limiter is down or slow': {
     pending:
-      'Matrix/code conflict: gateway.module.ts binds RATE_LIMITER to RedisRateLimiter, which fails closed with REDIS_UNAVAILABLE (gateway-redis-fault.spec.ts), and RateLimitGuard has no process-local fallback, while the matrix promises one. #372 decides which side moves.',
+      'Matrix/code conflict: gateway.module.ts binds RATE_LIMITER to RedisRateLimiter, which fails closed with REDIS_UNAVAILABLE (gateway-redis-fault.spec.ts), and RateLimitGuard has no process-local fallback, while the matrix promises one. #372 decides which side moves; #2029 applies it.',
   },
   'Redis / Authentication rate limiter is down or slow': {
     tests: [
@@ -116,7 +118,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
       ],
-      gaps: 'The fault case proves the seam signal and the process-local fallback; the 300 s / 10,000-entry failure map and the 5 req/s burst-5 bucket are unit-only (redis-identity.store.spec.ts).',
+      gaps: 'The fault case proves the seam signal and the process-local fallback; the 300 s / 10,000-entry failure map and the 5 req/s burst-5 bucket are unit-only (redis-identity.store.spec.ts); #2030.',
     },
   'Redis / API-key cache is down, slow, corrupt, or missing': {
     tests: [
@@ -181,7 +183,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         titles: ['fails closed when Redis cannot reserve a verified assertion'],
       },
     ],
-    gaps: 'The case proves the fallback to the JWKS source and the jwks_cache signal; its 503 comes from the replay-marker reservation. No case proves 503 IDENTITY_PROVIDER_UNAVAILABLE with no usable cache and an unavailable source.',
+    gaps: 'The case proves the fallback to the JWKS source and the jwks_cache signal; its 503 comes from the replay-marker reservation. No case proves 503 IDENTITY_PROVIDER_UNAVAILABLE with no usable cache and an unavailable source (#2030).',
   },
   'Redis / DPoP replay marker is down or ambiguous': {
     tests: [
@@ -265,7 +267,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
   'PostgreSQL / API-key status or Organization Identity Configuration read could use a lagging replica':
     {
       pending:
-        'The writer-read target is a code gap tracked by #2020: CONTROL_PLANE_READ wiring still exists. Add a case proving these reads use the writer when #2020 lands.',
+        'The writer-read target is a code gap tracked by #2020: CONTROL_PLANE_READ wiring still exists. #2029 adds a case proving these reads use the writer once #2020 lands.',
     },
   'PostgreSQL / Speaking result-ownership write fails': {
     tests: [
@@ -300,7 +302,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         ],
       },
     ],
-    gaps: 'The matrix names aihub_metering_incomplete_total and a durable incomplete outcome for reconciliation. The code counts a lost write in aihub_metering_write_failed_total{reason} and a log line; aihub_metering_incomplete_total counts only missing_usage records, and no durable row marks the lost write (its dispatch attempt reads response_received, so the unresolved-attempt gauge skips it). #372 decides which side moves.',
+    gaps: 'The matrix names aihub_metering_incomplete_total and a durable incomplete outcome for reconciliation. The code counts a lost write in aihub_metering_write_failed_total{reason} and a log line; aihub_metering_incomplete_total counts only missing_usage records, and no durable row marks the lost write (its dispatch attempt reads response_received, so the unresolved-attempt gauge skips it). #372 decides which side moves; #2029 applies it.',
   },
   'PostgreSQL / Audit/UX read uses a replica': {
     untestable:
@@ -319,7 +321,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
       ],
-      gaps: 'The provider throws while the module is built, but no boot-level case starts the app with a missing secret and proves it exits before listening. aihub_secret_delivery_healthy is set by scripts/ops/host-jobs/container-watchdog.sh, covered by its shell spec, not by this map.',
+      gaps: 'The provider throws while the module is built, but no boot-level case starts the app with a missing secret and proves it exits before listening (#2030). aihub_secret_delivery_healthy is set by scripts/ops/host-jobs/container-watchdog.sh, covered by its shell spec, not by this map.',
     },
   'Vault and runtime secrets / Vault/Agent becomes unavailable after a snapshot is loaded':
     {
@@ -354,7 +356,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         titles: ['uses the %s budget without automatic retries'],
       },
     ],
-    gaps: 'The operator client is proven to use its own 3 s connection and 30 s request bounds with one attempt. No case fails or stalls a sweep mid-listing and proves the next run retries from the retained cleanup state.',
+    gaps: 'The operator client is proven to use its own 3 s connection and 30 s request bounds with one attempt. No case fails or stalls a sweep mid-listing and proves the next run retries from the retained cleanup state (#2030).',
   },
   // Not through a fault proxy: the sender posts to Resend's fixed HTTPS
   // endpoint, so provider answers are injected at its fetch seam and the
@@ -503,7 +505,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
       ],
-      gaps: 'No case proves a hung source is cut at the 3 s fetch timeout. On the assertion path UserAssertionVerifier turns IDENTITY_JWKS_INVALID into retryable 503 IDENTITY_PROVIDER_UNAVAILABLE, while the matrix promises non-retryable 400 IDENTITY_JWKS_INVALID; #372 decides which side moves.',
+      gaps: 'No case proves a hung source is cut at the 3 s fetch timeout (#2030). On the assertion path UserAssertionVerifier turns IDENTITY_JWKS_INVALID into retryable 503 IDENTITY_PROVIDER_UNAVAILABLE, while the matrix promises non-retryable 400 IDENTITY_JWKS_INVALID; #372 decides which side moves; #2029 applies it.',
     },
   [PROSE_OBLIGATIONS[0]]: {
     tests: [
@@ -516,11 +518,11 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         ],
       },
     ],
-    gaps: 'RECOVERY_BOUND_MS (10 s) is provisional; #749 and #645 own the same-process recovery bounds it must match.',
+    gaps: 'RECOVERY_BOUND_MS (10 s) is provisional; #2028 replaces it with the same-process recovery bounds #749 and #645 select.',
   },
   [PROSE_OBLIGATIONS[1]]: {
     pending:
-      'No DNS cutover case yet; #749 and #645 set the recovery bounds it verifies.',
+      'No DNS cutover case yet; #2028 owns it, blocked by #749 and #645.',
   },
   [PROSE_OBLIGATIONS[2]]: {
     tests: [
