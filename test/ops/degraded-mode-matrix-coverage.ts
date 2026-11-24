@@ -271,8 +271,19 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     },
   'AI Services and legacy content backend / Legacy content backend is down, slow, or returns a wrong response':
     {
-      pending:
-        'Unit coverage only (http-legacy-content.client.spec.ts); no fault-proxy case. #1949 owns any behavior change.',
+      tests: [
+        {
+          file: `${FAULT}legacy-content-fault.spec.ts`,
+          titles: [
+            'answers a refused connection at once with a retryable 503 AI_SERVICE_UNAVAILABLE',
+            'answers a hung backend with a retryable 504 AI_SERVICE_TIMEOUT at its 10 s timeout',
+            'answers upstream %s with a retryable 503 AI_SERVICE_UNAVAILABLE',
+            'answers upstream %s with a non-retryable 502 AI_SERVICE_ERROR',
+            'answers %s with a non-retryable 502 AI_SERVICE_CONTRACT_VIOLATION',
+            'serves content again once the backend returns',
+          ],
+        },
+      ],
     },
   'Customer JWKS endpoints / Customer JWKS source is down, slow, unreachable, or returns unusable data':
     {
