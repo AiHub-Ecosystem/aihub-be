@@ -80,6 +80,9 @@ afterAll(async () => {
   // Close every client first, so a failed cleanup step cannot leave a handle
   // that keeps Jest from exiting.
   await dpop.onModuleDestroy();
+  // The cache's quit fails while its client is still reconnecting after the
+  // last fault, and the client then reconnects forever, so Jest never exits.
+  dpopRedis.disconnect();
   await gatewayRedis.quit().catch(() => undefined);
   email.onModuleDestroy();
   await proxy.close();

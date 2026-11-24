@@ -36,6 +36,9 @@ let authClient: ReturnType<typeof createPostgresAuthClient>;
 let proxy: TcpFaultProxy;
 let proxiedUrl: string;
 const adapters: BloomFilterUserAccessTokenRevocationAdapter[] = [];
+// The adapter skips disconnecting its subscriber when unsubscribe fails, and a
+// reconnecting client keeps Jest from exiting, so the spec disconnects both.
+const clients: Redis[] = [];
 
 /** Built as auth-runtime.module.ts builds it, against the proxied Redis. */
 function adapter(withSubscriber: boolean) {
@@ -59,6 +62,7 @@ function adapter(withSubscriber: boolean) {
     redisSubscriber: subscriber,
   });
   adapters.push(created);
+  clients.push(publisher, ...(subscriber === undefined ? [] : [subscriber]));
   return { adapter: created, publisher };
 }
 
@@ -90,6 +94,7 @@ beforeAll(async () => {
 afterEach(async () => {
   await proxy.setMode('normal');
   await Promise.all(adapters.splice(0).map((created) => created.close()));
+  for (const client of clients.splice(0)) client.disconnect();
 });
 
 afterAll(async () => {
