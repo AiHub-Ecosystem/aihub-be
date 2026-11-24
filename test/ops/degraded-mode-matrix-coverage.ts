@@ -287,8 +287,35 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     },
   'Customer JWKS endpoints / Customer JWKS source is down, slow, unreachable, or returns unusable data':
     {
-      pending:
-        'jwks-dns-isolation.integration.spec.ts covers a silent DNS query only; no case for an unreachable or unusable source with and without a stale cache.',
+      // Not through a fault proxy: the JWKS fetch accepts only https URLs on
+      // public hosts (SSRF guard), so it cannot reach a loopback proxy. These
+      // specs inject the failing source instead.
+      tests: [
+        {
+          file: 'src/modules/identity/user-assertions/infrastructure/jwks-key-provider.spec.ts',
+          titles: [
+            'serves stale keys when a refresh fails within the stale window',
+            'returns the contracted unavailable error when there is no usable cache',
+            'classifies DNS and network failures as retryable source unavailability',
+            'classifies unsupported JWKS content as invalid without echoing it',
+            'rejects a response over the 64KB cap before caching it',
+            'negatively caches a cold JWKS failure for 30 seconds with a retry hint',
+          ],
+        },
+        {
+          file: 'src/modules/identity/user-assertions/application/user-assertion-verifier.spec.ts',
+          titles: [
+            'answers an unreachable JWKS source with no usable cache as a retryable IDENTITY_PROVIDER_UNAVAILABLE',
+          ],
+        },
+        {
+          file: 'test/integration/jwks-dns-isolation.integration.spec.ts',
+          titles: [
+            'lets Argon2 and another Organization’s downstream hostname connect during a silent JWKS DNS query',
+          ],
+        },
+      ],
+      gaps: 'No case proves a hung source is cut at the 3 s fetch timeout. On the assertion path UserAssertionVerifier turns IDENTITY_JWKS_INVALID into retryable 503 IDENTITY_PROVIDER_UNAVAILABLE, while the matrix promises non-retryable 400 IDENTITY_JWKS_INVALID; #372 decides which side moves.',
     },
   [PROSE_OBLIGATIONS[0]]: {
     tests: [

@@ -8,6 +8,7 @@ import {
   importJWK,
 } from 'jose';
 
+import { AppError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { getMetrics } from '@/common/observability/metrics/metrics';
 import type {
@@ -548,6 +549,34 @@ describe('UserAssertionVerifier', () => {
       }),
     ).resolves.toMatchObject({ userId: 'user_123' });
     expect(calls).toEqual([false, true, false, true]);
+  });
+
+  it('answers an unreachable JWKS source with no usable cache as a retryable IDENTITY_PROVIDER_UNAVAILABLE', async () => {
+    const fixture = await rsaFixture();
+    // What JwksKeyProvider throws when the source is down and no fresh or
+    // stale keys remain (jwks-key-provider.spec.ts).
+    const sourceDown = new AppError({
+      code: 'IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+      message: 'JWKS source is unavailable',
+      retryable: true,
+    });
+    const subject = verifier({
+      resolve: () => Promise.reject(sourceDown),
+      validateRemote: () => Promise.resolve({ keys: [] }),
+    });
+
+    await expect(
+      subject.verify({
+        signedAssertion: await token(fixture.privateKey, {
+          jti: 'jti-source-down',
+        }),
+        organizationId: 'org_acme',
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
   });
 
   it('allows an untracked Organization its first rotation reload when every cooldown is live', async () => {
