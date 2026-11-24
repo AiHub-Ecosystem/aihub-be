@@ -165,6 +165,18 @@ describe('compound dependency fault under load in one app process', () => {
     const app = worker as TestWorker;
     const tenant = organization as GradingOrganization;
     const pid = app.child.pid;
+    // Warm the grading path before the faults. Otherwise the app's PostgreSQL
+    // pool opens its first connections through the slowed proxy and every
+    // caller misses the API-key cache, so the whole load can be refused
+    // before any grading reaches the hung AI Service, which proves nothing
+    // about that fault (seen once in CI).
+    await eventually(
+      async () => (await fetch(`${app.url}/ready`)).status === 200,
+      10_000,
+    );
+    providerHangs = false;
+    expect((await grade(app, tenant)).status).toBe(200);
+    providerPeakInFlight = 0;
     const heapBefore = await metricSum(app, 'aihub_process_heap_used_bytes');
 
     providerHangs = true;
@@ -201,6 +213,11 @@ describe('compound dependency fault under load in one app process', () => {
     const failures = answers.filter(({ status }) => status >= 400);
     expect(failures).toHaveLength(LOAD);
     expect(failures.filter(({ retryable }) => retryable !== true)).toEqual([]);
+    // Some gradings reached the hung AI Service and timed out; on failure the
+    // diff names every refusal code the load got.
+    expect(new Set(failures.map(({ code }) => code))).toContain(
+      'AI_SERVICE_TIMEOUT',
+    );
     // The permits and the per-origin bulkhead cap what reaches the hung AI
     // Service, so its socket pool never queues.
     expect(providerPeakInFlight).toBeGreaterThan(0);
