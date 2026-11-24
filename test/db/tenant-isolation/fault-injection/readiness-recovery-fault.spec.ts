@@ -134,7 +134,7 @@ describe('readiness through dependency faults in one app process', () => {
 
     expect(up.dependencies).toEqual({ 'runtime-postgres': 'up', redis: 'up' });
     expect(stillRunning(app, pid)).toBe(true);
-  }, 90_000);
+  }, 150_000);
 
   describe.each<[Dependency, FaultMode]>([
     ['postgres', 'refuse'],
@@ -174,7 +174,7 @@ describe('readiness through dependency faults in one app process', () => {
         redis: 'up',
       });
       expect(stillRunning(app, pid)).toBe(true);
-    }, 90_000);
+    }, 150_000);
   });
 
   it.each<Dependency>(['postgres', 'redis'])(
@@ -193,6 +193,6 @@ describe('readiness through dependency faults in one app process', () => {
       expect(slow.status).toBe(200);
       expect(slow.ms).toBeLessThan(READY_ANSWER_BOUND_MS);
     },
-    90_000,
+    150_000,
   );
 });

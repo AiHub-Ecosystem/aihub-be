@@ -96,10 +96,12 @@ export async function startWorker(configuration: {
   });
   const ready = new Promise<number>((resolve, reject) => {
     const lines = createInterface({ input: worker.stdout! });
+    // A cold boot takes about 16 s; two lane workers booting together on a
+    // loaded runner have needed over 45 s.
     const timeout = setTimeout(() => {
       lines.close();
       reject(new Error(`AIHUB test worker did not start: ${stderr}`));
-    }, 45_000);
+    }, 90_000);
     lines.on('line', (line) => {
       const port = Number(line.match(/^AIHUB_TEST_READY:(\d+)$/)?.[1]);
       if (Number.isSafeInteger(port) && port > 0) {

@@ -17,6 +17,8 @@ import {
   SheddingLevelStore,
 } from '@/modules/gateway/infrastructure/shedding-level.store';
 
+import { createTenantIsolationRedis } from '../fixtures';
+
 import {
   eventually,
   redisAnswers,
@@ -72,16 +74,23 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  // A published level would shed gradings in later specs of this lane.
-  await gatewayRedis.eval(
-    "return redis.call('DEL', KEYS[1])",
-    1,
-    SHEDDING_LEVEL_KEY,
-  );
+  // Close every client first, so a failed cleanup step cannot leave a handle
+  // that keeps Jest from exiting.
   await dpop.onModuleDestroy();
-  await gatewayRedis.quit();
+  await gatewayRedis.quit().catch(() => undefined);
   email.onModuleDestroy();
   await proxy.close();
+  // A published level would shed gradings in later specs of this lane. The
+  // proxied clients may still be reconnecting after the last fault, so the
+  // key is removed on a direct connection.
+  const raw = createTenantIsolationRedis();
+  try {
+    // The client has no offline queue, so wait until it is connected.
+    await redisAnswers(raw);
+    await raw.del(SHEDDING_LEVEL_KEY);
+  } finally {
+    await raw.quit();
+  }
 });
 
 describe('DPoP replay marker while Redis is down', () => {

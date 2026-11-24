@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { MeteringService } from '@/modules/metering/application/usage-recording/metering.service';
-import { createRedisMeteringClient } from '@/modules/metering/infrastructure/quota/redis-metering.client';
+import {
+  type RedisMeteringClient,
+  createRedisMeteringClient,
+} from '@/modules/metering/infrastructure/quota/redis-metering.client';
 import { RedisQuotaCounter } from '@/modules/metering/infrastructure/quota/redis-quota-counter';
 import { PostgresUsageRepository } from '@/modules/metering/infrastructure/usage-recording/postgres-usage.repository';
 import {
@@ -40,6 +43,7 @@ let pool: ReturnType<typeof createTestPool>;
 let raw: ReturnType<typeof createTenantIsolationRedis>;
 let holder: PrismaClientHolder;
 let proxy: TcpFaultProxy;
+let meteringClient: RedisMeteringClient;
 let counter: RedisQuotaCounter;
 let metering: MeteringService;
 let fixture: TenantIsolationFixture;
@@ -91,11 +95,10 @@ beforeAll(async () => {
   holder = createPrismaClient('integration-test', testDatabaseUrl());
   const target = await redisThroughProxy();
   proxy = target.proxy;
-  counter = new RedisQuotaCounter(
-    createRedisMeteringClient(target.url),
-    () => new Date(),
-    NOOP_LOGGER,
-  );
+  const client = createRedisMeteringClient(target.url);
+  if (client === undefined) throw new Error('Metering Redis client missing');
+  meteringClient = client;
+  counter = new RedisQuotaCounter(client, () => new Date(), NOOP_LOGGER);
   metering = new MeteringService(
     new PostgresUsageRepository(holder.prisma),
     undefined,
@@ -142,9 +145,21 @@ describe('post-result quota increment while Redis is down', () => {
         call.result.status === 'fulfilled' ? call.result.value : '';
       expect(await meteringStatus(requestId)).toBe('quota_unverified');
       expect(await redisUnavailableCount('quota')).toBeGreaterThan(before);
-      // The counter missed this request; it is never read as zero usage.
-      await proxy.setMode('normal');
+      // While the fault holds, the counter missed this request (read on a
+      // direct connection); it is never reset or read as zero usage.
       expect(await raw.get(quotaKey())).toBe('4');
+
+      await proxy.setMode('normal');
+      // A refused increment never reached Redis. A timed-out one is
+      // ambiguous: its bytes were held, not dropped, so Redis may still run
+      // it once the stall ends (#645 owns late-command behavior). A reply on
+      // the same connection means anything sent before it has run.
+      await eventually(
+        async () => (await meteringClient.get(quotaKey())) !== null,
+      );
+      expect(mode === 'refuse' ? ['4'] : ['4', '5']).toContain(
+        await raw.get(quotaKey()),
+      );
     },
   );
 

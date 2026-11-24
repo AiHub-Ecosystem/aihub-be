@@ -109,6 +109,23 @@ await test('the PgBouncer template change runs the database lane (#1868)', () =>
   );
 });
 
+await test('a degraded-mode matrix change runs the unit lane (#2019)', () => {
+  // The proof-map spec in the unit lane reads the matrix, so a row change must
+  // run it.
+  const { jobs, fallback } = plan([
+    'docs/superpowers/specs/2026-09-07-aihub/14-degraded-mode-matrix.md',
+  ]);
+  assert.equal(fallback, undefined);
+  assert.equal(jobs.test, true);
+  // Another spec chapter stays documentation-only.
+  assert.equal(
+    plan([
+      'docs/superpowers/specs/2026-09-07-aihub/07-reliability-and-errors.md',
+    ]).jobs.test,
+    false,
+  );
+});
+
 await test('an empty change set runs every job', () => {
   const { jobs, fallback } = plan([]);
   assert.ok(fallback);

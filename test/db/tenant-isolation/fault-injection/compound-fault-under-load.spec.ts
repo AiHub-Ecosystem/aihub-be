@@ -127,7 +127,7 @@ describe('compound dependency fault under load in one app process', () => {
       monthlyQuota: 10_000,
       hardStop: false,
     });
-  }, 90_000);
+  }, 150_000);
 
   afterAll(async () => {
     await worker?.stop();

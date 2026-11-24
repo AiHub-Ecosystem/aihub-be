@@ -176,6 +176,15 @@ export const AREAS = [
     checks: ['check:doc-drift'],
   },
   {
+    // #2019: the unit lane's proof-map spec parses this matrix, so a row added,
+    // renamed, or removed here must run the spec that catches a missing proof.
+    area: 'the degraded-mode matrix the proof-map spec reads',
+    pattern:
+      /^docs\/superpowers\/specs\/2026-09-07-aihub\/14-degraded-mode-matrix\.md$/,
+    jobs: ['static', 'test'],
+    checks: ['check:doc-drift'],
+  },
+  {
     area: 'documentation and local agent rules',
     pattern: /^(?:docs\/|AGENTS\.md$|\.claude\/|\.coderabbit\.ya?ml$)|\.md$/,
     jobs: ['static'],
