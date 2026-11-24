@@ -24,6 +24,10 @@ import {
   createTenantIsolationRedis,
 } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   metricValue,
@@ -32,7 +36,6 @@ import {
   resetAndSeedTenants,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // Two PostgreSQL writes that follow a successful grading, from the #2019
 // matrix. The metering write is best-effort: the client keeps its result. The

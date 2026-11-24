@@ -10,7 +10,12 @@ import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/
 import { GRADIENT2_DEFAULT_CONFIG } from '@/modules/gateway/infrastructure/dispatch/gradient2-concurrency-limiter';
 import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
 
-import { eventually, metricValue, rejection, timed } from './fault-targets';
+import {
+  eventually,
+  metricValue,
+  rejection,
+  timed,
+} from '../../../../test/support/fault-timing';
 
 // The AI Service answers, but with a status or body the matrix maps to a
 // client error (#2019, 14-degraded-mode-matrix.md "AI Services" rows).

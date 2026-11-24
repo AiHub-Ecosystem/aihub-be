@@ -4,9 +4,13 @@ import { type Server, createServer } from 'node:http';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { HttpLegacyContentClient } from '@/modules/content-proxy/infrastructure/http-legacy-content.client';
 
-import { rejection, timed } from './fault-targets';
-import { TcpFaultProxy } from './tcp-fault-proxy';
+import { rejection, timed } from '../../../support/fault-timing';
+import { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 
+// It needs no database, but stays in this Jest-on-Node lane: under the unit
+// lane's Bun runner the client would use Bun's fetch, not the undici fetch
+// production runs, and the hung-backend case then fails with a connection
+// error instead of the timeout.
 // The legacy content backend row of the #2019 matrix. #1949 owns any change
 // to this mapping; these cases pin the current one.
 // The client's fixed fetch timeout (DEFAULT_TIMEOUT_MS in the client).

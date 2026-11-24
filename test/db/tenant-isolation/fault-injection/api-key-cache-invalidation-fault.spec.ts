@@ -12,6 +12,10 @@ import { RedisIdentityStore } from '@/modules/identity/shared/infrastructure/red
 
 import { createTenantIsolationRedis } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   redisTarget,
@@ -20,7 +24,6 @@ import {
   rejection,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // The revoke, rotation, and suspension cache-invalidation rows of the #2019
 // matrix. The durable change is already committed when the purge runs; these

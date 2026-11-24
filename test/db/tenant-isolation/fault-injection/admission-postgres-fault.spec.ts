@@ -23,6 +23,7 @@ import {
   createTenantIsolationRedis,
 } from '../fixtures';
 
+import type { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 import {
   inflight,
   postgresThroughProxy,
@@ -31,7 +32,6 @@ import {
   resetAndSeedTenants,
   timed,
 } from './fault-targets';
-import type { TcpFaultProxy } from './tcp-fault-proxy';
 
 // Scenario 4 of #328 (2026-10-09): Postgres slows down while gradings hold
 // their Organization permits. The usage write is awaited on the response

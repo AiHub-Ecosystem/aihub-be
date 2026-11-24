@@ -2,7 +2,7 @@ import { Client, type Pool } from 'pg';
 
 import { getMetrics } from '@/common/observability/metrics/metrics';
 import { createPostgresPool } from '@/common/postgres/postgres-pool';
-import { TcpFaultProxy } from '../tenant-isolation/fault-injection/tcp-fault-proxy';
+import { TcpFaultProxy } from '../../support/tcp-fault-proxy';
 import { testDatabaseUrl } from './database';
 
 /**

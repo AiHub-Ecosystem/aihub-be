@@ -1,7 +1,6 @@
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
-import { getMetrics } from '@/common/observability/metrics/metrics';
 import type { RedisProtectionSeam } from '@/common/observability/metrics/redis-unavailable-metric';
 import { generateOrganizationApiKey } from '@/modules/identity/api-keys/application/organization-api-key-generator';
 
@@ -14,21 +13,15 @@ import {
   seedTenantIsolation,
 } from '../fixtures';
 
-import { TcpFaultProxy } from './tcp-fault-proxy';
+import { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 
-/** A metric's current value from the exposition, or 0 before it is set. */
-export async function metricValue(
-  name: string,
-  labels: Readonly<Record<string, string>>,
-): Promise<number> {
-  const labelText = Object.entries(labels)
-    .map(([key, value]) => `${key}="${value}"`)
-    .join(',');
-  const line = (await getMetrics())
-    .split('\n')
-    .find((candidate) => candidate.startsWith(`${name}{${labelText}} `));
-  return line === undefined ? 0 : Number(line.slice(line.lastIndexOf(' ') + 1));
-}
+export {
+  eventually,
+  metricValue,
+  rejection,
+  timed,
+} from '../../../support/fault-timing';
+import { eventually, metricValue } from '../../../support/fault-timing';
 
 export function redisUnavailableCount(
   seam: RedisProtectionSeam,
@@ -123,32 +116,4 @@ export async function postgresThroughProxy(
   url.hostname = '127.0.0.1';
   url.port = String(port);
   return { proxy, url: url.toString() };
-}
-
-/** Milliseconds an async call took, with its outcome. */
-export async function timed<T>(
-  run: () => Promise<T>,
-): Promise<{ readonly ms: number; readonly result: PromiseSettledResult<T> }> {
-  const startedAt = performance.now();
-  const [result] = await Promise.allSettled([run()]);
-  return { ms: performance.now() - startedAt, result };
-}
-
-export function rejection(result: PromiseSettledResult<unknown>): unknown {
-  if (result.status !== 'rejected') {
-    throw new Error('Expected the call to fail during the fault');
-  }
-  return result.reason;
-}
-
-export async function eventually(
-  check: () => Promise<boolean>,
-  timeoutMs = 3_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await check().catch(() => false)) return;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error('Condition was not met after the fault cleared');
 }

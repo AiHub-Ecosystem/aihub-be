@@ -1,7 +1,10 @@
 import { type TestWorker, startWorker } from '../../dispatch/app-worker';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import { postgresThroughProxy, redisThroughProxy } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // The readiness probe gives each dependency 1 s, so one /ready answer is
 // bounded a little above that.

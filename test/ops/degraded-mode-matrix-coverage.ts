@@ -419,7 +419,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
         {
-          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          file: 'src/modules/gateway/infrastructure/ai-service-response-fault.spec.ts',
           titles: [
             'answers %s as a retryable 503 AI_SERVICE_UNAVAILABLE and counts a credential failure',
             'answers 429 as a retryable 503 AI_SERVICE_THROTTLED that keeps the provider retry hint',
@@ -439,7 +439,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
           ],
         },
         {
-          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          file: 'src/modules/gateway/infrastructure/ai-service-response-fault.spec.ts',
           titles: [
             'answers %s as a retryable 502 AI_SERVICE_ERROR',
             'answers %s as a non-retryable 502 AI_SERVICE_ERROR',
@@ -452,7 +452,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     {
       tests: [
         {
-          file: `${FAULT}ai-service-response-fault.spec.ts`,
+          file: 'src/modules/gateway/infrastructure/ai-service-response-fault.spec.ts',
           titles: [
             'answers %s as a non-retryable 502 AI_SERVICE_CONTRACT_VIOLATION',
           ],

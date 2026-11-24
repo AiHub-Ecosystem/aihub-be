@@ -16,6 +16,10 @@ import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-
 
 import { createTenantIsolationRedis } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   inflight,
@@ -26,7 +30,6 @@ import {
   sandboxInflight,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // The gateway client's commandTimeout is 200 ms; a refusal must not wait out
 // a reconnect or a stalled reply much longer than that.

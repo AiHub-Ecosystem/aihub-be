@@ -25,6 +25,10 @@ import {
   createTenantIsolationRedis,
 } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   postgresThroughProxy,
@@ -32,7 +36,6 @@ import {
   resetAndSeedTenants,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 const REFUSED_BOUND_MS = 2_000;
 const STALLED_BOUND_MS =

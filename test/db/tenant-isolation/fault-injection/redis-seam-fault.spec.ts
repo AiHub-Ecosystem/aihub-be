@@ -19,6 +19,10 @@ import {
 
 import { createTenantIsolationRedis } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   redisAnswers,
@@ -27,7 +31,6 @@ import {
   rejection,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // Redis seams of the #2019 matrix whose fallback is decided in the adapter:
 // DPoP replay markers, the shared shedding level, and the email send rate.

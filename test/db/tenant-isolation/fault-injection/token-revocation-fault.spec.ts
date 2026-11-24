@@ -14,13 +14,16 @@ import { PostgresUserAccessTokenRevocationRepository } from '@/modules/auth/user
 import { createPostgresAuthClient } from '../../auth/postgres-auth.client';
 import { createTestPool, testDatabaseUrl } from '../../shared/database';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   redisThroughProxy,
   redisUnavailableCount,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // The User Access JWT revocation row of the #2019 matrix: PostgreSQL is the
 // authority, Redis Pub/Sub only feeds a local Bloom filter.

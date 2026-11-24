@@ -23,8 +23,8 @@ import {
 import { createTestPool } from '../../shared/database';
 import { createTenantIsolationRedis } from '../fixtures';
 
+import type { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 import { eventually, postgresThroughProxy, redisTarget } from './fault-targets';
-import type { TcpFaultProxy } from './tcp-fault-proxy';
 
 // The compound case of #2019: the AI Service hangs and PostgreSQL is slow
 // while one Organization sends far more gradings than its permits allow.

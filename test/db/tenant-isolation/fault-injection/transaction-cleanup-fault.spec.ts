@@ -2,9 +2,9 @@ import { runGuardedTransaction } from '@/modules/persistence/infrastructure/pris
 import { createPrismaClient } from '@/modules/persistence/persistence.module';
 import type { Prisma, PrismaClient } from '@prisma-client/client';
 
+import type { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 import { createTestPool } from '../../shared/database';
 import { eventually, postgresThroughProxy, timed } from './fault-targets';
-import type { TcpFaultProxy } from './tcp-fault-proxy';
 
 // A transaction whose cleanup cannot be confirmed must not hand its open
 // transaction to the next borrower (#1285). The factory, pool, and timeouts are

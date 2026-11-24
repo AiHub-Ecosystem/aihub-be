@@ -23,6 +23,10 @@ import {
   createTenantIsolationRedis,
 } from '../fixtures';
 
+import type {
+  FaultMode,
+  TcpFaultProxy,
+} from '../../../support/tcp-fault-proxy';
 import {
   eventually,
   redisThroughProxy,
@@ -30,7 +34,6 @@ import {
   resetAndSeedTenants,
   timed,
 } from './fault-targets';
-import type { FaultMode, TcpFaultProxy } from './tcp-fault-proxy';
 
 // The post-result quota increment row of the #2019 matrix: the client keeps
 // its result, the durable usage record lands, and the record says the quota
