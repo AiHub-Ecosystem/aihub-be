@@ -137,6 +137,40 @@ describe('ConfiguredRuntimeSecretProvider', () => {
     expect(provider.getSnapshot()).toBe(first);
   });
 
+  it('keeps serving the loaded snapshot once the Agent-rendered file becomes unreadable', () => {
+    let available = true;
+    const provider = new ConfiguredRuntimeSecretProvider(
+      options({
+        source: 'agent-file',
+        secretsFile: 'runtime-secrets.json',
+        readFile: () => {
+          if (!available) throw new Error('Vault Agent is gone');
+          return JSON.stringify({
+            'ai-speaking': {
+              client_id: speakingClient,
+              secret_key: speakingSecret,
+            },
+            'ai-writing': { token: writingToken },
+            resend: { api_key: resendApiKey },
+            'user-access-jwt': {
+              private_key_pem: userAccessPrivateKey,
+              key_id: userAccessKeyId,
+            },
+            'email-outbox': emailOutboxAgent,
+            'web-session': { client_secret: bffClientSecret },
+          });
+        },
+      }),
+    );
+    const loaded = provider.getSnapshot();
+
+    // Vault or its Agent going away after startup changes nothing in-process.
+    available = false;
+
+    expect(provider.getSnapshot()).toBe(loaded);
+    expect(provider.getSnapshot().aiWriting).toEqual({ token: writingToken });
+  });
+
   it('fails closed when the email-outbox key bundle is missing', () => {
     expect(
       () =>

@@ -308,13 +308,30 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
   },
   'Vault and runtime secrets / Required secret is missing, malformed, or incomplete at startup':
     {
-      pending:
-        'Startup failure is not yet covered by a boot-level case in this suite; related: test/vault-approle-autologin.spec.ts.',
+      tests: [
+        {
+          file: 'src/modules/secrets/infrastructure/configured-runtime-secret.provider.spec.ts',
+          titles: [
+            'rejects a missing required credential without exposing its value',
+            'rejects malformed Agent-rendered data without exposing raw JSON',
+            'fails closed when the Agent-rendered file is unavailable',
+            'fails closed when the email-outbox key bundle is missing',
+          ],
+        },
+      ],
+      gaps: 'The provider throws while the module is built, but no boot-level case starts the app with a missing secret and proves it exits before listening. aihub_secret_delivery_healthy is set by scripts/ops/host-jobs/container-watchdog.sh, covered by its shell spec, not by this map.',
     },
   'Vault and runtime secrets / Vault/Agent becomes unavailable after a snapshot is loaded':
     {
-      pending:
-        'No case proves the process keeps serving its snapshot after Vault or the Agent goes away.',
+      tests: [
+        {
+          file: 'src/modules/secrets/infrastructure/configured-runtime-secret.provider.spec.ts',
+          titles: [
+            'keeps serving the loaded snapshot once the Agent-rendered file becomes unreadable',
+            'loads an Agent-rendered JSON snapshot and keeps it stable after startup',
+          ],
+        },
+      ],
     },
   'SeaweedFS object storage / Avatar, Speaking audio, or Writing chart storage is down or slow':
     {
@@ -331,16 +348,63 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
       ],
     },
   'SeaweedFS object storage / Operator storage sweep is slow or fails': {
-    pending:
-      'No case for the operator storage sweep connection and page bounds.',
+    tests: [
+      {
+        file: 'test/integration/object-storage-deadlines.spec.ts',
+        titles: ['uses the %s budget without automatic retries'],
+      },
+    ],
+    gaps: 'The operator client is proven to use its own 3 s connection and 30 s request bounds with one attempt. No case fails or stalls a sweep mid-listing and proves the next run retries from the retained cleanup state.',
   },
+  // Not through a fault proxy: the sender posts to Resend's fixed HTTPS
+  // endpoint, so provider answers are injected at its fetch seam and the
+  // shared circuit runs against the lane Redis.
   'Email provider / Resend returns 429/5xx, times out, or transport fails': {
-    pending:
-      'Unit coverage only (resend-email.sender.spec.ts); no fault-proxy case for the provider circuit and deferred dispatch.',
+    tests: [
+      {
+        file: 'src/modules/auth/email-delivery/application/poller/email-delivery-poller.dispatch.spec.ts',
+        titles: [
+          'refunds an attempt and pauses the rest of the batch after a provider-wide 5xx',
+          'defers 429 without spending an attempt and honours Retry-After',
+          'does not reserve a send or spend an attempt while the shared circuit is open',
+          'reports an attempt timeout as its own error code',
+        ],
+      },
+      {
+        file: 'src/modules/auth/email-delivery/infrastructure/resend/resend-email.sender.spec.ts',
+        titles: [
+          'classifies a fetch rejection without retaining the thrown error',
+        ],
+      },
+      {
+        file: 'src/modules/auth/email-delivery/infrastructure/redis-rate-limiter/redis-email-send-rate-limiter.spec.ts',
+        titles: [
+          'applies Redis full-jitter backoff while keeping Retry-After as a minimum',
+        ],
+      },
+      {
+        file: 'test/db/auth/email-provider-outage-circuit.spec.ts',
+        titles: [
+          'preserves the longest cooldown and allows one shared half-open probe',
+        ],
+      },
+      {
+        file: 'src/modules/auth/email-delivery/infrastructure/metrics/email-delivery-metrics.spec.ts',
+        titles: ['exposes shared outage duration in seconds without labels'],
+      },
+    ],
   },
   'Email provider / Resend returns credential 401/403': {
-    pending:
-      'Unit coverage only (resend-email.sender.spec.ts); no case for the credential hold.',
+    tests: [
+      {
+        file: 'src/modules/auth/email-delivery/application/poller/email-delivery-poller.dispatch.spec.ts',
+        titles: ['holds the queue and emits one configuration alert for %s'],
+      },
+      {
+        file: 'src/modules/auth/email-delivery/infrastructure/email-outbox-poller.scheduler.spec.ts',
+        titles: ['emits a bounded configuration signal for status %s'],
+      },
+    ],
   },
   'AI Services and legacy content backend / Configured AI Service is unavailable, credential-rejected, throttled, or its breaker/bulkhead refuses':
     {
