@@ -170,7 +170,7 @@ function mapAuditEvent(
 /**
  * Deliberately separate from the audit event store beside it. That store is a
  * write helper that runs inside transactions other repositories open; this
- * read owns its own client and has no transaction to join.
+ * read runs its query in its own Organization-scoped transaction.
  */
 export class PostgresOrganizationAuditReadRepository
   implements OrganizationAuditEventReadPort
