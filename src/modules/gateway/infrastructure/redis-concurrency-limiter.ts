@@ -25,6 +25,15 @@ import type { RedisGatewayClient } from './redis-gateway.client';
 
 export type RedisConcurrencyClient = Pick<RedisGatewayClient, 'eval' | 'zrem'>;
 
+// ioredis rejects with this before writing when the socket is not writable and
+// the offline queue is off (createRedisClient), so no lease can exist yet.
+const COMMAND_NOT_SENT_MESSAGE =
+  "Stream isn't writeable and enableOfflineQueue options is false";
+
+function isCommandNotSent(error: unknown): boolean {
+  return error instanceof Error && error.message === COMMAND_NOT_SENT_MESSAGE;
+}
+
 /** A refused permit is told to wait this long, plus up to as long again. */
 export const CONCURRENCY_RETRY_AFTER_MS = 500;
 // A lease older than this no longer counts toward the cap, so it must outlast
@@ -146,8 +155,12 @@ export class RedisConcurrencyLimiter implements ConcurrencyLimiterPort {
         lease: this.remoteLease(client, keys, request.requestId),
       };
     } catch (error) {
-      // A slow reply can time out after Redis already added the lease.
-      this.removeLater(client, keys, request.requestId);
+      // Only a timeout or lost reply may have added the lease. A command the
+      // socket refused to write cannot have, so cleanup would retry for the
+      // whole stale window with nothing to remove.
+      if (!isCommandNotSent(error)) {
+        this.removeLater(client, keys, request.requestId);
+      }
       this.health.reportDegraded(error);
       throw this.unavailableError(error);
     }

@@ -53,7 +53,7 @@ describe('admitGradedRequest', () => {
     });
 
     expect(calls).toEqual([
-      {
+      expect.objectContaining({
         apiKeyId: 'ak_1',
         rateLimitRpm: 60,
         organizationId: 'org_1',
@@ -62,8 +62,23 @@ describe('admitGradedRequest', () => {
         idempotencyKey: 'key-1',
         monthlyRequestQuota: 100,
         hardStopOnQuota: true,
-      },
+      }),
     ]);
+  });
+
+  it('hands the port the application-owned retry-budget policy', async () => {
+    const { port, calls } = portReturning({ stage: 'admitted' });
+
+    await admitGradedRequest(port, input);
+
+    expect(calls[0]?.retryBudgetPolicy).toEqual({
+      seenKeyCap: 10_000,
+      windowMs: 60_000,
+      windowTtlSeconds: 120,
+      retentionMs: 86_400_000,
+      retentionTtlSeconds: 86_460,
+      repeatAllowanceRatio: 0.1,
+    });
   });
 
   it('does not track a monthly quota for a sandbox key', async () => {

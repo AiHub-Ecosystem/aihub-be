@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import type { GradedAdmissionRequest } from '@/modules/gateway/application/graded-admission.port';
+import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
 import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   GRADED_ADMISSION_SCRIPT,
@@ -42,6 +43,7 @@ const request: GradedAdmissionRequest = {
   idempotencyKey: 'same-key',
   monthlyRequestQuota: 100,
   hardStopOnQuota: false,
+  retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
 };
 
 describe('RedisGradedAdmission', () => {
@@ -83,7 +85,38 @@ describe('RedisGradedAdmission', () => {
       expect.any(String),
       'req_1',
       '10000',
+      '60000',
+      '120',
+      '86400000',
+      '86460',
+      '0.1',
       '100',
+    ]);
+  });
+
+  it('forwards the application-owned retry-budget policy to the Lua script', async () => {
+    const redis = new FakeRedis();
+    const admission = new RedisGradedAdmission(redis, () => NOW);
+
+    await admission.consume({
+      ...request,
+      retryBudgetPolicy: {
+        seenKeyCap: 7,
+        windowMs: 45_000,
+        windowTtlSeconds: 90,
+        retentionMs: 12_000_000,
+        retentionTtlSeconds: 12_060,
+        repeatAllowanceRatio: 0.25,
+      },
+    });
+
+    expect(redis.calls[0]?.args.slice(9, 15)).toEqual([
+      '7',
+      '45000',
+      '90',
+      '12000000',
+      '12060',
+      '0.25',
     ]);
   });
 
@@ -145,6 +178,7 @@ describe('RedisGradedAdmission', () => {
       operation: 'speaking.grading',
       monthlyRequestQuota: null,
       hardStopOnQuota: false,
+      retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
     });
 
     expect(redis.calls).toHaveLength(1);
@@ -154,6 +188,11 @@ describe('RedisGradedAdmission', () => {
       '',
       'req_1',
       '10000',
+      '60000',
+      '120',
+      '86400000',
+      '86460',
+      '0.1',
       '',
     ]);
   });

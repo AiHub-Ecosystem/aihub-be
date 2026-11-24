@@ -14,6 +14,7 @@ import type {
 import { GradedPipelineEngine } from '@/modules/gateway/application/graded-request/graded-pipeline-engine';
 import { type GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
 import { GradingOrchestrator } from '@/modules/gateway/application/graded-request/grading-orchestrator';
+import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
 import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   LEASE_REMOVAL_RETRY_MS,
@@ -85,6 +86,7 @@ function gradedRequest(organization: string) {
     operation: 'writing.task2.grade' as const,
     monthlyRequestQuota: 1_000,
     hardStopOnQuota: false,
+    retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
   };
 }
 

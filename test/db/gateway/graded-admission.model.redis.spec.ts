@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import * as fc from 'fast-check';
 import type Redis from 'ioredis';
 
+import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
 import {
   type RedisGatewayClient,
   createRedisGatewayClient,
@@ -157,6 +158,7 @@ class Harness {
       operation: 'writing.task1.grade' as const,
       monthlyRequestQuota: this.quota,
       hardStopOnQuota: HARD_STOP_NO_SEEDER,
+      retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
     };
   }
 
@@ -312,6 +314,7 @@ describe('graded admission quota on a real Redis, model-based', () => {
                     operation: 'writing.task1.grade',
                     monthlyRequestQuota: quota,
                     hardStopOnQuota: true,
+                    retryBudgetPolicy: ORGANIZATION_RETRY_BUDGET_POLICY,
                   }),
                 ),
               );

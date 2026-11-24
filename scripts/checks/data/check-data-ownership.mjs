@@ -109,6 +109,10 @@ const allowlist = new Map([
     'src/modules/metering/infrastructure/billing/postgres-quota-reconciliation.repository.ts::organizations',
     'quota reconciliation by org',
   ],
+  [
+    'src/modules/speaking/infrastructure/grading-jobs/speaking-grading-job-row.ts::usage_records',
+    'excludes a job the meter already counted from the in-flight quota count (#1950)',
+  ],
 ]);
 
 /** @param {string} s @returns {string} */
