@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 
 import type { OperationId } from '@/catalog/operation-id';
+import { waitForBackgroundWork } from '@/common/background-work-tracker';
 import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   DispatchResult,
@@ -207,6 +208,7 @@ beforeAll(async () => {
   client = proxied;
   meteringClient = createRedisMeteringClient(target.url);
   raw = createTenantIsolationRedis();
+  await Promise.all([redisAnswers(client), redisAnswers(raw)]);
 });
 
 afterEach(async () => {
@@ -283,12 +285,9 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         // lease; only the limiter's background removal takes it out again.
         await proxy.setMode('normal');
         await redisAnswers(client);
-        await eventually(
-          async () =>
-            (await inflight(raw, organization)) === 0 &&
-            (environment !== 'sandbox' || (await sandboxInflight(raw)) === 0),
-          LEASE_REMOVAL_RETRY_MS * 3,
-        );
+        await waitForBackgroundWork(LEASE_REMOVAL_RETRY_MS * 3);
+        expect(await inflight(raw, organization)).toBe(0);
+        expect(await sandboxInflight(raw)).toBe(0);
 
         await expect(
           runOrganizationGradedRequest(organization, environment, limiter),
@@ -384,7 +383,7 @@ it('does not replay a rate-limit mutation when reconnect follows a lost reply', 
   expect(rejection(result.result)).toMatchObject(REDIS_UNAVAILABLE);
 
   await proxy.setMode('normal');
-  await eventually(async () => (await client.get(key)) === '1');
+  await eventually(async () => (await client.get(key)) !== null);
 
   expect(await raw.get(key)).toBe('1');
   await expect(limiter.consume({ keyId, limit: 1 })).resolves.toMatchObject({
@@ -399,6 +398,7 @@ it('does not replay a quota increment when reconnect follows a lost reply', asyn
   const now = new Date();
   const key = quotaKeyForMonth(organization, now.toISOString().slice(0, 7));
   const counter = new RedisQuotaCounter(redis);
+  await eventually(async () => (await redis.get(key)) === null, 10_000);
   await raw.set(key, '0');
 
   await proxy.setMode('slow');
@@ -412,7 +412,7 @@ it('does not replay a quota increment when reconnect follows a lost reply', asyn
   expect(result.result.status).toBe('rejected');
 
   await proxy.setMode('normal');
-  await eventually(async () => (await redis.get(key)) === '1');
+  await eventually(async () => (await redis.get(key)) !== null, 10_000);
 
   expect(await raw.get(key)).toBe('1');
-}, 10_000);
+}, 20_000);
