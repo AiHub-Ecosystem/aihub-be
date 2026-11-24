@@ -75,8 +75,24 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     ],
   },
   'Redis / Post-result quota counter increment fails': {
-    pending:
-      'No fault-proxy case for a failed post-result counter increment; unit coverage only in src/modules/metering/infrastructure/quota/redis-quota-counter.spec.ts.',
+    tests: [
+      {
+        file: `${FAULT}quota-counter-fault.spec.ts`,
+        titles: [
+          'keeps the result and its usage record, marks it quota_unverified, and counts the seam when Redis is %s',
+          'counts again once Redis returns',
+        ],
+      },
+      {
+        // The counter gap is rebuilt from durable usage, and a hard-stop
+        // Organization is still refused at its next admission.
+        file: `${FAULT}lost-keys-fault.spec.ts`,
+        titles: [
+          'rebuilds a lost quota counter from durable usage, once, for concurrent first requests',
+          'refuses a hard-stop Organization whose durable usage already meets its quota',
+        ],
+      },
+    ],
   },
   'Redis / Non-graded rate limiter is down or slow': {
     pending:
