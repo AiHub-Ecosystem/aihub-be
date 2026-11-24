@@ -132,20 +132,54 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
     gaps: 'The case proves the fallback to the JWKS source and the jwks_cache signal; its 503 comes from the replay-marker reservation. No case proves 503 IDENTITY_PROVIDER_UNAVAILABLE with no usable cache and an unavailable source.',
   },
   'Redis / DPoP replay marker is down or ambiguous': {
-    pending:
-      'Unit coverage only (redis-dpop-replay-cache.spec.ts); no fault-proxy case for a down or ambiguous replay marker.',
+    tests: [
+      {
+        file: `${FAULT}redis-seam-fault.spec.ts`,
+        titles: [
+          'rejects a claim inside the bound when Redis is %s and counts the seam',
+          'detects a replay again once Redis returns',
+        ],
+      },
+      {
+        file: 'src/modules/auth/web-sessions/presentation/user-access-jwt.guard.dpop.spec.ts',
+        titles: [
+          'fails closed with a retryable 503, never a fallback, when replay state is unavailable',
+        ],
+      },
+    ],
   },
   'Redis / User Access JWT revocation publish or subscriber is down': {
     pending:
       'Unit coverage only (bloom-filter-user-access-token-revocation.adapter.spec.ts); no fault-proxy case for a down publish or subscriber.',
   },
   'Redis / Gateway shared load-shedding level is down, slow, or unavailable': {
-    pending:
-      'multi-instance-shedding.spec.ts does not inject a Redis fault; no case proves the 15 s peer-level bound.',
+    tests: [
+      {
+        file: `${FAULT}redis-seam-fault.spec.ts`,
+        titles: [
+          'trusts a peer level for at most 15 s, keeps the local level, and never sheds for Redis alone',
+        ],
+      },
+    ],
   },
   'Redis / Email-send rate limit is down or slow': {
-    pending:
-      'Unit coverage only (redis-email-send-rate-limiter.unavailable.spec.ts); no case proves the outbox defers dispatch while Redis is down.',
+    tests: [
+      {
+        file: `${FAULT}redis-seam-fault.spec.ts`,
+        titles: [
+          'defers a send inside the bound when Redis is %s instead of bypassing the shared limit',
+          'reserves sends again once Redis returns',
+        ],
+      },
+      {
+        // The outbox answer to `reserved: false` is the same whether the cap
+        // is full or Redis cannot answer: the request stays queued.
+        file: 'src/modules/auth/email-delivery/application/poller/email-delivery-poller.dispatch.spec.ts',
+        titles: [
+          'keeps a request queued without spending an attempt when the shared rate cap is full',
+        ],
+      },
+    ],
   },
   'PostgreSQL / Request-path read/write is unreachable, unanswered, or blocked on a lock/statement':
     {
