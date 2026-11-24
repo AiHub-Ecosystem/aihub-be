@@ -1,23 +1,9 @@
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { AppModule } from '@/app.module';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { ORGANIZATION_CREATION_RECORD } from '@/modules/identity/organizations/application/organization-creation-record.port';
 import { ORGANIZATION_RENAME_RECORD } from '@/modules/identity/organizations/application/organization-rename-record.port';
 import { PostgresOrganizationCreationRepository } from '@/modules/identity/organizations/infrastructure/postgres-organization-creation.repository';
@@ -32,8 +18,7 @@ import {
   resetIdentityTables,
   testDatabaseUrl,
 } from '../shared/database';
-
-const REQUEST_ID = 'req_01J00000000000000000000000';
+import { buildIdentityApp } from './support/identity-app';
 
 describe('Organization name validation over HTTP and PostgreSQL', () => {
   let app: NestFastifyApplication;
@@ -44,36 +29,15 @@ describe('Organization name validation over HTTP and PostgreSQL', () => {
   beforeAll(async () => {
     pool = createTestPool();
     identityClient = createPostgresIdentityClient(testDatabaseUrl());
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token) =>
-        verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_owner'),
-    };
-    const userAccounts = userAccountStatus(async (userId) => {
-      const result = await pool.query<{ status: 'active' | 'disabled' }>(
-        'SELECT status FROM user_accounts WHERE id = $1',
-        [userId],
-      );
-      return result.rows[0]?.status;
+    app = await buildIdentityApp({
+      builder: Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(ORGANIZATION_CREATION_RECORD)
+        .useValue(new PostgresOrganizationCreationRepository(identityClient))
+        .overrideProvider(ORGANIZATION_RENAME_RECORD)
+        .useValue(new PostgresOrganizationRenameRepository(identityClient)),
+      pool,
+      jti: 'jti_owner',
     });
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(ORGANIZATION_CREATION_RECORD)
-      .useValue(new PostgresOrganizationCreationRepository(identityClient))
-      .overrideProvider(ORGANIZATION_RENAME_RECORD)
-      .useValue(new PostgresOrganizationRenameRepository(identityClient))
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
   });
 
   afterAll(async () => {

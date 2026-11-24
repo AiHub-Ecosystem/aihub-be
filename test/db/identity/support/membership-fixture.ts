@@ -1,24 +1,10 @@
 import { ulid } from 'ulid';
 
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import type { Pool } from 'pg';
 
 import { AppModule } from '@/app.module';
-import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
-import {
-  NO_USER_ACCESS_TOKEN_REVOCATIONS,
-  verifiedUserAccessToken,
-} from '@/modules/auth/testing/user-access-token-verifier.stub';
-import { userAccountStatus } from '@/modules/auth/testing/user-account-status.stub';
-import { USER_ACCESS_TOKEN_REVOCATION_RECORD } from '@/modules/auth/user-access-tokens/application/user-access-token-revocation-record.port';
-import {
-  USER_ACCESS_TOKEN_VERIFIER,
-  type UserAccessTokenVerifierPort,
-} from '@/modules/auth/web-sessions/application/user-access-token.port';
 import { ORGANIZATION_MEMBERSHIP } from '@/modules/identity/membership/application/organization-membership.port';
 import { PostgresOrganizationMembershipRepository } from '@/modules/identity/membership/infrastructure/postgres-organization-membership.repository';
 import { createPostgresIdentityClient } from '@/modules/identity/shared/infrastructure/postgres-identity.client';
@@ -29,14 +15,14 @@ import {
   testDatabaseUrl,
 } from '../../shared/database';
 import { PausingIdentityClient } from '../../shared/pausing-identity-client';
+import { buildIdentityApp } from './identity-app';
 
 export {
   type QueryPause,
   waitForQueryCapture,
 } from '../../shared/pausing-identity-client';
 export { waitForBlockedBy } from '../../shared/database';
-
-export const REQUEST_ID = 'req_01J00000000000000000000000';
+export { REQUEST_ID } from './identity-app';
 
 export function bearer(userId: string): string {
   return `Bearer ${userId}.token.value`;
@@ -70,34 +56,12 @@ export class MembershipFixture {
     const membership = new PostgresOrganizationMembershipRepository(
       this.identityClient.asPrisma(),
     );
-    const verifier: UserAccessTokenVerifierPort = {
-      verify: async (token) =>
-        verifiedUserAccessToken(token.split('.')[0] ?? '', 'jti_01'),
-    };
-    const userAccounts = userAccountStatus(async (userId) => {
-      const result = await this.pool.query<{ status: 'active' | 'disabled' }>(
-        'SELECT status FROM user_accounts WHERE id = $1',
-        [userId],
-      );
-      return result.rows[0]?.status;
+    this.app = await buildIdentityApp({
+      builder: Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(ORGANIZATION_MEMBERSHIP)
+        .useValue(membership),
+      pool: this.pool,
     });
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(ORGANIZATION_MEMBERSHIP)
-      .useValue(membership)
-      .overrideProvider(USER_ACCESS_TOKEN_VERIFIER)
-      .useValue(verifier)
-      .overrideProvider(USER_ACCOUNT_REPOSITORY)
-      .useValue(userAccounts)
-      .overrideProvider(USER_ACCESS_TOKEN_REVOCATION_RECORD)
-      .useValue(NO_USER_ACCESS_TOKEN_REVOCATIONS)
-      .compile();
-
-    this.app = moduleRef.createNestApplication<NestFastifyApplication>(
-      new FastifyAdapter({ genReqId: () => REQUEST_ID }),
-    );
-    await this.app.init();
-    await this.app.getHttpAdapter().getInstance().ready();
   }
 
   async close(): Promise<void> {
