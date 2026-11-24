@@ -437,9 +437,15 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         admit,
       }),
     ).resolves.toEqual({ created: true });
+
+    // The release itself changes nothing admission can see: settlement already
+    // stopped the double count.
     await expect(repository.releaseQuotaReservation(job.jobId)).resolves.toBe(
       true,
     );
+    await expect(
+      repository.countInFlight({ organizationId, environment: 'production' }),
+    ).resolves.toBe(1);
   });
 
   it('releases a successful job whose metering handoff never completed once the grace window passes', async () => {
