@@ -8,7 +8,7 @@ import type { OperationDispatcherPort } from '@/modules/gateway/application/disp
 import { DownstreamCircuitBreakers } from '@/modules/gateway/infrastructure/dispatch/downstream-circuit-breakers';
 import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/downstream-http.client';
 import { GRADIENT2_DEFAULT_CONFIG } from '@/modules/gateway/infrastructure/dispatch/gradient2-concurrency-limiter';
-import { createHttpOperationDispatcher } from '@/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.testing';
+import { createHttpOperationDispatcher } from '../../../../test/support/gateway/http-operation-dispatcher.testing';
 
 import {
   eventually,
