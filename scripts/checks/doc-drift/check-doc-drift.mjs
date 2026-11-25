@@ -183,6 +183,15 @@ export function findDocDriftViolations(rootDir = REPO_ROOT) {
   /** @type {string[]} */
   const violations = [];
 
+  for (const [id, paths] of byId) {
+    if (paths.length > 1) {
+      const named = paths
+        .map((path) => relative(repositoryRoot, path).replace(/\\/g, '/'))
+        .sort();
+      violations.push(`ADR-${id} has duplicate files: ${named.join(', ')}`);
+    }
+  }
+
   for (const path of files) {
     const id = adrIdOf(path);
     if (id === undefined) continue;

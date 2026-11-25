@@ -1,4 +1,4 @@
-# ADR-0162: Scope-bound User Access JWT audiences
+# ADR-0189: Scope-bound User Access JWT audiences
 
 - Status: Accepted
 - Date: 2026-11-11
@@ -15,7 +15,7 @@ Production and Sandbox use the same configured User Access JWT issuer and signin
 - Use the same scope-derived audience for issuance and verification. Keep the configured issuer, signing key, claims, 900-second maximum lifetime, and 60-second clock skew unchanged.
 - Do not accept the former unscoped audience as a compatibility fallback. It does not identify which scope issued the token.
 - After a scope is deployed with this rule, access tokens issued before the change with the former audience are rejected immediately, even if their original expiry is later. Their original lifetime is at most 15 minutes; login, refresh, and Web Session exchange mint a new token with the deployed scope's audience.
-- Ship this audience change as a one-release security cutover rather than a reader-first migration. A preceding release that accepts both audiences would preserve the cross-scope authorization gap. The N-1 compatibility gate reports a predecessor's rejection of the scoped audience as a warning and continues its other probes; it does not claim token compatibility with pre-ADR-0162 images.
+- Ship this audience change as a one-release security cutover rather than a reader-first migration. A preceding release that accepts both audiences would preserve the cross-scope authorization gap. The N-1 compatibility gate reports a predecessor's rejection of the scoped audience as a warning and continues its other probes; it does not claim token compatibility with pre-ADR-0189 images.
 
 ## Consequences
 

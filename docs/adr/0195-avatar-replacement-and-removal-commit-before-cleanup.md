@@ -1,4 +1,4 @@
-# ADR-0171: Avatar replacement and removal commit before object cleanup
+# ADR-0195: Avatar replacement and removal commit before object cleanup
 
 - Status: Accepted
 - Date: 2026-11-16

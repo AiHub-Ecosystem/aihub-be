@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-19
 - Amends: [ADR-0022](0022-aihub-local-user-authentication.md) — the Bearer boundary no longer suffices for a Web Session token once enforcement is on
-- Related: [#1701](https://github.com/AiHub-Ecosystem/aihub-be/issues/1701), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md), [ADR-0150](0150-revoke-individual-user-access-jwts.md), [ADR-0162](0162-scope-bound-user-access-jwt-audiences.md), [evaluation](../operations/sender-constrained-user-access-token-evaluation.md)
+- Related: [#1701](https://github.com/AiHub-Ecosystem/aihub-be/issues/1701), [ADR-0081](0081-aihub-owned-customer-web-web-sessions.md), [ADR-0150](0150-revoke-individual-user-access-jwts.md), [ADR-0189](0189-scope-bound-user-access-jwt-audiences.md), [evaluation](../operations/sender-constrained-user-access-token-evaluation.md)
 
 ## Context
 

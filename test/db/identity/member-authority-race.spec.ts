@@ -33,7 +33,7 @@ import {
 } from '../shared/database';
 
 /**
- * ADR-0159 (ADR-0027 as amended, #447): a member's authority ends everywhere
+ * ADR-0188 (ADR-0027 as amended, #447): a member's authority ends everywhere
  * when it is removed. These are the gate-based PostgreSQL regressions for the
  * serialization boundary: two connections, explicit barriers, no timing
  * sleeps. The authority change is one raw connection that holds the
@@ -128,7 +128,7 @@ function managementContext(actorId: string) {
 /**
  * The authority change, held open. It takes the locks the real disable and
  * demotion transactions take — the Organization row first, then the member
- * row (ADR-0043, ADR-0159) — and reports its backend pid so the mutation's
+ * row (ADR-0043, ADR-0188) — and reports its backend pid so the mutation's
  * wait can be observed with `waitForBlockedBy` instead of a sleep.
  */
 async function holdAuthorityChange(options: {
@@ -285,7 +285,7 @@ async function keyRows(): Promise<readonly { id: string; status: string }[]> {
   return result.rows;
 }
 
-describe('API key mutations refuse an authority that ended before their locks (ADR-0159)', () => {
+describe('API key mutations refuse an authority that ended before their locks (ADR-0188)', () => {
   let caller: string;
   let repository: PostgresOrganizationApiKeyRepository;
 
@@ -357,7 +357,7 @@ describe('API key mutations refuse an authority that ended before their locks (A
 
   it('still admits a create after a role-preserving transfer to active admin', async () => {
     // The positive control: the transfer is committed first, and an active
-    // admin keeps API-key management authority (ADR-0159, decision 2).
+    // admin keeps API-key management authority (ADR-0188, decision 2).
     await pool.query(
       `UPDATE organization_members SET role = 'admin', updated_at = now()
        WHERE organization_id = $1 AND user_account_id = $2`,
@@ -396,7 +396,7 @@ describe('API key mutations refuse an authority that ended before their locks (A
   });
 });
 
-describe('Invitation send and revoke re-read the caller under the Organization lock (ADR-0159)', () => {
+describe('Invitation send and revoke re-read the caller under the Organization lock (ADR-0188)', () => {
   let inviter: string;
   let creations: PostgresOrganizationInvitationCreateRepository;
   let revocations: PostgresOrganizationInvitationRevokeRepository;
@@ -448,7 +448,7 @@ describe('Invitation send and revoke re-read the caller under the Organization l
 
   it('refuses a send when the organization is suspended before the lock', async () => {
     // A suspension committed before the send boundary prevents both the invitation
-    // row and its email outbox request (ADR-0159, decision 3).
+    // row and its email outbox request (ADR-0188, decision 3).
     await pool.query(
       `UPDATE organizations SET status = 'suspended' WHERE id = $1`,
       [ORGANIZATION_ID],
@@ -543,7 +543,7 @@ describe('Invitation send and revoke re-read the caller under the Organization l
   });
 });
 
-describe('Acceptance admission against the inviter current authority (ADR-0159)', () => {
+describe('Acceptance admission against the inviter current authority (ADR-0188)', () => {
   let inviter: string;
   let recipient: string;
   let invitationId: string;
@@ -689,7 +689,7 @@ describe('Acceptance admission against the inviter current authority (ADR-0159)'
 
   it('runs a demotion and an acceptance concurrently without a lock-order inversion', async () => {
     // Both operations share one lock order: Organization row first, then
-    // membership/invitation rows (ADR-0159, decision 6). Acceptance takes
+    // membership/invitation rows (ADR-0188, decision 6). Acceptance takes
     // the Organization row FOR SHARE before it reads or grants; a concurrent
     // demotion attempts Organization FOR UPDATE and serializes behind it.
     // Both commit cleanly without deadlock.

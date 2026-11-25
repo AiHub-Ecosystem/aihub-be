@@ -141,7 +141,7 @@ export class PostgresOrganizationInvitationRevokeRepository
             throw invalidIdentityData();
           }
 
-          // ADR-0159 (decision 2): the caller's role is re-read under the
+          // ADR-0188 (decision 2): the caller's role is re-read under the
           // Organization lock rather than trusting the role captured before the
           // transaction, so a disable or demotion that committed while this
           // request waited cannot close an invitation it no longer has authority

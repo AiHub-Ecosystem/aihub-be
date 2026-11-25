@@ -1,4 +1,4 @@
-# ADR-0154: Adaptive concurrency limit for AI-service dispatch
+# ADR-0185: Adaptive concurrency limit for AI-service dispatch
 
 - Status: Accepted; baseline update rule amended by [#1880](https://github.com/AiHub-Ecosystem/aihub-be/issues/1880)
 - Date: 2026-11-07

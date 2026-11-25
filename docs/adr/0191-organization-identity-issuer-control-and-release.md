@@ -1,4 +1,4 @@
-# ADR-0163: Organization identity issuer control and release
+# ADR-0191: Organization identity issuer control and release
 
 - Status: Accepted
 - Date: 2026-11-15

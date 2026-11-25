@@ -14,7 +14,7 @@ import {
  * follows from the read is a write they commit; acceptance takes it `FOR
  * SHARE`, which is enough to hold the row stable against a concurrent disable
  * or demotion while the grant, the token consumption, and the applied event
- * commit (ADR-0159, decision 2). Every statement selects `status AS
+ * commit (ADR-0188, decision 2). Every statement selects `status AS
  * membership_status` explicitly: the reader consumes the aliased name, so an
  * unaliased `status` column would read as `undefined` and refuse everyone.
  */

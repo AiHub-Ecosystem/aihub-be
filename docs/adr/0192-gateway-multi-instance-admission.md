@@ -1,4 +1,4 @@
-# ADR-0168: Gateway admission limits are shared across application instances
+# ADR-0192: Gateway admission limits are shared across application instances
 
 - Status: Accepted
 - Date: 2026-11-14

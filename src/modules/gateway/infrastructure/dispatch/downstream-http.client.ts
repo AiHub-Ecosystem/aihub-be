@@ -57,7 +57,7 @@ type DownstreamHeaders = Readonly<
 
 // The undici Pool cap stays a hard socket/stream ceiling; the per-origin
 // Gradient2 limit is the adaptive admission signal that usually refuses
-// excess work well before the Pool queues it (#1590, ADR-0154).
+// excess work well before the Pool queues it (#1590, ADR-0185).
 export const MAX_CONCURRENT_REQUESTS_PER_ORIGIN = 20;
 
 const definitelyNotDispatched = new WeakSet<AppError>();

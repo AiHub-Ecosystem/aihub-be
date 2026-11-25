@@ -3,7 +3,7 @@
 - Status: Accepted (per [#280](https://github.com/AiHub-Ecosystem/aihub-be/issues/280); the referenced ADR file was absent from this checkout)
 - Related issue: [#280](https://github.com/AiHub-Ecosystem/aihub-be/issues/280)
 - Amends: [ADR-0006](0006-redis-scoped-role-fail-open.md) Auth & authorization outage behavior
-- Related: [ADR-0004](0004-signed-user-assertions-jwks.md), [ADR-0053](0053-optional-user-identity-verification.md), [ADR-0163](0163-organization-identity-issuer-control-and-release.md)
+- Related: [ADR-0004](0004-signed-user-assertions-jwks.md), [ADR-0053](0053-optional-user-identity-verification.md), [ADR-0191](0191-organization-identity-issuer-control-and-release.md)
 
 ## Context
 

@@ -1,4 +1,4 @@
-# ADR-0159: Authenticate identity cache entries before use
+# ADR-0187: Authenticate identity cache entries before use
 
 - Status: Accepted — approved during #349 grooming on 2026-11-09
 - Date: 2026-11-09

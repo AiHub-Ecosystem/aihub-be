@@ -224,7 +224,7 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        // ADR-0159 (decision 2): the caller is re-read under the Organization
+        // ADR-0188 (decision 2): the caller is re-read under the Organization
         // lock, so a disable or demotion that committed while this request
         // waited refuses it instead of leaving a fresh credential behind.
         const locked = await this.lockOrganizationAndAuthorize(
@@ -374,7 +374,7 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        // ADR-0159 (decision 2): a caller demoted or disabled while this
+        // ADR-0188 (decision 2): a caller demoted or disabled while this
         // request waited is refused here, so a revoked-then-reread key cannot
         // be closed by an authority that no longer exists.
         const locked = await this.lockOrganizationAndAuthorize(
@@ -505,7 +505,7 @@ export class PostgresOrganizationApiKeyRepository
 
     try {
       return await this.scoped(input.organizationId, async (transaction) => {
-        // ADR-0159 (decision 2): an admin disabled during an incident must not
+        // ADR-0188 (decision 2): an admin disabled during an incident must not
         // complete a concurrent creation and walk away with a fresh
         // credential. The same evaluation refuses a suspended Organization.
         const locked = await this.lockOrganizationAndAuthorize(

@@ -3,11 +3,11 @@
 - Status: Accepted
 - Date: 2026-11-17
 - Related issue: [#1591](https://github.com/AiHub-Ecosystem/aihub-be/issues/1591)
-- Related: [ADR-0154](0154-adaptive-concurrency-limit-for-ai-service-dispatch.md), [ADR-0168](0168-gateway-multi-instance-admission.md), [#398](https://github.com/AiHub-Ecosystem/aihub-be/issues/398), [#581](https://github.com/AiHub-Ecosystem/aihub-be/issues/581)
+- Related: [ADR-0185](0185-adaptive-concurrency-limit-for-ai-service-dispatch.md), [ADR-0192](0192-gateway-multi-instance-admission.md), [#398](https://github.com/AiHub-Ecosystem/aihub-be/issues/398), [#581](https://github.com/AiHub-Ecosystem/aihub-be/issues/581)
 
 ## Context
 
-The adaptive concurrency limiter (ADR-0154) stops one origin from being pushed
+The adaptive concurrency limiter (ADR-0185) stops one origin from being pushed
 past its estimated capacity, and the retry budget stops a retry storm. Neither
 decides **which** request to refuse. Under saturation the limiter refuses
 whoever arrives when the permit count is empty, so a burst of Writing grading
@@ -42,7 +42,7 @@ and metrics an alert can read.
    `0.75` for 20 s, and a restore restarts that window, so a dip between two
    spikes cannot flap the level. Changes are spaced at least 1 s apart, so a jump
    escalates one tier at a time.
-5. The level is shared through Redis (ADR-0168), because an instance that has
+5. The level is shared through Redis (ADR-0192), because an instance that has
    not seen the spike must not keep admitting what a peer is already shedding.
    Reads are served from process memory and refreshed on a timer; a refusal never
    waits on Redis. A lower publish neither lowers the shared key nor renews it,

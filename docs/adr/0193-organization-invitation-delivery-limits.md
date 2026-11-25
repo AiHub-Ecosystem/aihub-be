@@ -1,4 +1,4 @@
-# ADR-0170: Organization invitation limits apply at delivery
+# ADR-0193: Organization invitation limits apply at delivery
 
 - Status: Accepted — scope authorized for issue [#444](https://github.com/AiHub-Ecosystem/aihub-be/issues/444) on 2026-11-16
 - Date: 2026-11-16

@@ -38,7 +38,7 @@ import {
  * Locking the organization row serializes concurrent invitations for the same
  * organization, so the active-member check and the partial unique index cannot
  * be raced by two requests arriving together. The status is read under the
- * same lock so a suspension that commits first closes this surface (ADR-0159,
+ * same lock so a suspension that commits first closes this surface (ADR-0188,
  * decision 3).
  */
 const LOCK_ORGANIZATION_SQL = `
@@ -122,7 +122,7 @@ export class PostgresOrganizationInvitationCreateRepository
           // The inviter's authority is re-evaluated under the Organization lock:
           // a disable or demotion that committed while this request waited
           // refuses the send, so a pending invitation cannot outlive the
-          // authority that issued it (ADR-0159, decision 1).
+          // authority that issued it (ADR-0188, decision 1).
           const inviterMembershipRows = await identityRows(
             transaction,
             LOCK_MEMBERSHIP_AUTHORITY_SQL,

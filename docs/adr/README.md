@@ -1,7 +1,9 @@
 # Architecture Decision Records
 
 Sequential immutable log. Numbering is continuous; never renumber or reuse an
-identifier. Each file carries its own `Status:` line; accepted decisions are
+identifier. Duplicate identifiers found under #1670 were renumbered once;
+`check-doc-drift` now fails on any future collision. Each file carries its own
+`Status:` line; accepted decisions are
 replaced by a successor that links back, never by editing history away.
 
 ## Numbering note: 0001–0012

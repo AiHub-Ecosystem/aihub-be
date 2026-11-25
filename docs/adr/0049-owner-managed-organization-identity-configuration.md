@@ -1,9 +1,9 @@
 # ADR-0049: Owner-managed Organization identity configuration
 
-- Status: Accepted; amended by [ADR-0159](0159-pending-invitation-authority-and-management-serialization.md)
+- Status: Accepted; amended by [ADR-0188](0188-pending-invitation-authority-and-management-serialization.md)
 - Related issue: #157
 - Related ADR: ADR-0035
-- Amended by: [ADR-0163](0163-organization-identity-issuer-control-and-release.md)
+- Amended by: [ADR-0191](0191-organization-identity-issuer-control-and-release.md)
 
 Only an active `owner` of an active Organization may create or replace its User Assertion identity configuration through the Bearer boundary. Authenticated callers who do not meet that policy receive the existing Safe Authorization Denial; missing or invalid Bearer credentials follow the existing authentication errors. The request must provide exactly one non-null JWKS source (`jwks_url` or `public_keys_jwks`), matching the Customer Web's two setup options and avoiding stored keys that the verifier would ignore when a URL is present. A new configuration is active, while replacement preserves its current status so an owner cannot override an operator's disablement; a supplied URL is validated on save through the existing SSRF-protected JWKS fetch path.
 

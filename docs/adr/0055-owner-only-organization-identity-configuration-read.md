@@ -1,6 +1,6 @@
 # ADR-0055: Owner-only read of the Organization Identity Configuration
 
-- Status: Accepted; amended by [ADR-0163](0163-organization-identity-issuer-control-and-release.md)
+- Status: Accepted; amended by [ADR-0191](0191-organization-identity-issuer-control-and-release.md)
 - Related issue: #171
 - Related ADR: ADR-0049, ADR-0028, ADR-0040
 

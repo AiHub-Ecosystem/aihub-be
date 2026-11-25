@@ -1,4 +1,4 @@
-# ADR-0170: Avatar bytes are re-encoded before publication and every change is audited
+# ADR-0194: Avatar bytes are re-encoded before publication and every change is audited
 
 - Status: Accepted
 - Date: 2026-11-16

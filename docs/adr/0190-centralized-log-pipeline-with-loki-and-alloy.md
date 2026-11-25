@@ -1,4 +1,4 @@
-# ADR-0164: Centralized log pipeline with Loki and Alloy
+# ADR-0190: Centralized log pipeline with Loki and Alloy
 
 - Status: Accepted; the owner approved this decision in session on 2026-11-13.
 - Date: 2026-11-13

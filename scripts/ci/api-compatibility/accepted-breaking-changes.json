@@ -52,7 +52,7 @@
     "major": 1,
     "baseVersion": "1.10.0",
     "candidateVersion": "1.11.0",
-    "decision": "docs/adr/0159-pending-invitation-authority-and-management-serialization.md",
+    "decision": "docs/adr/0188-pending-invitation-authority-and-management-serialization.md",
     "changes": ["the request property `allowed_environments` became required"]
   },
   {

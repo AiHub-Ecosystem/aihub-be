@@ -1,4 +1,4 @@
-# ADR-0159: Pending invitation authority lifetime and the management serialization boundary
+# ADR-0188: Pending invitation authority lifetime and the management serialization boundary
 
 - Status: Accepted
 - Date: 2026-11-09

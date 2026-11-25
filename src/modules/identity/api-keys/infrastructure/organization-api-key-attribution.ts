@@ -1,5 +1,5 @@
 /**
- * ADR-0159 (#447): a key records who created it and who last
+ * ADR-0188 (#447): a key records who created it and who last
  * rotated it, so a removed manager's credentials stay attributable for as long
  * as the keys do instead of only for as long as the audit trail retains the
  * `api_key.created` and `api_key.rotated` events.

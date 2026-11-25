@@ -51,7 +51,7 @@ export const FIND_INVITATION_SQL = `
  * transfer takes the same row `FOR UPDATE` before it touches any membership,
  * so it either commits before this transaction's inviter read or waits behind
  * it — the inviter's authority cannot change inside the window the grant
- * decides in (ADR-0159, decision 2). `FOR SHARE` is the weakest lock that
+ * decides in (ADR-0188, decision 2). `FOR SHARE` is the weakest lock that
  * gives that serialization, and it is the same first lock every other
  * invitation and membership transaction takes.
  */
@@ -229,7 +229,7 @@ export class PostgresOrganizationInvitationAcceptRepository
           return { kind: 'organization_suspended' };
         }
 
-        // ADR-0159 (decision 1): the invitation's authority is only as good
+        // ADR-0188 (decision 1): the invitation's authority is only as good
         // as the inviter's current Membership. An inviter who was disabled,
         // demoted, or has transferred ownership since the invitation was
         // issued can no longer grant the named role, so acceptance refuses

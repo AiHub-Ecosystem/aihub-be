@@ -2,7 +2,7 @@
  * The shedding level every application instance applies.
  *
  * The level is shared so one instance that sees the host saturate does not shed
- * alone while its peers keep admitting the same work (ADR-0168, ADR-0173).
+ * alone while its peers keep admitting the same work (ADR-0192, ADR-0173).
  * Reads are served from process memory and refreshed on a timer, so a refusal
  * never waits on Redis.
  */

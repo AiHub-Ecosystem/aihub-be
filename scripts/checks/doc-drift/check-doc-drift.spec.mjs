@@ -138,6 +138,24 @@ await test('requires every ADR to have a status line', async (/** @type {import(
   );
 });
 
+await test('fails when two ADR files share a 4-digit identifier (#1670)', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/adr/0001-first.md': '# ADR-0001: First\n\nStatus: Accepted\n',
+    'docs/adr/0001-second.md': '# ADR-0001: Second\n\nStatus: Accepted\n',
+  });
+
+  const violations = findDocDriftViolations(root);
+  assert.ok(
+    violations.some(
+      (message) =>
+        message.includes('ADR-0001 has duplicate files:') &&
+        message.includes('docs/adr/0001-first.md') &&
+        message.includes('docs/adr/0001-second.md'),
+    ),
+    `expected a duplicate-identifier violation naming both files, got: ${violations.join('\n')}`,
+  );
+});
+
 await test('the static job runs this suite in CI (#1786)', async () => {
   const workflow = await readFile(
     new URL('../../../.github/workflows/ci.yml', import.meta.url),

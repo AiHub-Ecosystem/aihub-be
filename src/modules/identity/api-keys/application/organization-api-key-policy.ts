@@ -26,7 +26,7 @@ export function reachedOrganizationApiKeyLimit(
 }
 
 /**
- * ADR-0159 (decision 2): a key mutation decides the caller's authority before
+ * ADR-0188 (decision 2): a key mutation decides the caller's authority before
  * it opens its transaction and again under the same Organization lock the
  * mutation writes through. The read before the transaction admits a caller
  * whose Membership then changes; this read is what refuses it, so a rotate

@@ -1,4 +1,4 @@
-# ADR-0149: Evaluate PostgreSQL fencing for lease-owned work
+# ADR-0184: Evaluate PostgreSQL fencing for lease-owned work
 
 - Status: Proposed — evaluation recommends deferring production adoption until a concrete worker and protected resource are selected.
 - Date: 2026-11-05

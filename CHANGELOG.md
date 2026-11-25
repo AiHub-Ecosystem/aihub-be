@@ -280,7 +280,7 @@ out.
 - `/v1/organizations/{organization_id}/api-keys` create now requires
   `allowed_environments` in the request body. The environment a credential is
   bound to is part of its authority, so the caller states it instead of
-  receiving a Production default (ADR-0159).
+  receiving a Production default (ADR-0188).
 
 ### Added
 

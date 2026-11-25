@@ -12,7 +12,7 @@ import { identityRows } from '@/modules/identity/shared/infrastructure/postgres-
  * The caller's Membership, read inside the mutation's transaction. The
  * Organization row is already locked by the mutation's own first statement —
  * the same first lock every disable, demotion, invitation, and key mutation
- * takes (ADR-0159, decision 6) — so this read sees the Membership an
+ * takes (ADR-0188, decision 6) — so this read sees the Membership an
  * authority change that committed earlier left behind, and one that starts
  * later waits behind the mutation.
  */

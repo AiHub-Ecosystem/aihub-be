@@ -1,6 +1,6 @@
 # ADR-0006: Redis has a scoped role and fails open where blocking costs more
 
-- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116; non-graded rate-limit outages amended by ADR-0168; API-key brute-force outage row amended by ADR-0174; Signed User Assertion replay checking amended by ADR-0175)
+- Status: Accepted (retroactive record; graded-route behavior amended by ADR-0116; non-graded rate-limit outages amended by ADR-0192; API-key brute-force outage row amended by ADR-0174; Signed User Assertion replay checking amended by ADR-0175)
 - Date: decided 2026-09-07 in the implementation specification suite; file written 2026-11-07
 
 ## Context

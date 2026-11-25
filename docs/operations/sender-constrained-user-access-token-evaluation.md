@@ -12,7 +12,7 @@ The comparison case is the current credential: a 15-minute RS256 JWT whose holde
 
 - ADR-0022 defines the User Access JWT: RS256, a configured `kid`, 15-minute lifetime, and only `iss`, `aud`, `sub`, `jti`, `iat`, and `exp` claims. `JoseUserAccessTokenService.verify` requires the exact `kid`, algorithm, issuer, and audience; rejects non-integer or non-safe time claims; bounds total lifetime to 900 seconds; applies 60 seconds of clock skew; and validates the `usr_...` subject.
 - ADR-0150 adds durable per-token revocation keyed by verified `(iss, jti)` in Postgres. Every protected Bearer request performs a direct revocation lookup; a local Bloom-filter miss never authorizes a token, and a database outage fails closed with retryable `503`. A user can revoke one leaked JWT immediately without ending sibling JWTs or sessions.
-- ADR-0162 adds scope-bound audiences: Production and Sandbox no longer share a fixed `aihub-user-api` audience, so a token minted in one scope does not pass validation in the other.
+- ADR-0189 adds scope-bound audiences: Production and Sandbox no longer share a fixed `aihub-user-api` audience, so a token minted in one scope does not pass validation in the other.
 - ADR-0081 gives the Customer Web an AIHUB-owned Web Session: the browser holds only an opaque HttpOnly cookie; the BFF exchanges that session server-to-server for a User Access JWT. There is no direct browser-to-AIHUB Bearer path in the shipped Customer Web.
 
 Together these already narrow both the replay window and the blast radius: revocation is immediate, audience scoping prevents cross-scope replay, and the BFF keeps the long-lived credential server-side.
@@ -31,7 +31,7 @@ Applying either mechanism here requires decisions that do not yet exist:
 
 ## Cost of the status quo
 
-The residual risk is narrow: within 15 minutes of a copied token leaving the BFF, an attacker can use it from another client until the owner revokes it. ADR-0150 gives the owner an immediate manual remedy; ADR-0162 prevents cross-scope use; ADR-0081 keeps the long-lived credential in an HttpOnly cookie. No incident class in the repository shows token replay as a realized attack, and no enterprise customer requirement is recorded.
+The residual risk is narrow: within 15 minutes of a copied token leaving the BFF, an attacker can use it from another client until the owner revokes it. ADR-0150 gives the owner an immediate manual remedy; ADR-0189 prevents cross-scope use; ADR-0081 keeps the long-lived credential in an HttpOnly cookie. No incident class in the repository shows token replay as a realized attack, and no enterprise customer requirement is recorded.
 
 ## Decision
 

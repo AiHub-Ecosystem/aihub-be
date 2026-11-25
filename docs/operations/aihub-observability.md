@@ -30,7 +30,7 @@ Stop the timer only after every check passes or the four-hour objective is decla
 
 ## Centralized log pipeline
 
-ADR-0164 accepts Loki on the monitoring host and Alloy on the Production/Sandbox
+ADR-0190 accepts Loki on the monitoring host and Alloy on the Production/Sandbox
 application host. Alloy's collection boundary is the AIHUB app containers and
 AIHUB-specific Nginx access logs only. Loki and the Grafana datasource are
 operator-only; no customer access or per-Organization dashboards are part of

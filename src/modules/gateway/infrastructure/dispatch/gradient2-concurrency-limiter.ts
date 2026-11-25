@@ -19,7 +19,7 @@ const MIN_LIMIT = 2;
 const MAX_LIMIT = 20;
 // Netflix ships tolerance 1.5 / longWindow 600 as defaults; this launcher
 // uses the tighter tolerance and a faster window so the documented 20x spike
-// converges to the floor. See ADR-0154.
+// converges to the floor. See ADR-0185.
 const RTT_TOLERANCE = 1.25;
 const LONG_WINDOW = 600;
 const WARMUP = 10;

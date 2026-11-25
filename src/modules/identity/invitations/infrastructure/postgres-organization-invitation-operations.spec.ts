@@ -185,7 +185,7 @@ const OPEN_INVITATION_ROW = {
 /**
  * Scripts the reads acceptance makes before any grant: the unlocked
  * pre-read, the shared Organization lock, the locked invitation, the
- * accepting account, and the inviter's current Membership (ADR-0159).
+ * accepting account, and the inviter's current Membership (ADR-0188).
  */
 function acceptScenario(
   prisma: ScriptedPrisma,
@@ -212,7 +212,7 @@ function acceptScenario(
   }
 }
 
-describe('Organization Invitation inviter-authority admission (ADR-0159)', () => {
+describe('Organization Invitation inviter-authority admission (ADR-0188)', () => {
   it('refuses an invitation whose inviter can no longer grant its role', async () => {
     // Transfer-then-accept: the inviter was an owner when the invitation was
     // issued, then transferred ownership and became an admin. An admin cannot
