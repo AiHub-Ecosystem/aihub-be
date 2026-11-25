@@ -33,6 +33,7 @@ import type {
   TcpFaultProxy,
 } from '../../../support/tcp-fault-proxy';
 import {
+  metricValue,
   redisThroughProxy,
   redisUnavailableCount,
   rejection,
@@ -360,3 +361,185 @@ it('shares an exhausted uncached API-key budget across Redis clients', async () 
     await second.onModuleDestroy();
   }
 });
+
+describe('API-key authentication budgets while Redis is refused', () => {
+  // A clock the budgets read, so refill and expiry are driven, not waited for.
+  let nowMs: number;
+  let failures: RedisAuthFailureCounter;
+  let store: RedisIdentityStore;
+  let authenticator: ApiKeyAuthenticator;
+
+  function unknownKey(): string {
+    return generateOrganizationApiKey(TEST_NOW).raw;
+  }
+
+  beforeEach(async () => {
+    nowMs = Date.now();
+    store = new RedisIdentityStore(
+      proxiedRedisUrl,
+      undefined,
+      IDENTITY_CACHE_HMAC_KEY,
+    );
+    failures = new RedisAuthFailureCounter(
+      proxiedRedisUrl,
+      undefined,
+      { warn: () => undefined, log: () => undefined },
+      () => nowMs,
+    );
+    authenticator = new ApiKeyAuthenticator(
+      new PostgresApiKeyRepository(identityClient),
+      store,
+      failures,
+      () => TEST_NOW,
+    );
+    await proxy.setMode('refuse');
+  });
+
+  afterEach(async () => {
+    await proxy.setMode('normal');
+    await store.onModuleDestroy();
+    await failures.onModuleDestroy();
+  });
+
+  it('spends uncached lookups from a local bucket of 5 per second with burst 5', async () => {
+    const rejectedBefore = await metricValue('aihub_rejected_total', {
+      reason: 'rate_limit',
+    });
+    for (let lookup = 0; lookup < 5; lookup += 1) {
+      await expect(
+        authenticator.authenticate(credential(unknownKey())),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    }
+
+    await expect(
+      authenticator.authenticate(credential(unknownKey())),
+    ).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      message: 'Too many API-key lookups',
+      retryable: true,
+      retryAfterMs: 200,
+    });
+    expect(
+      await metricValue('aihub_rejected_total', { reason: 'rate_limit' }),
+    ).toBe(rejectedBefore + 1);
+
+    // One token refills in 200 ms.
+    nowMs += 200;
+    await expect(
+      authenticator.authenticate(credential(unknownKey())),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('refuses an IP after 20 failures inside the 300 s local window, then forgets them', async () => {
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+      // Keep the lookup bucket topped up; only the failure count is tested.
+      nowMs += 200;
+      await expect(
+        authenticator.authenticate(credential(unknownKey())),
+      ).rejects.toMatchObject({
+        code: attempt < 20 ? 'UNAUTHORIZED' : 'RATE_LIMITED',
+      });
+    }
+
+    nowMs += 200;
+    await expect(
+      authenticator.authenticate(credential(unknownKey())),
+    ).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      message: 'Too many authentication failures',
+    });
+
+    nowMs += 300_000;
+    await expect(
+      authenticator.authenticate(credential(unknownKey())),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('keeps at most 10,000 IPs in the local failure map, dropping the oldest', async () => {
+    await failures.recordFailure('203.0.113.1');
+    for (let index = 0; index < 10_000; index += 1) {
+      await failures.recordFailure(
+        `10.${index >> 16}.${(index >> 8) & 255}.${index & 255}`,
+      );
+    }
+
+    expect(await failures.get('203.0.113.1')).toBe(0);
+    expect(await failures.get('10.0.39.15')).toBe(1);
+  }, 60_000);
+});
+
+describe.each<FaultMode>(['refuse', 'hang'])(
+  'customer JWKS while the cache Redis is %s and the source is down',
+  (mode) => {
+    it('answers a retryable 503 IDENTITY_PROVIDER_UNAVAILABLE from the JWKS step, before any replay reservation', async () => {
+      await pool.query(
+        `UPDATE organization_identity_configs
+         SET jwks_url = $2, public_keys_jwks = NULL
+         WHERE organization_id = $1`,
+        [ORGANIZATION_A, 'https://tenant-a.example.test/jwks'],
+      );
+      const store = new RedisIdentityStore(
+        proxiedRedisUrl,
+        undefined,
+        IDENTITY_CACHE_HMAC_KEY,
+      );
+      let fetches = 0;
+      let reservations = 0;
+      const provider = new JwksKeyProvider(
+        store,
+        async () => {
+          fetches += 1;
+          throw new TypeError('fetch failed');
+        },
+        () => ({
+          resolve4: async () => ['8.8.8.8'],
+          resolve6: async () => [],
+          cancel: () => undefined,
+        }),
+        Date.now,
+      );
+      const resolver = new UserIdentityResolver(
+        new PostgresOrganizationIdentityConfigRepository(identityClient),
+        new UserAssertionVerifier(
+          provider,
+          new JoseUserAssertionCrypto(),
+          {
+            reserve: (input) => {
+              reservations += 1;
+              return store.reserve(input);
+            },
+          },
+          nowSeconds,
+        ),
+      );
+      const before = await redisUnavailableCount('jwks_cache');
+
+      try {
+        await proxy.setMode(mode);
+        const verified = await timed(async () =>
+          resolver.resolve({
+            value: await signUserAssertion(fixture.organizationA.identity),
+            organizationId: ORGANIZATION_A,
+          }),
+        );
+
+        // No fresh or stale keys exist to fall back on, so the request fails
+        // at the key lookup, not at the replay marker.
+        expect(rejection(verified.result)).toMatchObject({
+          code: 'IDENTITY_PROVIDER_UNAVAILABLE',
+          httpStatus: 503,
+          retryable: true,
+        });
+        expect(verified.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+        expect(fetches).toBe(1);
+        expect(reservations).toBe(0);
+        expect(await redisUnavailableCount('jwks_cache')).toBeGreaterThan(
+          before,
+        );
+      } finally {
+        await proxy.setMode('normal');
+        await store.onModuleDestroy();
+      }
+    });
+  },
+);

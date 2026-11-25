@@ -7,7 +7,7 @@
  *
  * A `pending` proof or a tested proof with `gaps` names the issue that owns it:
  * #2028 (DNS/IP cutover and recovery bounds), #2029 (matrix/code alignment),
- * #2030 (test-only gaps), or #398 (the heap budget).
+ * or #398 (the heap budget).
  */
 export interface MatrixSpec {
   /** Repo-relative path of the spec. */
@@ -62,8 +62,14 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'refuses a hard-stop Organization whose durable usage already meets its quota',
           ],
         },
+        {
+          file: `${FAULT}lost-keys-fault.spec.ts`,
+          titles: [
+            'fails a hard-stop Organization closed and admits others as quota_unverified, never reading the lost counter as zero',
+            'rebuilds the counter from durable usage once the source returns',
+          ],
+        },
       ],
-      gaps: 'No case fails the durable-usage source during a rebuild: hard-stop Organizations failing closed and others admitted as quota_unverified are unproven (#2030).',
     },
   'Redis / Graded concurrency permit is down, slow, ambiguous, or malformed': {
     tests: [
@@ -117,8 +123,15 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'authenticates from Postgres and never grants an unknown key',
           ],
         },
+        {
+          file: `${FAULT}identity-redis-fault.spec.ts`,
+          titles: [
+            'spends uncached lookups from a local bucket of 5 per second with burst 5',
+            'refuses an IP after 20 failures inside the 300 s local window, then forgets them',
+            'keeps at most 10,000 IPs in the local failure map, dropping the oldest',
+          ],
+        },
       ],
-      gaps: 'The fault case proves the seam signal and the process-local fallback; the 300 s / 10,000-entry failure map and the 5 req/s burst-5 bucket are unit-only (redis-identity.store.spec.ts); #2030.',
     },
   'Redis / API-key cache is down, slow, corrupt, or missing': {
     tests: [
@@ -182,8 +195,13 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         file: `${FAULT}identity-redis-fault.spec.ts`,
         titles: ['fails closed when Redis cannot reserve a verified assertion'],
       },
+      {
+        file: `${FAULT}identity-redis-fault.spec.ts`,
+        titles: [
+          'answers a retryable 503 IDENTITY_PROVIDER_UNAVAILABLE from the JWKS step, before any replay reservation',
+        ],
+      },
     ],
-    gaps: 'The case proves the fallback to the JWKS source and the jwks_cache signal; its 503 comes from the replay-marker reservation. No case proves 503 IDENTITY_PROVIDER_UNAVAILABLE with no usable cache and an unavailable source (#2030).',
   },
   'Redis / DPoP replay marker is down or ambiguous': {
     tests: [
@@ -336,8 +354,13 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'fails closed when the email-outbox key bundle is missing',
           ],
         },
+        {
+          file: 'test/db/startup/startup-secret-failure.spec.ts',
+          titles: [
+            'exits with a safe configuration error before listening on %s',
+          ],
+        },
       ],
-      gaps: 'The provider throws while the module is built, but no boot-level case starts the app with a missing secret and proves it exits before listening (#2030). aihub_secret_delivery_healthy is set by scripts/ops/host-jobs/container-watchdog.sh, covered by its shell spec, not by this map.',
     },
   'Vault and runtime secrets / Vault/Agent becomes unavailable after a snapshot is loaded':
     {
@@ -371,8 +394,13 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
         file: 'test/integration/object-storage-deadlines.spec.ts',
         titles: ['uses the %s budget without automatic retries'],
       },
+      {
+        file: 'test/db/writing/writing-chart-upload-sweep.spec.ts',
+        titles: [
+          'keeps the row of an object storage could not delete mid-run, and deletes it on the next run',
+        ],
+      },
     ],
-    gaps: 'The operator client is proven to use its own 3 s connection and 30 s request bounds with one attempt. No case fails or stalls a sweep mid-listing and proves the next run retries from the retained cleanup state (#2030).',
   },
   // Not through a fault proxy: the sender posts to Resend's fixed HTTPS
   // endpoint, so provider answers are injected at its fetch seam and the
@@ -520,8 +548,14 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
             'lets Argon2 and another Organization’s downstream hostname connect during a silent JWKS DNS query',
           ],
         },
+        {
+          file: 'src/modules/identity/user-assertions/infrastructure/jwks-remote-fetch.spec.ts',
+          titles: [
+            'gives up at the 3 s fetch deadline with a retryable IDENTITY_JWKS_SOURCE_UNAVAILABLE',
+          ],
+        },
       ],
-      gaps: 'No case proves a hung source is cut at the 3 s fetch timeout (#2030). On the assertion path UserAssertionVerifier turns IDENTITY_JWKS_INVALID into retryable 503 IDENTITY_PROVIDER_UNAVAILABLE, while the matrix promises non-retryable 400 IDENTITY_JWKS_INVALID; #372 decides which side moves; #2029 applies it.',
+      gaps: 'On the assertion path UserAssertionVerifier turns IDENTITY_JWKS_INVALID into retryable 503 IDENTITY_PROVIDER_UNAVAILABLE, while the matrix promises non-retryable 400 IDENTITY_JWKS_INVALID; #372 decides which side moves; #2029 applies it.',
     },
   [PROSE_OBLIGATIONS[0]]: {
     tests: [

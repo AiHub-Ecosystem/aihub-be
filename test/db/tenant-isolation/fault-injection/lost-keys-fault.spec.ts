@@ -29,8 +29,11 @@ import {
   createTenantIsolationRedis,
 } from '../fixtures';
 
+import type { TcpFaultProxy } from '../../../support/tcp-fault-proxy';
 import {
+  eventually,
   metricValue,
+  postgresThroughProxy,
   redisAnswers,
   redisTarget,
   resetAndSeedTenants,
@@ -229,5 +232,87 @@ describe('Redis keys lost under load', () => {
     expect(peakActive).toBeLessThanOrEqual(2 * maxConcurrent);
     expect(refused).toBeGreaterThan(0);
     expect(await raw.zcard(`aihub:v1:inflight:${ORGANIZATION_A}`)).toBe(0);
+  });
+});
+
+describe('a lost quota counter whose durable usage source is down', () => {
+  let proxy: TcpFaultProxy;
+  let proxiedHolder: PrismaClientHolder;
+  let unverifiable: RedisGradedAdmission;
+
+  beforeAll(async () => {
+    const target = await postgresThroughProxy();
+    proxy = target.proxy;
+    proxiedHolder = createPrismaClient('integration-test', target.url);
+    // Built as metering.module.ts builds it, with PostgreSQL behind the proxy.
+    unverifiable = new RedisGradedAdmission(
+      gatewayRedis,
+      () => Date.now(),
+      Math.random,
+      NOOP_LOGGER,
+      new RedisQuotaSeeder(
+        gatewayRedis,
+        new PostgresMonthlyBillableUsage(proxiedHolder.prisma),
+      ),
+    );
+  });
+
+  afterEach(async () => {
+    await proxy.setMode('normal');
+  });
+
+  afterAll(async () => {
+    await proxiedHolder.close();
+    await proxy.close();
+  });
+
+  it('fails a hard-stop Organization closed and admits others as quota_unverified, never reading the lost counter as zero', async () => {
+    const failedBefore = await seeds('failed');
+    await proxy.setMode('refuse');
+
+    await expect(
+      unverifiable.consume(
+        request({ monthlyRequestQuota: 100, hardStopOnQuota: true }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'REDIS_UNAVAILABLE',
+      httpStatus: 503,
+      retryable: true,
+    });
+    await expect(unverifiable.consume(request())).resolves.toMatchObject({
+      stage: 'admitted',
+      quotaUnverified: true,
+    });
+    // No count was written in place of the durable one.
+    expect(await raw.get(quotaKey(ORGANIZATION_A))).toBeNull();
+    expect(await seeds('failed')).toBeGreaterThanOrEqual(failedBefore + 2);
+  });
+
+  it('rebuilds the counter from durable usage once the source returns', async () => {
+    await proxy.setMode('refuse');
+    await expect(unverifiable.consume(request())).resolves.toMatchObject({
+      quotaUnverified: true,
+    });
+
+    await proxy.setMode('normal');
+    // The pool may still hold its breaker open for a second after the
+    // refusals, so the first rebuild can fail once more.
+    // Once the source returns, the first successful rebuild sets the durable
+    // count. Any later consume increments it; both outcomes prove recovery.
+    let counter: string | null = null;
+    await eventually(async () => {
+      const decision = await unverifiable.consume(request());
+      if ('quotaUnverified' in decision) return false;
+      expect(decision).toMatchObject({ stage: 'admitted' });
+      counter = await raw.get(quotaKey(ORGANIZATION_A));
+      return (
+        counter === String(DURABLE_USAGE) ||
+        counter === String(DURABLE_USAGE + 1)
+      );
+    }, 5_000);
+
+    expect([String(DURABLE_USAGE), String(DURABLE_USAGE + 1)]).toContain(
+      counter,
+    );
   });
 });
