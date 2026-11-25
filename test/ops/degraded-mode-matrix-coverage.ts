@@ -76,7 +76,7 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
       {
         file: `${FAULT}gateway-redis-fault.spec.ts`,
         titles: [
-          'refuses a %s concurrency permit without admitting locally and leaks no lease',
+          'admits a %s Organization request after concurrent outage attempts leave no leases',
           'frees a permit after Redis returns beyond the bounded retry attempts',
         ],
       },
