@@ -84,6 +84,12 @@ An AIHUB-generated identifier for one HTTP request. The same value connects
 the application's completion event, the response, and the proxy access record.
 _Avoid_: caller-supplied request ID
 
+**Observability context boundary**:
+The only scopes where request context may be carried implicitly: OpenTelemetry
+trace context and request-log bindings. Business logic receives organization
+identity, request ID, and other request context explicitly.
+_Avoid_: tracing boundary when it excludes log bindings, implicit context store
+
 **AIHUB response deadline**:
 The maximum time from request receipt that AIHUB gives a synchronous caller to
 receive its response. It does not end required-idempotency Writing work that is
