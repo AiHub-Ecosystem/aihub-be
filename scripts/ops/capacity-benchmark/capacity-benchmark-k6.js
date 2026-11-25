@@ -214,7 +214,7 @@ export function load(data) {
     console.log('BENCHMARK_LOAD_STARTED');
   }
   const index = exec.vu.idInTest - 1;
-  const user = data.users[index];
+  const user = data.users[index % data.users.length];
   const organization = data.organizations[index % data.organizations.length];
   if (user === undefined || organization === undefined) {
     throw new Error('benchmark credential seed is incomplete');
