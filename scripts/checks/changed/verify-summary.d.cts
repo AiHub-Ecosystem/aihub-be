@@ -4,5 +4,6 @@ export declare function summarize(
   rawLog: string,
   exitCode: number,
   logPath: string,
+  treeChanged?: boolean,
 ): string;
 export declare function logFileName(now: Date): string;

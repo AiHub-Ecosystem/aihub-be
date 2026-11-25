@@ -212,6 +212,15 @@ function safeErrorMessage(error) {
   return redactDatabaseUrls(collected.join('; '));
 }
 
+/** @param {unknown} error */
+function laneFailureMessage(error) {
+  const message = safeErrorMessage(error);
+  const hint = message.includes('ECONNREFUSED')
+    ? ' PostgreSQL is not accepting connections: start it with `docker compose up -d --wait postgres redis`.'
+    : '';
+  return `Database validation lane failed: ${message}${hint}`;
+}
+
 if (require.main === module) {
   runDatabaseLane(process.argv[2]).then(
     (exitCode) => {
@@ -231,9 +240,7 @@ if (require.main === module) {
           `${caughtError.message} on PostgreSQL server ${new URL(adminUrl).host}. Wait for it to finish before retrying.`,
         );
       } else {
-        console.error(
-          `Database validation lane failed: ${safeErrorMessage(caughtError)}`,
-        );
+        console.error(laneFailureMessage(caughtError));
       }
       process.exitCode = 1;
       return 1;
@@ -243,6 +250,7 @@ if (require.main === module) {
 
 module.exports = {
   databaseLaneLockConnectionString,
+  laneFailureMessage,
   runDatabaseLane,
   safeErrorMessage,
   withDatabaseLaneLock,

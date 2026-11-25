@@ -78,6 +78,14 @@ export async function stopChild(child: ChildProcess): Promise<void> {
   await exited;
 }
 
+/**
+ * The environment starts from `process.env`, which a Jest lane has already
+ * rewritten: its setup file sets `NODE_ENV=test` and
+ * `AIHUB_RUNTIME_SECRET_SOURCE=env` for in-process specs. A spec that boots the
+ * built app in the database lane sets those two back to `development` and
+ * `agent-file` on the returned `environment`, or the app rejects its
+ * configuration (see `test/db/startup/startup-secret-failure.spec.ts`).
+ */
 export async function withBootEnvironment<T>(
   operation: (boot: BootEnvironment) => Promise<T>,
 ): Promise<T> {

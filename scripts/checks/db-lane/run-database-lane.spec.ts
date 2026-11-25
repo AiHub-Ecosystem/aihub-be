@@ -21,6 +21,7 @@ interface DatabaseLaneRunner {
     },
   ): Promise<number>;
   safeErrorMessage(error: unknown): string;
+  laneFailureMessage(error: unknown): string;
   withDatabaseLaneLock<T>(
     client: LaneClient,
     run: () => Promise<T>,
@@ -116,6 +117,26 @@ describe('database validation lane runner', () => {
 
     expect(runCommand).toHaveBeenCalledTimes(1);
     expect(isEnded()).toBe(true);
+  });
+});
+
+describe('laneFailureMessage', () => {
+  it('tells the caller how to start the services when PostgreSQL refuses the connection', () => {
+    const message = runner.laneFailureMessage(
+      new AggregateError(
+        [new Error('connect ECONNREFUSED 127.0.0.1:5432')],
+        '',
+      ),
+    );
+
+    expect(message).toContain('connect ECONNREFUSED 127.0.0.1:5432');
+    expect(message).toContain('docker compose up -d --wait postgres redis');
+  });
+
+  it('adds no hint to an unrelated failure', () => {
+    const message = runner.laneFailureMessage(new Error('password rejected'));
+
+    expect(message).toBe('Database validation lane failed: password rejected');
   });
 });
 

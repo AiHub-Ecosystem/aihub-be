@@ -14,6 +14,7 @@ const childProcess = /** @type {typeof import('node:child_process')} */ (
   require('node:child_process')
 );
 const { spawn } = childProcess;
+const { createHash } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -86,8 +87,9 @@ function jestFailures(lines) {
  * @param {string} rawLog the full output of `bun run verify`
  * @param {number} exitCode
  * @param {string} logPath where the full output was written
+ * @param {boolean} [treeChanged] the working tree differs from when the run began
  */
-function summarize(rawLog, exitCode, logPath) {
+function summarize(rawLog, exitCode, logPath, treeChanged = false) {
   const lines = rawLog.replace(ANSI, '').split(/\r?\n/);
   const out = [
     exitCode === 0 ? 'verify: PASS' : `verify: FAIL (exit ${exitCode})`,
@@ -131,8 +133,37 @@ function summarize(rawLog, exitCode, logPath) {
     );
   }
 
+  if (treeChanged) {
+    out.push(
+      'warning: the working tree changed while verify ran, so this result may not describe the final tree: run it again',
+    );
+  }
+
   out.push(`full log: ${logPath}`);
   return out.join('\n');
+}
+
+/**
+ * What a run is a verdict on: HEAD, the tracked diff, and the untracked files.
+ * @param {string} cwd
+ */
+function treeFingerprint(cwd) {
+  /** @param {string[]} args */
+  const git = (args) =>
+    childProcess.execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+  try {
+    return createHash('sha256')
+      .update(git(['rev-parse', 'HEAD']))
+      .update(git(['diff', 'HEAD']))
+      .update(git(['ls-files', '--others', '--exclude-standard']))
+      .digest('hex');
+  } catch {
+    return '';
+  }
 }
 
 /** @param {Date} now */
@@ -149,8 +180,10 @@ function run() {
   mkdirSync(directory, { recursive: true });
   const logPath = path.join(directory, logFileName(new Date()));
 
+  const root = path.join(__dirname, '..', '..', '..');
+  const before = treeFingerprint(root);
   const child = spawn('bun', ['run', 'verify'], {
-    cwd: path.join(__dirname, '..', '..', '..'),
+    cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -166,7 +199,8 @@ function run() {
     const log = Buffer.concat(chunks).toString('utf8');
     writeFileSync(logPath, log);
     const status = code ?? 1;
-    console.log(summarize(log, status, logPath));
+    const treeChanged = before !== '' && treeFingerprint(root) !== before;
+    console.log(summarize(log, status, logPath, treeChanged));
     process.exit(status);
   });
 }

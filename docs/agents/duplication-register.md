@@ -22,6 +22,10 @@ inventory: specs and `testing/` code are included; `**/fixtures/**` and
 available. The gate checks only new clones; it does not enforce a total
 duplication threshold or use a committed baseline.
 
+The gate prints one summary line and, on failure, `jscpd found N new clones`
+without their locations. Run `bun run check:duplication:full` to list every
+clone, old and new, with file and line ranges.
+
 To keep an intentional clone, add a row here with its paths and reason, then
 wrap the exact repeated blocks in both copies with `jscpd:ignore-start` and
 `jscpd:ignore-end`. This keeps the clone documented without editing a baseline

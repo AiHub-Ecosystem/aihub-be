@@ -84,7 +84,7 @@ A reviewer reads `AGENTS.md`, the `.claude/rules/` files whose `paths` match the
 
 ### Required verification
 
-After each batch of edits run `bun run check:changed`: it reads the changed files from git and runs the gates they can break (`bun lint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, each changed `*.spec.ts` under Jest, and `prettier` for docs). Run `bun run verify` once, at the end, before handoff. `bun run test -- ./path/to/focused-file.spec.ts` runs one spec.
+After each batch of edits run `bun run check:changed`: it reads the changed files from git and runs the gates they can break (`bun lint` and `biome`, import style, file size, `arch-check`, `type-check`, the related specs, each changed `*.spec.ts` under Jest, and `prettier` for docs). Run `bun run verify` once, at the end, before handoff. `bun run test -- ./path/to/focused-file.spec.ts` runs one spec. A spec under `test/db/` runs only through `bun run test:db -- <path>` or `bun run test:tenant-isolation -- <path>`: the default and Jest unit configs both exclude it, and the lane needs Postgres and Redis up (`docs/agents/verification.md`).
 
 `bun run build` is a pure SWC transform; type ownership lives in `type-check` (via `bun run verify`).
 

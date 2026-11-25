@@ -28,6 +28,16 @@ describe('summarize', () => {
     expect(text.split('\n').length).toBeLessThan(10);
   });
 
+  it('warns when the working tree changed during the run', () => {
+    const text = summarize(PASSING, 0, '/tmp/v.log', true);
+
+    expect(text.split('\n')[0]).toBe('verify: PASS');
+    expect(text).toContain('working tree changed while verify ran');
+    expect(summarize(PASSING, 0, '/tmp/v.log')).not.toContain(
+      'working tree changed',
+    );
+  });
+
   it('reads the last Jest summary when a log holds two runs', () => {
     const log = `${PASSING}\nTest Suites: 2 failed, 170 passed, 172 total\nTests:       13 failed, 1644 passed, 1657 total`;
 
