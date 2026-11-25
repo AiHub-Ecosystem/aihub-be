@@ -7,6 +7,7 @@
 - `src/**/infrastructure/**`
 - `src/config/**`
 - `scripts/**`
+- `ops/**`
 - `.dependency-cruiser.cjs`
 
 **Not allowed:** edits to domain invariants, public API schemas, or pure adapter mappings unless the owning role requests a change.

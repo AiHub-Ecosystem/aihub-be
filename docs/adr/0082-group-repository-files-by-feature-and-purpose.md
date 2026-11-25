@@ -13,6 +13,8 @@ Issue #341 addresses folders where files for many Identity features, script purp
 - Group CLI specs under `test/cli/` and integration specs under `test/integration/`. Keep shared setup and cross-cutting specs at the `test/` root.
 - Keep each Identity feature-layer folder at 20 direct entries or fewer, and each of the `scripts/` and `test/` roots at 15 direct entries or fewer. Add a purpose or feature subfolder before exceeding those limits.
 
+#1826 records a conflict with this decision: root `ops/` stays outside the `scripts/` grouping as an explicit exemption in `AGENTS.md`, holding host-deployed configuration and operator commands (`nginx/`, `firewall/`, `monitoring/`, `logs/`, `host-jobs/`, `dast/`, `vault/`, `status.sh`). This decision still governs every other script; the exemption is limited to that deployment surface.
+
 Feature-first Identity grouping was chosen over feature subfolders inside each existing layer. The issue prefers the smaller layer-first move unless the architecture check cannot express its rules; a temporary layer-first fixture confirmed that `pnpm arch-check` catches application-to-infrastructure, presentation-to-infrastructure, and infrastructure-to-presentation imports. During grooming, the repository owner explicitly approved feature-first because it places one feature's application, infrastructure, and presentation files together for navigation. This is an approved choice despite the checker supporting layer-first, not a limitation of the checker. The permanent architecture test verifies the same three rules in the feature-first layout.
 
 ## Consequences

@@ -1080,7 +1080,7 @@ Validate the policy before starting the application:
 AIHUB_VAULT_SMOKE_ALLOW=true \
 AIHUB_VAULT_SMOKE_AUTH_METHOD=approle \
 AIHUB_VAULT_ENVIRONMENT=production \
-  node scripts/ops/vault/vault-smoke.mjs
+  node ops/vault/vault-smoke.mjs
 ```
 
 Run the smoke command from a Vault CLI session authenticated as the generated

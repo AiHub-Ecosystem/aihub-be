@@ -24,7 +24,7 @@ knowledge_base:
       - files: ".claude/agents/identity.md"
         applyTo: "src/modules/identity/**, src/common/request-context/**, src/common/security/**"
       - files: ".claude/agents/infrastructure.md"
-        applyTo: "src/**/infrastructure/**, src/config/**, scripts/**, .dependency-cruiser.cjs"
+        applyTo: "src/**/infrastructure/**, src/config/**, scripts/**, ops/**, .dependency-cruiser.cjs"
       - files: ".claude/agents/metering.md"
         applyTo: "src/modules/metering/**"
       - files: ".claude/agents/testing.md"
