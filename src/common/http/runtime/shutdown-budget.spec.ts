@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
 import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 import {
+  BACKGROUND_PAST_RESPONSE_TIMEOUTS,
+  BACKGROUND_SLACK_MS,
   backgroundDrainMs,
+  backgroundHardDeadlineMs,
   largestRequestTimeoutMs,
   requiredStopGraceMs,
 } from './shutdown-budget';
@@ -68,6 +71,26 @@ describe('shutdown budget', () => {
     expect(largestRequestTimeoutMs()).toBe(300_000);
     for (const period of composeStopGracePeriodsMs()) {
       expect(period).toBeGreaterThanOrEqual(requiredStopGraceMs(300_000));
+    }
+  });
+});
+
+describe('idempotency background hard deadline (#1660)', () => {
+  it('states the policy as one response timeout after the response deadline', () => {
+    expect(BACKGROUND_PAST_RESPONSE_TIMEOUTS).toBe(1);
+    expect(backgroundHardDeadlineMs(50)).toBe(100);
+  });
+
+  it('keeps the hard deadline and shutdown wait budget aligned', () => {
+    for (const timeoutMs of [5, 50, 60_000, 125_000, 300_000]) {
+      const afterResponseMs = backgroundHardDeadlineMs(timeoutMs) - timeoutMs;
+
+      expect(afterResponseMs).toBe(
+        timeoutMs * BACKGROUND_PAST_RESPONSE_TIMEOUTS,
+      );
+      expect(backgroundDrainMs(timeoutMs)).toBe(
+        afterResponseMs + BACKGROUND_SLACK_MS,
+      );
     }
   });
 });

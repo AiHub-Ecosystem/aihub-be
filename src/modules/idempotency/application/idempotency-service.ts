@@ -5,6 +5,7 @@ import {
 } from '@/common/errors/app-error';
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
 import { jitteredRetryAfterMs } from '@/common/errors/retry-jitter';
+import { backgroundHardDeadlineMs } from '@/common/http/runtime/shutdown-budget';
 import {
   databaseUnavailableError,
   isPostgresUnavailable,
@@ -256,11 +257,10 @@ export class IdempotencyService implements IdempotencyServicePort {
       );
       throw timeoutError();
     }
-    // Background work can run up to `timeoutMs` past its response deadline
-    // (the longest grading route is 125s on Writing /v2); the shutdown budget
-    // allows that timeout plus 15s (shutdown-budget.ts). Change this factor
-    // together with BACKGROUND_SLACK_MS there.
-    const hardTimeoutMs = input.timeoutMs * 2;
+    // The hard deadline is the shared background policy: one response timeout
+    // past the response deadline, which the shutdown drain covers plus slack
+    // (shutdown-budget.ts, #1660).
+    const hardTimeoutMs = backgroundHardDeadlineMs(input.timeoutMs);
     const hardDeadlineAt = new Date(this.now() + hardTimeoutMs);
     const controller = new AbortController();
     let rejectHardDeadline: ((error: unknown) => void) | undefined;

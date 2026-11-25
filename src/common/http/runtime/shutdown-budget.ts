@@ -10,13 +10,23 @@ import { PUBLIC_ROUTES } from '@/catalog/public-routes';
 //   telemetry    = 5s flush
 //   margin       = 10s
 // shutdown-budget.spec.ts fails when the compose value falls short.
+// Shared policy (#1660): background work may run one full response timeout
+// past its response deadline before the hard deadline aborts it. The drain
+// budget below is that window plus slack, and Idempotency uses the same policy
+// for its hard deadline, so the two values cannot drift apart.
+export const BACKGROUND_PAST_RESPONSE_TIMEOUTS = 1;
+
 // Slack past the timeout for the final writes after late work ends.
-const BACKGROUND_SLACK_MS = 15_000;
+export const BACKGROUND_SLACK_MS = 15_000;
 const TELEMETRY_FLUSH_MS = 5_000;
 const SHUTDOWN_MARGIN_MS = 10_000;
 
+export function backgroundHardDeadlineMs(timeoutMs: number): number {
+  return timeoutMs * (1 + BACKGROUND_PAST_RESPONSE_TIMEOUTS);
+}
+
 export function backgroundDrainMs(timeoutMs: number): number {
-  return timeoutMs + BACKGROUND_SLACK_MS;
+  return timeoutMs * BACKGROUND_PAST_RESPONSE_TIMEOUTS + BACKGROUND_SLACK_MS;
 }
 
 export function requiredStopGraceMs(timeoutMs: number): number {
