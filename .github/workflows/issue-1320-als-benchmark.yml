@@ -1,0 +1,104 @@
+name: Issue 1320 ALS benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Code variant to measure.
+        required: true
+        type: choice
+        options:
+          - baseline
+          - als
+        default: baseline
+      max_vus:
+        description: k6 load VUs; the seeded user pool follows this value.
+        required: true
+        type: number
+        default: 2000
+      rates:
+        description: Comma-separated offered request rates for the stages.
+        required: true
+        type: string
+        default: "16,2000"
+      duration:
+        description: Base hold duration for each stage.
+        required: true
+        type: string
+        default: 15s
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-1320-benchmark-${{ github.ref }}-${{ inputs.variant }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Issue 1320 ${{ inputs.variant }} at ${{ inputs.max_vus }} VUs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        run: npm install --global bun@1.4.4-canary.20261109.1
+
+      - name: Test capacity benchmark process timeout handling
+        run: bun run test:capacity-benchmark
+
+      - name: Apply the throwaway ALS variant when selected
+        env:
+          VARIANT: ${{ inputs.variant }}
+        run: |
+          set -euo pipefail
+          if [ "$VARIANT" != "als" ]; then
+            exit 0
+          fi
+          git apply scripts/ops/capacity-benchmark/issue-1320-als.patch
+          git add -A
+          git -c user.name=benchmark -c user.email=benchmark@local commit -m 'chore(benchmark): apply throwaway ALS variant'
+          git status --porcelain
+
+      - name: Record runner hardware and Docker engine
+        run: |
+          mkdir -p artifacts/capacity-benchmark
+          {
+            lscpu
+            free -b
+            df -h /
+            docker version
+            docker info
+          } > "artifacts/capacity-benchmark/runner-info.txt"
+
+      - name: Run the staged benchmark
+        env:
+          BENCHMARK_STAGE_RATES_RPS: ${{ inputs.rates }}
+          BENCHMARK_DURATION: ${{ inputs.duration }}
+          BENCHMARK_MINIMUM_GRADING_SAMPLES: 1000
+          BENCHMARK_REPETITION: 1
+          BENCHMARK_RUNNER_DESCRIPTION: ubuntu-24.04 issue-1320 ${{ inputs.variant }}
+          BENCHMARK_REDIS_RTT_MS: 60
+          BENCHMARK_STUB_LATENCY_MS: 2000
+          BENCHMARK_STUB_ERROR_RATE: 0
+          BENCHMARK_MAX_VUS: ${{ inputs.max_vus }}
+        run: bun run capacity:benchmark
+
+      - name: Upload raw run
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: issue-1320-${{ inputs.variant }}-${{ github.run_id }}
+          path: artifacts/capacity-benchmark/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,73 @@
+diff --git a/src/common/request-context/benchmark-als-store.ts b/src/common/request-context/benchmark-als-store.ts
+new file mode 100644
+index 00000000..363cd267
+--- /dev/null
++++ b/src/common/request-context/benchmark-als-store.ts
+@@ -0,0 +1,6 @@
++import { AsyncLocalStorage } from 'node:async_hooks';
++
++import type { RequestContext } from '@/common/request-context/request-context';
++
++// Throwaway issue-1320 variant only: implicit deep-path context lookup.
++export const benchmarkContextStore = new AsyncLocalStorage<RequestContext>();
+diff --git a/src/modules/gateway/application/graded-request/grading-orchestrator.ts b/src/modules/gateway/application/graded-request/grading-orchestrator.ts
+index 703c7433..b723b418 100644
+--- a/src/modules/gateway/application/graded-request/grading-orchestrator.ts
++++ b/src/modules/gateway/application/graded-request/grading-orchestrator.ts
+@@ -8,6 +8,7 @@ import {
+   type OperationDef,
+ } from '@/catalog/operation-catalog';
+ import type { OperationId } from '@/catalog/operation-id';
++import { benchmarkContextStore } from '@/common/request-context/benchmark-als-store';
+ import { createRequestContext } from '@/common/request-context/request-context.factory';
+ import {
+   WritingV2StoredGradeResponseSchema,
+@@ -170,7 +171,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
+     };
+ 
+     if (def.idempotency === 'none') {
+-      return dispatch();
++      return benchmarkContextStore.run(context, () => dispatch());
+     }
+ 
+     const preloadedReplay = command.completedReplay;
+@@ -211,7 +212,7 @@ export class GradingOrchestrator implements GradingOrchestratorPort {
+           ? {}
+           : { backgroundLifecycle: command.backgroundLifecycle }),
+       },
+-      dispatch,
++      (work) => benchmarkContextStore.run(context, () => dispatch(work)),
+       (value) =>
+         decodeStoredResult(value, command.operation, def) as DispatchResult<
+           ResponseForCommand<C>
+diff --git a/src/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.ts b/src/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.ts
+index 88a0caa1..8f11a7cc 100644
+--- a/src/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.ts
++++ b/src/modules/gateway/infrastructure/dispatch/http-operation-dispatcher.ts
+@@ -8,6 +8,7 @@ import type { ErrorCode } from '@/common/errors/error-code';
+ import { parseRetryAfter } from '@/common/http/retry-after';
+ import { isRecord } from '@/common/is-record';
+ import { recordDownstreamCredentialRejection } from '@/common/observability/metrics/metrics';
++import { benchmarkContextStore } from '@/common/request-context/benchmark-als-store';
+ import type { RequestContext } from '@/common/request-context/request-context';
+ import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
+ import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
+@@ -231,7 +232,8 @@ export class HttpOperationTransport implements OperationTransportPort {
+       throw unconfiguredOperation(operation);
+     }
+ 
+-    const builtRequest = adapter.buildRequest(input, context);
++    const effectiveContext = benchmarkContextStore.getStore() ?? context;
++    const builtRequest = adapter.buildRequest(input, effectiveContext);
+     const downstreamRequest =
+       builtRequest.method === 'GET'
+         ? {
+@@ -241,7 +243,7 @@ export class HttpOperationTransport implements OperationTransportPort {
+         : builtRequest;
+     const authorization =
+       adapter.downstream === 'ai-writing'
+-        ? `Bearer ${await this.tokenIssuer.mint(context, operation)}`
++        ? `Bearer ${await this.tokenIssuer.mint(effectiveContext, operation)}`
+         : undefined;
+ 
+     // An operation whose adapter is registered before its catalog entry reads
