@@ -2,7 +2,20 @@ import { randomUUID } from 'node:crypto';
 
 import type Redis from 'ioredis';
 
+import type { OperationId } from '@/catalog/operation-id';
+import { waitForBackgroundWork } from '@/common/background-work-tracker';
+import type { RequestContext } from '@/common/request-context/request-context';
+import type {
+  DispatchResult,
+  OperationDispatcherPort,
+  RequestFor,
+  ResponseFor,
+} from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
+import { GradedPipelineEngine } from '@/modules/gateway/application/graded-request/graded-pipeline-engine';
+import { type GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
+import { GradingOrchestrator } from '@/modules/gateway/application/graded-request/grading-orchestrator';
 import { ORGANIZATION_RETRY_BUDGET_POLICY } from '@/modules/gateway/application/graded-request/retry-budget-policy';
+import { rateLimitWindow } from '@/modules/gateway/application/rate-limit-window';
 import {
   LEASE_REMOVAL_RETRY_MS,
   RedisConcurrencyLimiter,
@@ -12,8 +25,20 @@ import {
   createRedisGatewayClient,
 } from '@/modules/gateway/infrastructure/redis-gateway.client';
 import { RedisGradedAdmission } from '@/modules/gateway/infrastructure/redis-graded-admission';
-import { RedisRateLimiter } from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import {
+  RedisRateLimiter,
+  rateLimitKey,
+} from '@/modules/gateway/infrastructure/redis-rate-limiter';
+import type {
+  IdempotencyExecution,
+  IdempotencyExecutionInput,
+  IdempotencyServicePort,
+  IdempotencyWork,
+} from '@/modules/idempotency/application/idempotency-service.port';
+import { createRedisMeteringClient } from '@/modules/metering/infrastructure/quota/redis-metering.client';
+import { RedisQuotaCounter } from '@/modules/metering/infrastructure/quota/redis-quota-counter';
 import { RedisQuotaSeeder } from '@/modules/metering/infrastructure/quota/redis-quota-seed';
+import { quotaKeyForMonth } from '@/modules/metering/public/quota-counter';
 
 import { createTenantIsolationRedis } from '../fixtures';
 
@@ -48,6 +73,7 @@ const REDIS_UNAVAILABLE = {
 
 let proxy: TcpFaultProxy;
 let client: RedisGatewayClient;
+let meteringClient: ReturnType<typeof createRedisMeteringClient>;
 let raw: Redis;
 
 function organizationId(): string {
@@ -79,13 +105,115 @@ function concurrencyRequest(
   };
 }
 
+async function runOrganizationGradedRequest(
+  organization: string,
+  environment: 'production' | 'sandbox',
+  limiter: RedisConcurrencyLimiter,
+): Promise<boolean> {
+  const operation = 'writing.task1.grade' as const;
+  const requestId = `req_${randomUUID()}`;
+  const signal = new AbortController().signal;
+  const dispatchReached = new Error('dispatch reached');
+  let admitted = false;
+  const context: GradedPipelineContext<typeof operation> = {
+    requestId,
+    receivedAt: new Date(),
+    signal,
+    dispose: () => undefined,
+    operation,
+    authenticated: {
+      organizationId: organization,
+      apiKeyId: `ak_${organization}`,
+      environment,
+      scopes: ['writing.grade'],
+      rateLimitRpm: 600,
+      maxConcurrent: 2,
+      monthlyRequestQuota: 1_000,
+      hardStopOnQuota: false,
+      allowedEnvironments: ['production', 'sandbox'],
+    },
+    identity: {
+      userId: 'user_acme',
+      organizationId: organization,
+      scopes: [],
+      mode: 'declared_id',
+    },
+    idempotencyKey: `key-${randomUUID()}`,
+    metering: {
+      evidence: {
+        operation,
+        organizationId: organization,
+        apiKeyId: `ak_${organization}`,
+        environment,
+        settled: false,
+      },
+      setDimensions: () => undefined,
+      addEvidence: () => undefined,
+      markCompletionStarted: () => undefined,
+      markCompletionSettled: () => undefined,
+    },
+    markAdmission: () => {
+      admitted = true;
+    },
+    prepareInput: async () => ({
+      input: {
+        question: 'Describe the chart.',
+        chart_type: 'Line Graph',
+        essay: 'A clear response.',
+        image_url: 'https://example.com/chart.png',
+      },
+    }),
+  };
+  const dispatcher: OperationDispatcherPort = {
+    async dispatch<O extends OperationId>(
+      _operation: O,
+      _input: RequestFor<O>,
+      _context: RequestContext,
+    ): Promise<DispatchResult<ResponseFor<O>>> {
+      throw dispatchReached;
+    },
+  };
+  const idempotency: IdempotencyServicePort = {
+    async execute<T>(
+      input: IdempotencyExecutionInput,
+      work: IdempotencyWork<T>,
+    ): Promise<IdempotencyExecution<T>> {
+      return { result: await work(input), replay: false };
+    },
+  };
+  const engine = new GradedPipelineEngine(
+    new GradingOrchestrator(dispatcher, idempotency),
+    { finalize: async () => undefined },
+    new RedisGradedAdmission(
+      client,
+      () => Date.now(),
+      Math.random,
+      NOOP_LOGGER,
+      new RedisQuotaSeeder(client, { billableCount: async () => 0 }),
+    ),
+    limiter,
+    idempotency,
+    { count: async () => 0 },
+  );
+
+  try {
+    await engine.execute(context);
+  } catch (error) {
+    if (error === dispatchReached) return admitted;
+    throw error;
+  }
+  return false;
+}
+
 beforeAll(async () => {
   const target = await redisThroughProxy();
   proxy = target.proxy;
   const proxied = createRedisGatewayClient(target.url);
   if (proxied === undefined) throw new Error('Gateway Redis client missing');
   client = proxied;
+  meteringClient = createRedisMeteringClient(target.url);
   raw = createTenantIsolationRedis();
+  await Promise.all([redisAnswers(client), redisAnswers(raw)]);
 });
 
 afterEach(async () => {
@@ -95,6 +223,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await client.quit().catch(() => undefined);
+  await meteringClient?.quit().catch(() => undefined);
   await raw.quit();
   await proxy.close();
 });
@@ -133,7 +262,7 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
     });
 
     it.each(['production', 'sandbox'] as const)(
-      'refuses a %s concurrency permit without admitting locally and leaks no lease',
+      'admits a %s Organization request after concurrent outage attempts leave no leases',
       async (environment) => {
         const limiter = new RedisConcurrencyLimiter(client, NOOP_LOGGER);
         const organization = organizationId();
@@ -141,12 +270,18 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         const before = await redisUnavailableCount('concurrency');
 
         await proxy.setMode(mode);
-        const outage = await timed(() =>
-          limiter.acquire(concurrencyRequest(organization, environment)),
+        const outages = await Promise.all(
+          Array.from({ length: 3 }, () =>
+            timed(() =>
+              limiter.acquire(concurrencyRequest(organization, environment)),
+            ),
+          ),
         );
 
-        expect(rejection(outage.result)).toMatchObject(REDIS_UNAVAILABLE);
-        expect(outage.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+        for (const outage of outages) {
+          expect(rejection(outage.result)).toMatchObject(REDIS_UNAVAILABLE);
+          expect(outage.ms).toBeLessThan(FAIL_FAST_BOUND_MS);
+        }
         expect(await redisUnavailableCount('concurrency')).toBeGreaterThan(
           before,
         );
@@ -155,18 +290,13 @@ describe.each<FaultMode>(['refuse', 'hang', 'slow'])(
         // lease; only the limiter's background removal takes it out again.
         await proxy.setMode('normal');
         await redisAnswers(client);
-        await eventually(
-          async () =>
-            (await inflight(raw, organization)) === 0 &&
-            (environment !== 'sandbox' || (await sandboxInflight(raw)) === 0),
-          LEASE_REMOVAL_RETRY_MS * 3,
-        );
+        await waitForBackgroundWork(LEASE_REMOVAL_RETRY_MS * 3);
+        expect(await inflight(raw, organization)).toBe(0);
+        expect(await sandboxInflight(raw)).toBe(0);
 
-        const recovered = await limiter.acquire(
-          concurrencyRequest(organization, environment),
-        );
-        expect(recovered.allowed).toBe(true);
-        if (recovered.allowed) await recovered.lease.release();
+        await expect(
+          runOrganizationGradedRequest(organization, environment, limiter),
+        ).resolves.toBe(true);
         expect(await inflight(raw, organization)).toBe(0);
         expect(await sandboxInflight(raw)).toBe(0);
       },
@@ -240,4 +370,54 @@ it('frees a permit after Redis returns beyond the bounded retry attempts', async
   expect(recovered.allowed).toBe(true);
   if (recovered.allowed) await recovered.lease.release();
   expect(await inflight(raw, organization)).toBe(0);
+}, 20_000);
+
+it('does not replay a rate-limit mutation when reconnect follows a lost reply', async () => {
+  const now = 61_234;
+  const keyId = `ak_${randomUUID()}`;
+  const key = rateLimitKey(keyId, rateLimitWindow(keyId, now).index);
+  const limiter = new RedisRateLimiter('', client, () => now, NOOP_LOGGER);
+  await raw.del(key);
+
+  await proxy.setMode('slow');
+  const pending = timed(() => limiter.consume({ keyId, limit: 1 }));
+  await eventually(async () => (await raw.get(key)) === '1');
+  await proxy.setMode('refuse');
+
+  const result = await pending;
+  expect(rejection(result.result)).toMatchObject(REDIS_UNAVAILABLE);
+
+  await proxy.setMode('normal');
+  await eventually(async () => (await client.get(key)) !== null);
+
+  expect(await raw.get(key)).toBe('1');
+  await expect(limiter.consume({ keyId, limit: 1 })).resolves.toMatchObject({
+    allowed: false,
+  });
+}, 10_000);
+
+it('does not replay a quota increment when reconnect follows a lost reply', async () => {
+  const redis = meteringClient;
+  if (redis === undefined) throw new Error('Metering Redis missing');
+  const organization = organizationId();
+  const now = new Date();
+  const key = quotaKeyForMonth(organization, now.toISOString().slice(0, 7));
+  const counter = new RedisQuotaCounter(redis);
+  await eventually(async () => (await redis.get(key)) === null, 10_000);
+  await raw.set(key, '0');
+
+  await proxy.setMode('slow');
+  const pending = timed(() =>
+    counter.increment({ organizationId: organization, occurredAt: now }),
+  );
+  await eventually(async () => (await raw.get(key)) === '1');
+  await proxy.setMode('refuse');
+
+  const result = await pending;
+  expect(result.result.status).toBe('rejected');
+
+  await proxy.setMode('normal');
+  await eventually(async () => (await redis.get(key)) !== null, 10_000);
+
+  expect(await raw.get(key)).toBe('1');
 }, 20_000);
