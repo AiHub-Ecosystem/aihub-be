@@ -25,11 +25,21 @@ async function bootWithSecrets(
 ): Promise<{ readonly exitCode: number | null; readonly output: string }> {
   return withBootEnvironment(
     async ({ directory, environment, runtimeSecretsFile }) => {
+      // The database Jest lane sets NODE_ENV=test and secret-source=env in its
+      // setup file. The built app must read the rendered agent files instead.
+      const bootEnvironment = {
+        ...environment,
+        NODE_ENV: 'development',
+        AIHUB_RUNTIME_SECRET_SOURCE: 'agent-file',
+      };
       const bundle = JSON.parse(
         readFileSync(runtimeSecretsFile, 'utf8'),
       ) as SecretBundle;
       writeFileSync(runtimeSecretsFile, breakBundle(bundle));
-      const { child, logs } = await bootWithEnvironment(environment, directory);
+      const { child, logs } = await bootWithEnvironment(
+        bootEnvironment,
+        directory,
+      );
       try {
         return { exitCode: await waitForExit(child, logs), output: logs() };
       } finally {

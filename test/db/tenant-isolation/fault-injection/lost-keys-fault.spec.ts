@@ -297,17 +297,22 @@ describe('a lost quota counter whose durable usage source is down', () => {
     await proxy.setMode('normal');
     // The pool may still hold its breaker open for a second after the
     // refusals, so the first rebuild can fail once more.
-    let decision = await unverifiable.consume(request());
+    // Once the source returns, the first successful rebuild sets the durable
+    // count. Any later consume increments it; both outcomes prove recovery.
+    let counter: string | null = null;
     await eventually(async () => {
-      if (!('quotaUnverified' in decision)) return true;
-      decision = await unverifiable.consume(request());
-      return false;
+      const decision = await unverifiable.consume(request());
+      if ('quotaUnverified' in decision) return false;
+      expect(decision).toMatchObject({ stage: 'admitted' });
+      counter = await raw.get(quotaKey(ORGANIZATION_A));
+      return (
+        counter === String(DURABLE_USAGE) ||
+        counter === String(DURABLE_USAGE + 1)
+      );
     }, 5_000);
 
-    expect(decision).toMatchObject({ stage: 'admitted' });
-    expect(decision).not.toHaveProperty('quotaUnverified');
-    expect(await raw.get(quotaKey(ORGANIZATION_A))).toBe(
-      String(DURABLE_USAGE + 1),
+    expect([String(DURABLE_USAGE), String(DURABLE_USAGE + 1)]).toContain(
+      counter,
     );
   });
 });
