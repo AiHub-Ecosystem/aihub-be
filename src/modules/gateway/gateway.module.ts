@@ -8,6 +8,7 @@ import {
 
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
+import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import { speakingGradingJsonAdapter } from '@/downstream/speaking/speaking-grading-json.adapter';
 import { speakingGradingAdapter } from '@/downstream/speaking/speaking-grading.adapter';
 import {
@@ -125,6 +126,25 @@ import { SheddingGovernorScheduler } from './infrastructure/shedding-governor.sc
 import { SheddingLevelStore } from './infrastructure/shedding-level.store';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
+
+/** The one production adapter registry, consumed by `OPERATION_DISPATCHER`. */
+export const PRODUCTION_ADAPTERS = [
+  task1GradeAdapter,
+  task2GradeAdapter,
+  writingV3Task1GradeAdapter,
+  writingV3Task2GradeAdapter,
+  createMicroExerciseAdapter,
+  createLongWritingExerciseAdapter,
+  gradeMicroExerciseAdapter,
+  speakingGradingAdapter,
+  speakingGradingJsonAdapter,
+  speakingV2QuestionGradingAdapter,
+  speakingV2PartGradingAdapter,
+  speakingV2TestGradingAdapter,
+  speakingV2ResponseGetAdapter,
+  speakingV2PartGetAdapter,
+  speakingV2TestGetAdapter,
+] satisfies readonly DownstreamAdapter<unknown, unknown>[];
 
 @Module({
   imports: [
@@ -265,23 +285,7 @@ import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.inte
         const transport = new HttpOperationTransport(
           httpClient,
           tokenIssuer,
-          [
-            task1GradeAdapter,
-            task2GradeAdapter,
-            writingV3Task1GradeAdapter,
-            writingV3Task2GradeAdapter,
-            createMicroExerciseAdapter,
-            createLongWritingExerciseAdapter,
-            gradeMicroExerciseAdapter,
-            speakingGradingAdapter,
-            speakingGradingJsonAdapter,
-            speakingV2QuestionGradingAdapter,
-            speakingV2PartGradingAdapter,
-            speakingV2TestGradingAdapter,
-            speakingV2ResponseGetAdapter,
-            speakingV2PartGetAdapter,
-            speakingV2TestGetAdapter,
-          ],
+          PRODUCTION_ADAPTERS,
           circuitBreakers,
         );
         const policy = new DispatchAttemptPolicy(
