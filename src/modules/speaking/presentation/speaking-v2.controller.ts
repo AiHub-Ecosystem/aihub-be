@@ -27,12 +27,12 @@ import {
   SpeakingV2TestPathSchema,
 } from '@/contracts/speaking/v2/requests';
 import type { SpeakingV2TestResult } from '@/contracts/speaking/v2/test-result';
-import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
   type GradedPipelineDispatchResult,
   createGradedPipelineContext,
 } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
+import { GradedRequest } from '@/modules/identity/shared/presentation/graded-request.decorator';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import {
   SPEAKING_MULTIPART_PARSER,

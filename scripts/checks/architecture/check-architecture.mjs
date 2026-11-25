@@ -2180,6 +2180,117 @@ export function collectSourceTextFailures(options) {
     }
   }
 
+  // #2034: `no-circular` sees cycles between files, not between module
+  // directories. Build the runtime owner graph from every non-spec source file
+  // and fail on any cycle, naming the edges that take part in it. Published
+  // seams still count: a seam change can silently move an admission guard.
+  /** @type {Map<string, Map<string, string[]>>} */
+  const directoryGraph = new Map();
+  /** @param {string} owner @param {string} imported @param {string} edge */
+  function addDirectoryEdge(owner, imported, edge) {
+    let targets = directoryGraph.get(owner);
+    if (targets === undefined) {
+      targets = new Map();
+      directoryGraph.set(owner, targets);
+    }
+    const edges = targets.get(imported);
+    if (edges === undefined) targets.set(imported, [edge]);
+    else edges.push(edge);
+  }
+
+  for (const file of sourceFiles.filter(
+    (candidate) => candidate.endsWith('.ts') && !candidate.endsWith('.spec.ts'),
+  )) {
+    const from = relative(root, file).replace(/\\/g, '/');
+    const owner = /^src\/modules\/([^/]+)\//.exec(from)?.[1];
+    if (owner === undefined) continue;
+    const sourceFile = ts.createSourceFile(
+      file,
+      sourceText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    for (const statement of sourceFile.statements) {
+      const specifier = moduleSpecifierOf(statement);
+      if (specifier === undefined) continue;
+      // Inline `type` specifiers are as erased as `import type` at runtime.
+      const typeOnly =
+        (ts.isImportDeclaration(statement) &&
+          (statement.importClause?.isTypeOnly === true ||
+            (statement.importClause?.name === undefined &&
+              statement.importClause?.namedBindings !== undefined &&
+              ts.isNamedImports(statement.importClause.namedBindings) &&
+              statement.importClause.namedBindings.elements.length > 0 &&
+              statement.importClause.namedBindings.elements.every(
+                (element) => element.isTypeOnly,
+              )))) ||
+        (ts.isExportDeclaration(statement) &&
+          (statement.isTypeOnly === true ||
+            (statement.exportClause !== undefined &&
+              ts.isNamedExports(statement.exportClause) &&
+              statement.exportClause.elements.length > 0 &&
+              statement.exportClause.elements.every(
+                (element) => element.isTypeOnly,
+              ))));
+      if (typeOnly) continue;
+      let resolved;
+      const alias = /^@\/modules\/([^/]+)\//.exec(specifier);
+      if (alias !== null)
+        resolved = `src/modules/${alias[1]}/${specifier.slice(`@/modules/${alias[1]}/`.length)}`;
+      else if (specifier.startsWith('.'))
+        resolved = relative(root, join(dirname(file), specifier)).replace(
+          /\\/g,
+          '/',
+        );
+      if (resolved === undefined) continue;
+      const imported = /^src\/modules\/([^/]+)\//.exec(resolved)?.[1];
+      if (imported === undefined || imported === owner) continue;
+      addDirectoryEdge(owner, imported, `${from} -> ${resolved}`);
+    }
+  }
+
+  /** @type {Map<string, 'visiting' | 'done'>} */
+  const directoryVisitState = new Map();
+  /** @type {string[]} */
+  const directoryStack = [];
+  /** @type {Set<string>} */
+  const reportedDirectoryCycles = new Set();
+  /** @param {string} owner */
+  function visitDirectory(owner) {
+    directoryVisitState.set(owner, 'visiting');
+    directoryStack.push(owner);
+    for (const imported of directoryGraph.get(owner)?.keys() ?? []) {
+      const state = directoryVisitState.get(imported);
+      if (state === 'visiting') {
+        const cycle = [
+          ...directoryStack.slice(directoryStack.indexOf(imported)),
+          imported,
+        ];
+        const key = cycle.join(' -> ');
+        if (!reportedDirectoryCycles.has(key)) {
+          reportedDirectoryCycles.add(key);
+          const files = cycle
+            .slice(0, -1)
+            .flatMap((from, index) =>
+              (directoryGraph.get(from)?.get(cycle[index + 1]) ?? []).sort(),
+            );
+          fail(
+            `Module directory import cycle: ${cycle.join(' -> ')}; files: ${files.join(', ')}`,
+          );
+        }
+      } else if (state === undefined) {
+        visitDirectory(imported);
+      }
+    }
+    directoryStack.pop();
+    directoryVisitState.set(owner, 'done');
+  }
+
+  for (const owner of directoryGraph.keys()) {
+    if (!directoryVisitState.has(owner)) visitDirectory(owner);
+  }
+
   return { failures, stoppedEarly: false };
 }
 

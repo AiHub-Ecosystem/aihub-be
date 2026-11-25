@@ -37,6 +37,10 @@ Identity↔Gateway TypeScript imports in both directions remain accepted residua
 
 All cross-module imports continue crossing published seams (exported guards, `public/` facades, application port types).
 
+### Amendment (#2034)
+
+The Identity↔Gateway TypeScript cycle is no longer an accepted residual. A mechanical directory-level import check in `arch-check` now fails on any runtime import between two `src/modules` directories, excluding specs and type-only imports. Gateway keeps graded-request orchestration, the execution lifecycle, and `SuccessEnvelopeInterceptor`. The `GradedRequest` decorator moves to `identity/shared/presentation` because it composes identity-owned guards and must not make Gateway import Identity at runtime; Writing and Speaking consume it from Identity while still reaching Gateway through `public/graded-pipeline` and the module files. The shared authenticated-request helper and the End-User ID rule live in `src/common/security`, re-exported through Identity's existing seams. The Nest direction is unchanged: `IdentityModule` imports `GatewayModule`, and `GatewayModule` still does not import `IdentityModule`. No guard was reordered or removed (ADR-0057).
+
 - Status: Accepted
 - Related issue: [#1576](https://github.com/AiHub-Ecosystem/aihub-be/issues/1576)
 - Related: [ADR-0061](0061-one-module-owns-the-metering-record-and-its-completion.md), [ADR-0106](0106-cross-module-imports-are-forbidden-outside-published-seams.md), [ADR-0147](0147-graded-pipeline-engine-owns-execution-lifecycle.md), [ADR-0156](0156-restricted-cross-module-edges.md)

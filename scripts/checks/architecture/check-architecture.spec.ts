@@ -483,13 +483,6 @@ describe('restricted-edge import rules', () => {
     expect(
       matches(pathNot, 'src/modules/gateway/presentation/rate-limit.guard.ts'),
     ).toBe(true);
-    // The GradedRequest decorator composes at import time.
-    expect(
-      matches(
-        pathNot,
-        'src/modules/gateway/presentation/graded-request.decorator.ts',
-      ),
-    ).toBe(true);
     // The composition roots writing.module and speaking.module import.
     expect(matches(pathNot, 'src/modules/gateway/gateway.module.ts')).toBe(
       true,
@@ -846,7 +839,7 @@ describe('cross-module import rule over the real tree', () => {
     expect(
       matches(
         pathNot,
-        'src/modules/gateway/presentation/graded-request.decorator.ts',
+        'src/modules/identity/shared/presentation/graded-request.decorator.ts',
       ),
     ).toBe(true);
     // A file that is neither exported nor a decorator stays private, which is
@@ -2325,6 +2318,89 @@ describe('Nest module import cycles (#1576)', () => {
 
     expect(result.status).toBe(0);
     expect(result.output).not.toContain('Nest module import cycle');
+  });
+});
+
+describe('module directory runtime import cycles (#2034)', () => {
+  const identity = (source: string): [string, string] => [
+    'src/modules/identity/user-assertions/presentation/controller.ts',
+    source,
+  ];
+  const gateway = (source: string): [string, string] => [
+    'src/modules/gateway/presentation/rate-limit.ts',
+    source,
+  ];
+
+  it('fails on a two-directory cycle and names the participating files', () => {
+    const result = checkFixtures([
+      identity(
+        `import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\n`,
+      ),
+      gateway(
+        `import { isEndUserId } from '@/modules/identity/public/end-user-id';\n`,
+      ),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Module directory import cycle');
+    expect(result.output).toContain('identity -> gateway -> identity');
+    expect(result.output).toContain(
+      'src/modules/identity/user-assertions/presentation/controller.ts -> src/modules/gateway/presentation/rate-limit.guard',
+    );
+    expect(result.output).toContain(
+      'src/modules/gateway/presentation/rate-limit.ts -> src/modules/identity/public/end-user-id',
+    );
+  });
+
+  it('detects a cycle through a third module directory', () => {
+    const result = checkFixtures([
+      identity(
+        `import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\n`,
+      ),
+      gateway(`import { X } from '@/modules/metering/public/x';\n`),
+      [
+        'src/modules/metering/public/x.ts',
+        `import { Y } from '@/modules/identity/public/y';\n`,
+      ],
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(
+      'identity -> gateway -> metering -> identity',
+    );
+  });
+
+  it('ignores type-only imports and spec files', () => {
+    const result = checkFixtures([
+      identity(
+        `import type { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\n`,
+      ),
+      [
+        'src/modules/identity/shared/application/types.ts',
+        `import { type RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\nexport type { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\n`,
+      ],
+      gateway(
+        `import { isEndUserId } from '@/modules/identity/public/end-user-id';\n`,
+      ),
+      [
+        'src/modules/gateway/presentation/rate-limit.spec.ts',
+        `import { isEndUserId } from '@/modules/identity/public/end-user-id';\n`,
+      ],
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Module directory import cycle');
+  });
+
+  it('stays silent on a one-way import', () => {
+    const result = checkFixtures([
+      identity(
+        `import { RateLimitGuard } from '@/modules/gateway/presentation/rate-limit.guard';\n`,
+      ),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Module directory import cycle');
   });
 });
 

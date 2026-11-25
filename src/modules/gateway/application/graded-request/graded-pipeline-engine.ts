@@ -7,6 +7,10 @@ import {
 import { AppError } from '@/common/errors/app-error';
 import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { recordRejected } from '@/common/observability/metrics/rejected-metric';
+import {
+  invalidDeclaredUserId,
+  isEndUserId,
+} from '@/common/security/end-user-id';
 import type {
   ConcurrencyLease,
   ConcurrencyLimiterPort,
@@ -21,10 +25,6 @@ import type {
   IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
 import { resolveIdempotencyKey } from '@/modules/idempotency/public/idempotency-key';
-import {
-  invalidDeclaredUserId,
-  isEndUserId,
-} from '@/modules/identity/public/end-user-id';
 import type { MeteringFinalizerPort } from '@/modules/metering/application/usage-recording/metering-finalizer.port';
 import { billBackgroundCompletion } from '@/modules/metering/public/background-completion-billing';
 import {

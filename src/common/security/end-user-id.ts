@@ -1,3 +1,5 @@
+import { AppError } from '@/common/errors/app-error';
+
 /**
  * The single rule for an End-User ID, whichever form of User Identity it came
  * from: a Declared User ID as sent, or a Signed User Assertion's `sub`.
@@ -16,4 +18,14 @@ export function isEndUserId(value: unknown): value is string {
     value.length <= END_USER_ID_MAX_LENGTH &&
     VISIBLE_ASCII.test(value)
   );
+}
+
+/** Declared mode: the value breaks the End-User ID rule. */
+export function invalidDeclaredUserId(): AppError {
+  return new AppError({
+    code: 'INVALID_USER_IDENTITY',
+    message:
+      'User identity must be 1-256 visible ASCII characters with no spaces',
+    retryable: false,
+  });
 }

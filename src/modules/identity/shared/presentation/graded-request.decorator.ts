@@ -1,9 +1,9 @@
 import { UseGuards, UseInterceptors } from '@nestjs/common';
 
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { SuccessEnvelopeInterceptor } from '@/modules/gateway/presentation/success-envelope.interceptor';
 import { ApiKeyGuard } from '@/modules/identity/api-keys/presentation/api-key.guard';
 import { UserIdentityGuard } from '@/modules/identity/shared/presentation/user-identity.guard';
-import { SuccessEnvelopeInterceptor } from './success-envelope.interceptor';
 
 /**
  * The operations that run the graded-request chain. Declared separately from

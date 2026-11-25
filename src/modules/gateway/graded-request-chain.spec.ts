@@ -45,6 +45,11 @@ import {
 } from '@/modules/gateway/application/graded-admission.port';
 import { IDEMPOTENCY_REPOSITORY } from '@/modules/idempotency/application/idempotency-repository.port';
 import { InMemoryIdempotencyRepository } from '@/modules/idempotency/testing/in-memory-idempotency.repository';
+import {
+  GRADED_REQUEST_GUARDS,
+  GRADED_REQUEST_INTERCEPTORS,
+  GRADED_REQUEST_OPERATIONS,
+} from '@/modules/identity/shared/presentation/graded-request.decorator';
 import { REQUIRED_OPERATION_METADATA } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
@@ -58,11 +63,6 @@ import {
 import { fixtureJson } from '../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
-import {
-  GRADED_REQUEST_GUARDS,
-  GRADED_REQUEST_INTERCEPTORS,
-  GRADED_REQUEST_OPERATIONS,
-} from './presentation/graded-request.decorator';
 
 function operationsServedBy(controller: { prototype: object }): string[] {
   const prototype = controller.prototype as Record<string, unknown>;

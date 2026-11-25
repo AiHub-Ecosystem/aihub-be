@@ -8,11 +8,9 @@ import { userIdentityRequired } from '@/common/errors/user-identity-required';
 import { getRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { markRequestAdmission } from '@/common/http/hooks/request-timing.hook';
 import { routeTemplate } from '@/common/http/hooks/request-tracing.hook';
+import { getAuthenticatedApiKey } from '@/common/security/authenticated-request';
 import type { GradedPipelineContext } from '@/modules/gateway/application/graded-request/graded-pipeline.port';
-import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '@/modules/identity/shared/presentation/authenticated-request';
+import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import {
   markGradedCompletionSettled,
   markGradedCompletionStarted,

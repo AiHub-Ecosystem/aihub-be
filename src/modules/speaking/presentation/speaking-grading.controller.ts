@@ -21,7 +21,6 @@ import {
   type SpeakingGradeResponse,
 } from '@/contracts/speaking/grading';
 import type { DispatchResult } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
-import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
   GRADED_PIPELINE_ENGINE,
   type GradedPipelineEnginePort,
@@ -31,6 +30,7 @@ import {
   type AuthenticatedRequest,
   getAuthenticatedApiKey,
 } from '@/modules/identity/shared/presentation/authenticated-request';
+import { GradedRequest } from '@/modules/identity/shared/presentation/graded-request.decorator';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import {
   RUNTIME_PRESENTATION_CONFIGURATION,

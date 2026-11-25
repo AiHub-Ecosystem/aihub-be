@@ -7,7 +7,7 @@
 > **Runtime correction for §D.1–D.3:** These sketches predate the current
 > graded-request chain. Fastify parses JSON before Nest guards; use the order
 > defined by [ADR-0057](../../../adr/0057-graded-request-order-is-a-declared-contract.md)
-> and [`GradedRequest`](../../../../src/modules/gateway/presentation/graded-request.decorator.ts).
+> and [`GradedRequest`](../../../../src/modules/identity/shared/presentation/graded-request.decorator.ts).
 > Concurrency is acquired before idempotency. The interceptor records usage
 > for internal metering; public success responses omit `meta.usage`
 > ([ADR-0016](../../../adr/0016-metering-boundary-and-billing-evidence.md),

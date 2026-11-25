@@ -1,5 +1,5 @@
 import { AppError } from '@/common/errors/app-error';
-import { isEndUserId } from '@/modules/identity/domain/end-user-id';
+import { isEndUserId } from '@/common/security/end-user-id';
 import {
   type PublicJsonWebKey,
   type PublicJsonWebKeySet,

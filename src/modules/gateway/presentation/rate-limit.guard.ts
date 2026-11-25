@@ -7,15 +7,13 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import { recordRejected } from '@/common/observability/metrics/rejected-metric';
+import { getAuthenticatedApiKey } from '@/common/security/authenticated-request';
 import { rateLimitedError } from '@/modules/gateway/application/rate-limited-error';
 import {
   RATE_LIMITER,
   type RateLimiterPort,
 } from '@/modules/gateway/application/rate-limiter.port';
-import {
-  type AuthenticatedRequest,
-  getAuthenticatedApiKey,
-} from '@/modules/identity/shared/presentation/authenticated-request';
+import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
 import { reportStanding } from './rate-limit-standing';
 
 /**

@@ -21,13 +21,13 @@ import {
   type MicroExerciseResponse,
 } from '@/contracts/writing/v2/exercises';
 import type { DispatchResult } from '@/modules/gateway/application/dispatch/operation-dispatcher.port';
-import { GradedRequest } from '@/modules/gateway/presentation/graded-request.decorator';
 import {
   GRADED_PIPELINE_ENGINE,
   type GradedPipelineEnginePort,
   createGradedPipelineContext,
 } from '@/modules/gateway/public/graded-pipeline';
 import type { AuthenticatedRequest } from '@/modules/identity/shared/presentation/authenticated-request';
+import { GradedRequest } from '@/modules/identity/shared/presentation/graded-request.decorator';
 import { RequireOperation } from '@/modules/identity/shared/presentation/require-operation.decorator';
 import {
   isValidWritingExerciseError,

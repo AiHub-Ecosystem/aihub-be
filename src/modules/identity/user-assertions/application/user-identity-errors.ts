@@ -11,14 +11,7 @@ export function invalidUserIdentity(): AppError {
 }
 
 /** Declared mode: the value breaks the End-User ID rule. */
-export function invalidDeclaredUserId(): AppError {
-  return new AppError({
-    code: 'INVALID_USER_IDENTITY',
-    message:
-      'User identity must be 1-256 visible ASCII characters with no spaces',
-    retryable: false,
-  });
-}
+export { invalidDeclaredUserId } from '@/common/security/end-user-id';
 
 /**
  * Signed mode: any verification failure. The message never says which check
