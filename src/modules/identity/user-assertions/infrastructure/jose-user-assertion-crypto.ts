@@ -12,6 +12,7 @@ import type {
   UserAssertionCryptoPort,
   UserAssertionProtectedHeader,
 } from '@/modules/identity/user-assertions/application/user-assertion-crypto.port';
+import { malformedUserAssertionPayload } from '@/modules/identity/user-assertions/application/user-identity-errors';
 
 function toJwk(key: PublicJsonWebKey): JWK {
   if (
@@ -49,9 +50,12 @@ export class JoseUserAssertionCrypto implements UserAssertionCryptoPort {
     const result = await compactVerify(input.signedAssertion, cryptoKey, {
       algorithms: [input.algorithm],
     });
-    const payload: unknown = JSON.parse(
-      Buffer.from(result.payload).toString('utf8'),
-    );
+    let payload: unknown;
+    try {
+      payload = JSON.parse(Buffer.from(result.payload).toString('utf8'));
+    } catch (error) {
+      throw malformedUserAssertionPayload(error);
+    }
     if (!isRecord(payload)) {
       throw internalError('User assertion payload is invalid');
     }

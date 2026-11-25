@@ -13,19 +13,30 @@ export function invalidUserIdentity(): AppError {
 /** Declared mode: the value breaks the End-User ID rule. */
 export { invalidDeclaredUserId } from '@/common/security/end-user-id';
 
+const INVALID_SIGNED_ASSERTION_MESSAGE =
+  'User identity must be a valid Signed User Assertion for this Organization';
+
+function invalidSignedAssertion(cause?: unknown): AppError {
+  return new AppError({
+    code: 'INVALID_USER_IDENTITY',
+    message: INVALID_SIGNED_ASSERTION_MESSAGE,
+    retryable: false,
+    ...(cause === undefined ? {} : { cause }),
+  });
+}
+
 /**
  * Signed mode: any verification failure. The message never says which check
  * failed.
  */
 export function invalidSignedUserAssertion(cause?: unknown): AppError {
   recordRejected('auth');
-  return new AppError({
-    code: 'INVALID_USER_IDENTITY',
-    message:
-      'User identity must be a valid Signed User Assertion for this Organization',
-    retryable: false,
-    ...(cause === undefined ? {} : { cause }),
-  });
+  return invalidSignedAssertion(cause);
+}
+
+/** Unparsable Signed User Assertion payload; rejection accounting stays in the verifier. */
+export function malformedUserAssertionPayload(cause: unknown): AppError {
+  return invalidSignedAssertion(cause);
 }
 
 /** An identity-configuration store or JWKS outage; retryable, never a fallback. */
