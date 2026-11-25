@@ -117,7 +117,7 @@
     {
       "ruleId": "js/insecure-temporary-file",
       "path": "scripts/checks/changed/verify-summary.cjs",
-      "fingerprint": "97ee09b50099a7cd:1",
+      "fingerprint": "98294ee902fca39:1",
       "reason": "Developer verify log under the OS temp dir; holds no secret and its path is printed for the same user."
     },
     {
@@ -173,12 +173,6 @@
       "path": "scripts/ci/dast/dast-seed.ts",
       "fingerprint": "91dc67e457337f78:1",
       "reason": "Test seed script generates random characters for synthetic test accounts."
-    },
-    {
-      "ruleId": "js/clear-text-logging",
-      "path": "src/cli/user-account-status.ts",
-      "fingerprint": "107b1f08dd0a7002:1",
-      "reason": "Logs the COUNT of revoked password reset tokens, never a token value; the Prisma model name matches the sensitive-data heuristic."
     }
   ]
 }

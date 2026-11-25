@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   type Sarif,
   type SarifResult,
@@ -168,5 +171,25 @@ describe('codeql gate', () => {
         '{"entries":[{"ruleId":"js/redos","path":"src/a.ts","reason":"ok"}]}',
       ),
     ).toThrow('fingerprint');
+  });
+
+  it('triages the temporary-file alert the main scan reports', () => {
+    const triage = parseTriage(
+      readFileSync(join(process.cwd(), '.github/codeql/triage.json'), 'utf8'),
+    );
+    const outcome = evaluateSarif(
+      sarifOf(
+        result(
+          'js/insecure-temporary-file',
+          'scripts/checks/changed/verify-summary.cjs',
+          {
+            fingerprint: '98294ee902fca39:1',
+          },
+        ),
+      ),
+      triage,
+    );
+
+    expect(outcome.untriaged).toEqual([]);
   });
 });
