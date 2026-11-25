@@ -1,3 +1,8 @@
+/**
+ * The count a `::bigint` aggregate yields, or `undefined` when it is not a safe
+ * non-negative integer. Prisma's raw path returns `bigint` where `pg` returned a
+ * decimal string, and both are accepted.
+ */
 export function safeNonNegativeCount(value: unknown): number | undefined {
   const parsed =
     typeof value === 'bigint'

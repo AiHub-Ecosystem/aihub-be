@@ -1,3 +1,4 @@
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import { asDate } from '@/common/postgres/row-readers';
@@ -15,7 +16,6 @@ import {
   type NewBillingAdjustment,
   parseBillingMonth,
 } from '@/modules/metering/application/billing/billing-statement';
-import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { CONTROL_PLANE_TRANSACTION_OPTIONS } from '@/modules/persistence/public/prisma-transaction-options';
 import type { Prisma } from '@prisma-client/client';

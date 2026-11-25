@@ -4,6 +4,7 @@ import { internalError } from '@/common/errors/app-error';
 import type { OnModuleDestroy } from '@nestjs/common';
 
 import { OPERATION_IDS, isOperationId } from '@/catalog/operation-id';
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { isRecord } from '@/common/is-record';
 import type { DispatchAttemptUnresolvedSample } from '@/common/observability/metrics/metrics';
 import type {
@@ -12,7 +13,6 @@ import type {
   DispatchAttemptStart,
 } from '@/modules/metering/application/usage-recording/dispatch-attempt-record.port';
 import { organizationTransaction } from '@/modules/persistence/persistence.module';
-import { safeNonNegativeCount } from './metering-row';
 import type { PrismaMeteringClient } from './prisma-metering.client';
 
 // The deadline is stamped with the database's own clock, so the evidence does

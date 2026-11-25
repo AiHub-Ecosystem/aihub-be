@@ -1,3 +1,4 @@
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { isRecord } from '@/common/is-record';
 import {
   type UsageReportRepositoryPort,
@@ -5,7 +6,6 @@ import {
   type UsageReportSnapshotQuery,
   type UsageReportSnapshotRow,
 } from '@/modules/metering/application/billing/usage-completeness-report';
-import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { billableRequestSql } from './billable-request-sql';
 

@@ -1,6 +1,6 @@
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { internalError } from '@/common/errors/app-error';
 import type { MonthlyBillableUsagePort } from '@/modules/metering/application/billing/monthly-billable-usage.port';
-import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { billableRequestSql } from './billable-request-sql';
 

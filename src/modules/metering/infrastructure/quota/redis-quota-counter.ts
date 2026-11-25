@@ -2,6 +2,7 @@ import { internalError } from '@/common/errors/app-error';
 import { Logger } from '@nestjs/common';
 
 import { isUsableCount } from '@/common/counts/is-usable-count';
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { RedisHealthReporter } from '@/common/redis/redis-health-reporter';
 import type {
   QuotaCounterPort,
@@ -10,7 +11,6 @@ import type {
 } from '@/modules/metering/application/quota/quota-counter.port';
 import { quotaKeyForMonth } from '@/modules/metering/application/quota/quota-key';
 import { quotaPeriod } from '@/modules/metering/application/quota/quota-period';
-import { safeNonNegativeCount } from '@/modules/metering/public/count-decode';
 import type { RedisMeteringClient } from './redis-metering.client';
 
 export const QUOTA_TTL_SECONDS = 40 * 24 * 60 * 60;

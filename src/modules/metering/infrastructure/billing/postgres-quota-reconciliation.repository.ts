@@ -1,3 +1,4 @@
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { internalError } from '@/common/errors/app-error';
 import { isRecord } from '@/common/is-record';
 import type {
@@ -5,7 +6,6 @@ import type {
   QuotaReconciliationSnapshotPort,
   QuotaReconciliationTarget,
 } from '@/modules/metering/application/billing/quota-reconciliation.port';
-import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 import { billableRequestSql } from './billable-request-sql';
 

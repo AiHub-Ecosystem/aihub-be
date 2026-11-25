@@ -99,11 +99,11 @@ import {
   WEB_SESSION_CLIENT_SECRET,
   type WebSessionClientSecretPort,
 } from './web-sessions/application/web-session-client-secret.port';
-import { WEB_SESSION_ID } from './web-sessions/application/web-session-id.port';
 import { WEB_SESSION_POLICY } from './web-sessions/application/web-session-policy';
 import { WEB_SESSION_REPOSITORY } from './web-sessions/application/web-session-repository.port';
 import { WEB_SESSION_SERVICE } from './web-sessions/application/web-session-service.port';
 import {
+  WEB_SESSION_ID,
   WEB_SESSION_TOKEN_ISSUER,
   type WebSessionTokenIssuerPort,
 } from './web-sessions/application/web-session-token.port';

@@ -1,3 +1,4 @@
+import { safeNonNegativeCount } from '@/common/counts/safe-non-negative-count';
 import { isRecord } from '@/common/is-record';
 import type {
   PublicApiMajorCollectorRow,
@@ -12,7 +13,6 @@ import {
   type PublicApiMajorUsageWrite,
   type PublicApiMajorWindow,
 } from '@/modules/metering/application/billing/public-api-major-usage';
-import { safeNonNegativeCount } from '@/modules/metering/infrastructure/usage-recording/metering-row';
 import type { PrismaMeteringClient } from '@/modules/metering/infrastructure/usage-recording/prisma-metering.client';
 
 export const PUBLIC_API_MAJOR_ADD_SQL = `

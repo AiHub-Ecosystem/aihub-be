@@ -16,7 +16,7 @@ import {
   callerIsAuthenticated,
   parseRequestBody,
 } from '@/common/http/parsing/parse-request-body';
-import { parseRequestParams } from '@/common/http/parsing/parse-request-params';
+import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
 import type { SpeakingV2PartResult } from '@/contracts/speaking/v2/part-result';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import {
@@ -135,7 +135,7 @@ export class SpeakingV2Controller {
   ): Promise<GradedPipelineDispatchResult<SpeakingV2QuestionResult>> {
     return this.workflow.execute(
       createGradedPipelineContext(request, reply, RESPONSE_GET, async () => ({
-        input: parseRequestParams(SpeakingV2ResponsePathSchema, params),
+        input: parseRequestQuery(SpeakingV2ResponsePathSchema, params),
       })),
     );
   }
@@ -149,7 +149,7 @@ export class SpeakingV2Controller {
   ): Promise<GradedPipelineDispatchResult<SpeakingV2PartResult>> {
     return this.workflow.execute(
       createGradedPipelineContext(request, reply, PART_GET, async () => ({
-        input: parseRequestParams(SpeakingV2PartPathSchema, params),
+        input: parseRequestQuery(SpeakingV2PartPathSchema, params),
       })),
     );
   }
@@ -163,7 +163,7 @@ export class SpeakingV2Controller {
   ): Promise<GradedPipelineDispatchResult<SpeakingV2TestResult>> {
     return this.workflow.execute(
       createGradedPipelineContext(request, reply, TEST_GET, async () => ({
-        input: parseRequestParams(SpeakingV2TestPathSchema, params),
+        input: parseRequestQuery(SpeakingV2TestPathSchema, params),
       })),
     );
   }

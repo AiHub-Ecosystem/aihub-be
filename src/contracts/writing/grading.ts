@@ -17,7 +17,7 @@ export {
  * Downstream only produces Vietnamese feedback today. Widening this later is a
  * non-breaking change; narrowing would not be, so it starts closed.
  */
-export const LANGUAGES = ['vi'] as const;
+const LANGUAGES = ['vi'] as const;
 
 const LanguageSchema = Type.Union(
   LANGUAGES.map((value) => Type.Literal(value)),
@@ -140,4 +140,4 @@ export const GradeResponseSchema = Type.Object(
 
 export type GradeResponse = Static<typeof GradeResponseSchema>;
 
-export { BandSchema, LanguageSchema };
+export { BandSchema };
