@@ -8,6 +8,12 @@ const schemaPath = join(root, 'prisma', 'schema.prisma');
 const srcModules = join(root, 'src', 'modules');
 
 const schema = readFileSync(schemaPath, 'utf8');
+const businessModules = new Set(
+  readdirSync(srcModules, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name),
+);
+let failed = false;
 /** @typedef {{model: string, owner: string | null, table: string | null}} OwnedTable */
 /** @type {OwnedTable[]} */
 const tables = [];
@@ -35,6 +41,15 @@ for (const line of schema.split(/\r?\n/)) {
           /([A-Z])/g,
           (c, i) => (i ? '_' : '') + c.toLowerCase(),
         );
+      }
+      if (current.owner === null) {
+        console.error(`Model ${current.model} has no @owner annotation.`);
+        failed = true;
+      } else if (!businessModules.has(current.owner)) {
+        console.error(
+          `Model ${current.model} names owner \`${current.owner}\`, which is not a business module.`,
+        );
+        failed = true;
       }
       tables.push(current);
       current = null;
@@ -120,7 +135,6 @@ function esc(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-let failed = false;
 for (const file of collectFiles(srcModules)) {
   const rel = relative(root, file).replace(/\\/g, '/');
   const module = rel.split('/')[2];
@@ -135,6 +149,22 @@ for (const file of collectFiles(srcModules)) {
     );
     const prismaRe = new RegExp(`\\.\\s*${esc(t.model)}\\b`);
     if (!sqlRe.test(source) && !prismaRe.test(source)) continue;
+    // Allowlist entries cover reads and row locks only, never writes. A
+    // `SELECT ... FOR UPDATE` has no table name after UPDATE, so it stays valid.
+    const sqlWriteRe = new RegExp(
+      `\\b(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+[\`"']?${esc(t.table)}[\`"']?\\b`,
+      'i',
+    );
+    const prismaWriteRe = new RegExp(
+      `\\.\\s*${esc(t.model)}\\s*\\.\\s*(?:create|createManyAndReturn|createMany|updateMany|update|upsert|deleteMany|delete)\\b`,
+    );
+    if (sqlWriteRe.test(source) || prismaWriteRe.test(source)) {
+      console.error(
+        `${rel}: writes table \`${t.table}\` owned by module \`${t.owner}\`; allowlist entries cover reads and locks only.`,
+      );
+      failed = true;
+      continue;
+    }
     const key = `${rel}::${t.table}`;
     if (allowlist.has(key)) continue;
     console.error(
