@@ -86,7 +86,7 @@ const argon2BurstRateRps = positiveInteger(
   process.env.BENCHMARK_ARGON2_BURST_RATE_RPS ?? '16',
 );
 const metricsScenarioVUs = 1;
-const maxLoadVUs = 512;
+const maxLoadVUs = 2000;
 const seededUserCount = maxVUs + metricsScenarioVUs;
 const jobContentionDurationMs = 30_000;
 const jobContentionMarginMs = 3000;
