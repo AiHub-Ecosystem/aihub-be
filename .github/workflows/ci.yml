@@ -217,7 +217,7 @@ jobs:
         run: bun run check:duplication-register
 
       - name: Check for new code duplication
-        run: bun run check:duplication
+        run: bun run check:duplication:full
 
       - name: Check architecture
         run: bun run arch-check
@@ -1130,7 +1130,12 @@ jobs:
           set -euo pipefail
           test -n "$VPS_APP_DIR"
           printf -v app_dir_arg '%q' "$VPS_APP_DIR"
-          state="$(ssh -F "$AIHUB_SSH_CONFIG" aihub-read-only "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
+          # A CD deploy holds the host's exclusive lock while this job reads
+          # status. Retry a bounded window instead of failing a read-only lane.
+          attempt=1
+          max_attempts=20
+          while :; do
+            if state="$(ssh -F "$AIHUB_SSH_CONFIG" aihub-read-only "APP_DIR=$app_dir_arg bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$APP_DIR"
           helper=./scripts/ops/blue-green/blue-green-host.sh
@@ -1139,7 +1144,17 @@ jobs:
           fi
           "$helper" status
           REMOTE
-          )"
+            )"; then
+              break
+            fi
+            if (( attempt >= max_attempts )); then
+              printf 'Host state unavailable after %d attempts\n' "$attempt" >&2
+              exit 1
+            fi
+            printf 'Host state unavailable; retry %d/%d in 15s\n' "$attempt" "$max_attempts" >&2
+            attempt=$((attempt + 1))
+            sleep 15
+          done
           printf 'Active host state:\n%s\n' "$state"
           production_sha="$(sed -nE 's/^production active_slot=[ab] sha=([a-f0-9]{40}) service=.*/\1/p' <<< "$state")"
           [[ "$production_sha" =~ ^[a-f0-9]{40}$ ]] || {
