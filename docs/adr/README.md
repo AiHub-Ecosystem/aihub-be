@@ -42,3 +42,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0180](0180-speaking-priority-errors-in-v2.md)                  | Publish Speaking priority errors in `/v2`                               | Accepted                                       |
 | [0181](0181-scalar-renderer-1-83.md)                            | Scalar renderer 1.83.0                                                  | Accepted                                       |
 | [0182](0182-security-reads-use-postgres-writer.md)              | Keep security decisions on the PostgreSQL writer                        | Accepted; implementation pending               |
+| [0183](0183-explicit-request-context-stays-the-default.md)      | Keep explicit request context as the default                            | Accepted                                       |
