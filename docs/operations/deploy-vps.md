@@ -504,9 +504,37 @@ One run also refuses to act when it would delete more than 2,000 objects, or
 more than half of the objects it listed once that listing reaches 500: it
 deletes nothing, reports `ceilingExceeded: true`, and exits non-zero, because
 that share means the bucket or the record set is not the one this deployment
-expects. The Speaking Audio upload sweep also caps planned object-key deletion
+expects. A dry run reports the same field together with `"runtime_scope"` and
+aggregate counts, and exits zero, so an operator can review a legitimate
+backlog. The Speaking Audio upload sweep also caps planned object-key deletion
 attempts at 2,000; each eligible intent contributes its final and staging key,
 and an over-limit run exits non-zero.
+
+#### Recovering a backlog that trips the safety ceiling
+
+When the dry-run counts describe a real backlog, drain it with a separate
+manual command; the daily `avatar-sweep` schedule does not change. Confirm the
+reported `runtime_scope` belongs to the deployment you intend to drain, then
+repeat for that deployment:
+
+```sh
+docker compose exec -T <active-service> node scripts/runtime/runtime-entrypoint.mjs \
+  --timeout-seconds 1800 scripts/cli/cli.mjs avatar:recover \
+  --target production --reviewed true
+```
+
+Use `--target sandbox` for the Sandbox service. The command refuses to start
+without both the exact `--target` and `--reviewed true`. Each pass lists and
+deletes at most 500 objects, applies the same age, layout, and record checks,
+and writes its cursor to `aihub-avatar-recovery-<scope>.json` in the
+container's temporary directory (mode 0600). It prints one JSON line with
+`"status":"partial"` or `"status":"completed"`, committed counts, and failed
+counts; it never prints object keys. Keep rerunning the same command until the
+line says `completed`. A failed delete makes the command exit non-zero and
+keeps the cursor on the last settled object, so the failed key is re-listed and
+retried. Do not redeploy between passes: a new container does not carry the
+state file, and an empty state is treated as a fresh review rather than a
+resumed one.
 
 ### Sweeping Writing Task 1 chart uploads
 

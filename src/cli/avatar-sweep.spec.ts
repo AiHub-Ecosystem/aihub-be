@@ -124,7 +124,7 @@ function run(
     storage: FakeAvatarStorage,
     repository: InMemoryAvatarRepository,
   ) => void,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; runtimeScope?: 'production' | 'sandbox' } = {},
 ) {
   const storage = new FakeAvatarStorage();
   const repository = new InMemoryAvatarRepository();
@@ -142,6 +142,9 @@ function run(
     storage,
     emit: (line) => lines.push(line),
     now: () => NOW,
+    ...(options.runtimeScope === undefined
+      ? {}
+      : { runtimeScope: options.runtimeScope }),
   });
   return { outcome, storage, repository, lines, closed };
 }
@@ -168,6 +171,7 @@ describe('runAvatarSweepCommand', () => {
       stagingDeleted: 0,
       stagingFailed: 0,
       cutoff_source: 'process',
+      runtime_scope: 'production',
     });
     expect(closed.value).toBe(true);
     expect(storage.closed).toBe(true);
@@ -247,6 +251,31 @@ describe('runAvatarSweepCommand', () => {
     expect(storage.deleted).toEqual([]);
     expect(storage.objects.size).toBe(2);
     expect(JSON.parse(lines.join('\n'))).toMatchObject({ dryRun: true });
+  });
+
+  it('reports an over-ceiling dry run with its scope and no object keys', async () => {
+    const { outcome, storage, lines } = run(
+      (s) => {
+        for (let n = 1; n <= 2_001; n += 1) {
+          const suffix = String(n).padStart(26, '0');
+          s.objects.set(avatarObjectKey(`usr_${suffix}`, `ava_${suffix}`), OLD);
+        }
+      },
+      { dryRun: true, runtimeScope: 'sandbox' },
+    );
+
+    await expect(outcome).resolves.toMatchObject({
+      ceilingExceeded: true,
+      orphaned: 2_001,
+      deleted: 0,
+    });
+    expect(storage.deleted).toEqual([]);
+    expect(JSON.parse(lines.join('\n'))).toMatchObject({
+      runtime_scope: 'sandbox',
+      dryRun: true,
+      ceilingExceeded: true,
+    });
+    expect(lines.join('\n')).not.toContain('users/');
   });
 
   it('follows every page of the listing', async () => {

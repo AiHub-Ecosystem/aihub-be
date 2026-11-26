@@ -18,18 +18,22 @@ export interface AvatarSweepCliInput {
   readonly emit?: (line: string) => void;
   readonly now?: () => Date;
   readonly clockSource?: 'process' | 'database';
+  readonly runtimeScope?: 'production' | 'sandbox';
+}
+
+export async function openAvatarOperatorRepository(
+  databaseUrl: string,
+): Promise<AvatarRepositoryPort & { close(): Promise<void> }> {
+  const { createOperatorAvatarClient } = await import(
+    './operator-avatar-client'
+  );
+  return createOperatorAvatarClient(databaseUrl);
 }
 
 async function openRepository(
   input: AvatarSweepCliInput,
 ): Promise<AvatarRepositoryPort & { close(): Promise<void> }> {
-  if (input.repository !== undefined) {
-    return input.repository;
-  }
-  const { createOperatorAvatarClient } = await import(
-    './operator-avatar-client'
-  );
-  return createOperatorAvatarClient(input.databaseUrl);
+  return input.repository ?? openAvatarOperatorRepository(input.databaseUrl);
 }
 
 /**
@@ -57,6 +61,7 @@ export async function runAvatarSweepCommand(
     JSON.stringify({
       ...result,
       cutoff_source: input.clockSource ?? 'process',
+      runtime_scope: input.runtimeScope ?? 'production',
     }),
   );
   return result;

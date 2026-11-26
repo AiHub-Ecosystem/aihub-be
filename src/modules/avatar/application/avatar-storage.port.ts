@@ -74,9 +74,19 @@ export interface AvatarStoragePort {
   ): Promise<StoredAvatarObject | undefined>;
   deleteObject(objectKey: string, signal?: AbortSignal): Promise<void>;
   deleteStagingObject(objectKey: string, signal?: AbortSignal): Promise<void>;
-  /** Every object under the prefix, across however many pages storage needs. */
-  listObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
-  listStagingObjects(prefix: string): AsyncIterable<ListedAvatarObject>;
+  /**
+   * Every object under the prefix, across however many pages storage needs.
+   * A recovery pass starts strictly after a saved key and never re-lists what
+   * an earlier pass already settled.
+   */
+  listObjects(
+    prefix: string,
+    startAfter?: string,
+  ): AsyncIterable<ListedAvatarObject>;
+  listStagingObjects(
+    prefix: string,
+    startAfter?: string,
+  ): AsyncIterable<ListedAvatarObject>;
 }
 
 export const AVATAR_STORAGE = Symbol('AVATAR_STORAGE');

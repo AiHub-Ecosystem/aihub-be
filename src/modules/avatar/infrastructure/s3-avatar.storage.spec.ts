@@ -481,6 +481,24 @@ describe('S3AvatarStorage', () => {
       ]);
     });
 
+    it('starts a recovery listing strictly after a saved cursor', async () => {
+      const { client, send } = clientAnswering(async () => ({
+        Contents: [{ Key: 'users/c', LastModified: OLD }],
+        IsTruncated: false,
+      }));
+
+      const listed = await collect(
+        storage({ client }).listObjects('users/', 'users/b'),
+      );
+
+      expect(listed).toEqual([{ objectKey: 'users/c', lastModified: OLD }]);
+      expect(send.mock.calls[0]?.[0]?.input).toEqual({
+        Bucket: 'aihub-user-assets',
+        Prefix: 'users/',
+        StartAfter: 'users/b',
+      });
+    });
+
     it('lists an empty bucket as nothing', async () => {
       const { client } = clientAnswering(async () => ({ IsTruncated: false }));
 

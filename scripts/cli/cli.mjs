@@ -128,6 +128,12 @@ const avatarSweepDescriptor = cliRunnerDescriptor(
   'runAvatarSweepCommand',
   'avatar sweep command is unavailable',
 );
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/avatar-recovery').runAvatarRecoveryCommand>} */
+const avatarRecoveryDescriptor = cliRunnerDescriptor(
+  'avatar-recovery',
+  'runAvatarRecoveryCommand',
+  'avatar recovery command is unavailable',
+);
 /** @type {CliRunnerDescriptor<typeof import('../../src/cli/notifications-sweep').runNotificationsSweepCommand>} */
 const notificationsSweepDescriptor = cliRunnerDescriptor(
   'notifications-sweep',
@@ -252,6 +258,11 @@ async function runCliCommand(descriptor, ...args) {
 /** @param {Parameters<typeof import('../../src/cli/idempotency-cleanup').runIdempotencyCleanupCommand>[0]} input */
 async function runIdempotencyCleanup(input) {
   return runCliCommand(idempotencyCleanupDescriptor, input);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/avatar-recovery').runAvatarRecoveryCommand>[0]} input */
+async function runAvatarRecovery(input) {
+  return runCliCommand(avatarRecoveryDescriptor, input);
 }
 
 /** @param {Parameters<typeof import('../../src/cli/user-account-status').runDisableUserAccountCommand>[0]} input */
@@ -869,6 +880,7 @@ async function prepareOperatorMutation(command, options) {
   if (
     [
       'avatar:sweep',
+      'avatar:recover',
       'speaking:audio-upload-sweep',
       'writing:chart-upload-sweep',
       'writing:chart-revoke',
@@ -898,6 +910,12 @@ async function prepareOperatorMutation(command, options) {
 
   if (!NATIVE_DRY_RUN_COMMANDS.has(command)) options.delete('dry-run');
   return { target, maintenanceClock, previewed: false };
+}
+
+/** @param {OperatorDeployment} deployment @returns {'production' | 'sandbox'} */
+function requireAvatarDeployment(deployment) {
+  if (deployment !== 'production' && deployment !== 'sandbox') usageError();
+  return deployment;
 }
 
 /** @param {OperatorMutationSafety | undefined} safety @returns {OperatorMutationSafety} */
@@ -1244,13 +1262,42 @@ async function sweepAvatarsCommand(options) {
         dryRun,
         now: () => safety.maintenanceClock.now,
         clockSource: safety.maintenanceClock.source,
+        runtimeScope: requireAvatarDeployment(safety.target.deployment),
       })
     );
-  if (summary.ceilingExceeded) {
+  if (summary.ceilingExceeded && !dryRun) {
     throw new Error('avatar sweep would delete more than one run may');
   }
   if (avatarSweepExitCode(summary) !== 0) {
     throw new Error('avatar sweep could not delete every eligible object');
+  }
+}
+
+// The reviewed recovery path for a backlog the fail-closed sweep refuses.
+// Both flags are checked before the database preflight: a vague "go ahead"
+// cannot reach storage, and only the exact deployment the operator reviewed
+// is allowed to drain. The scheduled sweep is unchanged.
+/** @param {CliOptions} options */
+async function recoverAvatarsCommand(options) {
+  if (!booleanOption(options, 'reviewed')) usageError();
+  const target = options.get('target');
+  if (target !== 'production' && target !== 'sandbox') usageError();
+
+  const safety = requireOperatorSafety(
+    await prepareOperatorMutation('avatar:recover', options),
+  );
+  if (safety.previewed) return;
+
+  const summary = /** @type {{ failed: number; stagingFailed: number }} */ (
+    await runAvatarRecovery({
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      scope: requireAvatarDeployment(safety.target.deployment),
+      now: safety.maintenanceClock.now,
+      clockSource: safety.maintenanceClock.source,
+    })
+  );
+  if (summary.failed > 0 || summary.stagingFailed > 0) {
+    throw new Error('avatar recovery had failed deletes; rerun the same scope');
   }
 }
 
@@ -1599,6 +1646,10 @@ async function main() {
   }
   if (command === 'avatar:sweep') {
     await sweepAvatarsCommand(options);
+    return;
+  }
+  if (command === 'avatar:recover') {
+    await recoverAvatarsCommand(options);
     return;
   }
   if (command === 'speaking:audio-upload-sweep') {

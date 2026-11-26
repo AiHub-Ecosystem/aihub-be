@@ -69,6 +69,7 @@ describe('COMMAND_OPTIONS', () => {
       'org:grant-entitlement',
       'org:attach-owner',
       'avatar:sweep',
+      'avatar:recover',
       'speaking:audio-upload-sweep',
       'registrations:sweep',
       'notifications:sweep',
@@ -185,6 +186,15 @@ describe('operator CLI unknown options', () => {
       '2026-01-01',
     ],
     ['usage:prune', '--dry-run', 'true', '--target', 'sandbox', '--limt', '5'],
+    [
+      'avatar:recover',
+      '--target',
+      'sandbox',
+      '--reviewed',
+      'true',
+      '--reviewe',
+      'true',
+    ],
     [
       'quota:reconcile',
       '--month',
@@ -535,6 +545,16 @@ describe('operator CLI safety', () => {
       action: 'delete expired idempotency records',
       inputs: {},
     });
+    expect(
+      previewOperatorMutation(
+        'avatar:recover',
+        new Map([['reviewed', 'true']]),
+      ),
+    ).toEqual({
+      command: 'avatar:recover',
+      action: 'recover a reviewed Avatar backlog',
+      inputs: { reviewed: 'true' },
+    });
     expect(() => previewOperatorMutation('key:create', new Map())).toThrow(
       'operator preview requires --org',
     );
@@ -543,6 +563,7 @@ describe('operator CLI safety', () => {
   it('keeps the complete current mutation inventory at the safety boundary', () => {
     expect([...MUTATING_COMMANDS].sort()).toEqual(
       [
+        'avatar:recover',
         'avatar:sweep',
         'billing:adjust',
         'billing:statement',

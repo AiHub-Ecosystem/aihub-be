@@ -5,7 +5,10 @@ import {
 } from '@/modules/avatar/domain/avatar';
 
 import type { AvatarRepositoryPort } from './avatar-repository.port';
-import type { AvatarStoragePort } from './avatar-storage.port';
+import type {
+  AvatarStoragePort,
+  ListedAvatarObject,
+} from './avatar-storage.port';
 
 export interface AvatarSweepSummary {
   /** Every object storage listed under the Avatar prefix. */
@@ -37,6 +40,36 @@ const BATCH_SIZE = 500;
  */
 const DELETION_CEILING = 2_000;
 const SHARE_FLOOR = 500;
+
+/** One reviewed recovery pass: bounded work, with a cursor for the next. */
+const RECOVERY_LIST_LIMIT = 500;
+const RECOVERY_DELETE_LIMIT = 500;
+
+export interface AvatarRecoveryInput {
+  readonly now: Date;
+  readonly finalCursor?: string;
+  readonly stagingCursor?: string;
+  readonly maxListed?: number;
+  readonly maxDeletes?: number;
+}
+
+export interface AvatarRecoveryResult {
+  readonly scanned: number;
+  readonly unrecognised: number;
+  readonly orphaned: number;
+  readonly deleted: number;
+  readonly failed: number;
+  readonly stagingScanned: number;
+  readonly stagingUnrecognised: number;
+  readonly stagingEligible: number;
+  readonly stagingDeleted: number;
+  readonly stagingFailed: number;
+  readonly nextFinalCursor?: string;
+  readonly nextStagingCursor?: string;
+  readonly finalDone: boolean;
+  readonly stagingDone: boolean;
+  readonly partial: boolean;
+}
 
 interface SweepPlan {
   readonly scanned: number;
@@ -123,6 +156,147 @@ export class AvatarOrphanSweep {
       stagingEligible: plan.stagingEligible,
       stagingDeleted,
       stagingFailed,
+    };
+  }
+
+  /**
+   * The operator-reviewed drain of a backlog the normal run refuses. It keeps
+   * the same eligibility rules, but lists, checks, and deletes only a bounded
+   * slice per pass. The cursor is the last key fully settled, so an interrupted
+   * or failed pass simply starts that key again and never skips a retry.
+   */
+  async runRecovery(input: AvatarRecoveryInput): Promise<AvatarRecoveryResult> {
+    const cutoff = input.now.getTime() - AVATAR_SWEEP_GRACE_MS;
+    const listLimit = input.maxListed ?? RECOVERY_LIST_LIMIT;
+    const deleteLimit = input.maxDeletes ?? RECOVERY_DELETE_LIMIT;
+
+    let scanned = 0;
+    let unrecognised = 0;
+    let orphaned = 0;
+    let deleted = 0;
+    let failed = 0;
+    let nextFinalCursor = input.finalCursor;
+    let stagingScanned = 0;
+    let stagingUnrecognised = 0;
+    let stagingEligible = 0;
+    let stagingDeleted = 0;
+    let stagingFailed = 0;
+    let nextStagingCursor = input.stagingCursor;
+    let stopped = false;
+
+    let batch: ListedAvatarObject[] = [];
+    const flushFinal = async (): Promise<void> => {
+      if (batch.length === 0) return;
+      const keys = batch.map((object) => object.objectKey);
+      const recorded = await this.avatars.recordedObjectKeys(keys);
+      const survivors = keys.filter((key) => !recorded.has(key));
+      // A second batch-level check just before deletion refuses an object
+      // that acquired a record while this pass was planning.
+      const stillUnrecorded =
+        survivors.length === 0
+          ? new Set<string>()
+          : await this.avatars.recordedObjectKeys(survivors);
+      for (const key of keys) {
+        if (!survivors.includes(key) || stillUnrecorded.has(key)) {
+          nextFinalCursor = key;
+          continue;
+        }
+        if (deleted >= deleteLimit) {
+          stopped = true;
+          return;
+        }
+        try {
+          await this.storage.deleteObject(key);
+          deleted += 1;
+          nextFinalCursor = key;
+        } catch {
+          failed += 1;
+          stopped = true;
+          return;
+        }
+      }
+      batch = [];
+    };
+
+    for await (const object of this.storage.listObjects(
+      AVATAR_OBJECT_PREFIX,
+      input.finalCursor,
+    )) {
+      if (scanned >= listLimit) break;
+      scanned += 1;
+      if (!isAvatarObjectKey(object.objectKey)) {
+        unrecognised += 1;
+        nextFinalCursor = object.objectKey;
+        continue;
+      }
+      if (
+        object.lastModified === undefined ||
+        object.lastModified.getTime() > cutoff
+      ) {
+        nextFinalCursor = object.objectKey;
+        continue;
+      }
+      orphaned += 1;
+      batch.push(object);
+      if (batch.length >= BATCH_SIZE) await flushFinal();
+      if (stopped) break;
+    }
+    if (!stopped) await flushFinal();
+    const finalDone = !stopped && scanned < listLimit;
+
+    if (!stopped) {
+      for await (const object of this.storage.listStagingObjects(
+        AVATAR_OBJECT_PREFIX,
+        input.stagingCursor,
+      )) {
+        if (stagingScanned >= listLimit) break;
+        stagingScanned += 1;
+        if (!isAvatarObjectKey(object.objectKey)) {
+          stagingUnrecognised += 1;
+          nextStagingCursor = object.objectKey;
+          continue;
+        }
+        if (
+          object.lastModified === undefined ||
+          object.lastModified.getTime() > cutoff
+        ) {
+          nextStagingCursor = object.objectKey;
+          continue;
+        }
+        stagingEligible += 1;
+        if (deleted + stagingDeleted >= deleteLimit) {
+          stopped = true;
+          break;
+        }
+        try {
+          await this.storage.deleteStagingObject(object.objectKey);
+          stagingDeleted += 1;
+          nextStagingCursor = object.objectKey;
+        } catch {
+          stagingFailed += 1;
+          stopped = true;
+          break;
+        }
+      }
+    }
+    const stagingDone = !stopped && stagingScanned < listLimit;
+
+    return {
+      scanned,
+      unrecognised,
+      orphaned,
+      deleted,
+      failed,
+      stagingScanned,
+      stagingUnrecognised,
+      stagingEligible,
+      stagingDeleted,
+      stagingFailed,
+      ...(nextFinalCursor === undefined ? {} : { nextFinalCursor }),
+      ...(nextStagingCursor === undefined ? {} : { nextStagingCursor }),
+      finalDone,
+      stagingDone,
+      partial: stopped || !finalDone || !stagingDone,
     };
   }
 

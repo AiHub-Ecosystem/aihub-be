@@ -346,7 +346,10 @@ export class S3AvatarStorage implements AvatarStoragePort {
     }
   }
 
-  async *listObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
+  async *listObjects(
+    prefix: string,
+    startAfter?: string,
+  ): AsyncIterable<ListedAvatarObject> {
     if (this.configured === undefined) {
       throw objectStorageUnavailable(
         'AVATAR_STORAGE_UNAVAILABLE',
@@ -354,7 +357,29 @@ export class S3AvatarStorage implements AvatarStoragePort {
       );
     }
     const { client, bucket } = this.configured;
+    yield* this.listBucket(client, bucket, prefix, startAfter);
+  }
 
+  async *listStagingObjects(
+    prefix: string,
+    startAfter?: string,
+  ): AsyncIterable<ListedAvatarObject> {
+    if (this.configured === undefined)
+      throw objectStorageUnavailable(
+        'AVATAR_STORAGE_UNAVAILABLE',
+        'Avatar storage is unavailable',
+      );
+    const { client, stagingBucket } = this.configured;
+    yield* this.listBucket(client, stagingBucket, prefix, startAfter);
+  }
+
+  /** One pagination loop for both Avatar buckets, including recovery cursors. */
+  private async *listBucket(
+    client: Pick<S3Client, 'send'>,
+    bucket: string,
+    prefix: string,
+    startAfter?: string,
+  ): AsyncIterable<ListedAvatarObject> {
     let continuationToken: string | undefined;
     do {
       const signal = objectStorageSignal();
@@ -364,6 +389,7 @@ export class S3AvatarStorage implements AvatarStoragePort {
           new ListObjectsV2Command({
             Bucket: bucket,
             Prefix: prefix,
+            ...(startAfter === undefined ? {} : { StartAfter: startAfter }),
             ...(continuationToken === undefined
               ? {}
               : { ContinuationToken: continuationToken }),
@@ -383,45 +409,6 @@ export class S3AvatarStorage implements AvatarStoragePort {
           yield { objectKey: object.Key, lastModified: object.LastModified };
         }
       }
-      continuationToken = page.IsTruncated
-        ? page.NextContinuationToken
-        : undefined;
-    } while (continuationToken !== undefined);
-  }
-
-  async *listStagingObjects(prefix: string): AsyncIterable<ListedAvatarObject> {
-    if (this.configured === undefined)
-      throw objectStorageUnavailable(
-        'AVATAR_STORAGE_UNAVAILABLE',
-        'Avatar storage is unavailable',
-      );
-    const { client, stagingBucket } = this.configured;
-    let continuationToken: string | undefined;
-    do {
-      const signal = objectStorageSignal();
-      let page: ListObjectsV2CommandOutput;
-      try {
-        page = await client.send(
-          new ListObjectsV2Command({
-            Bucket: stagingBucket,
-            Prefix: prefix,
-            ...(continuationToken === undefined
-              ? {}
-              : { ContinuationToken: continuationToken }),
-          }),
-          { abortSignal: signal },
-        );
-      } catch (error) {
-        throw objectStorageUnavailable(
-          'AVATAR_STORAGE_UNAVAILABLE',
-          'Avatar storage is unavailable',
-          error,
-          signal,
-        );
-      }
-      for (const object of page.Contents ?? [])
-        if (object.Key !== undefined)
-          yield { objectKey: object.Key, lastModified: object.LastModified };
       continuationToken = page.IsTruncated
         ? page.NextContinuationToken
         : undefined;
