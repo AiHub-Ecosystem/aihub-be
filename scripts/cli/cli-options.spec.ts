@@ -12,6 +12,7 @@ import {
   MUTATING_COMMANDS,
   classifyDatabase,
   effectiveMaintenanceTime,
+  formatOperatorTarget,
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
@@ -319,6 +320,25 @@ describe('operator CLI safety', () => {
     expect(classifyDatabase('unexpected')).toBe('unknown');
   });
 
+  it('shows the target a mutating command such as idempotency:cleanup will change', () => {
+    expect(
+      formatOperatorTarget({
+        host: 'db.internal',
+        port: 5432,
+        database: 'aihub',
+        deployment: 'production',
+      }),
+    ).toBe(
+      JSON.stringify({
+        event: 'operator_cli_target',
+        host: 'db.internal',
+        port: 5432,
+        database: 'aihub',
+        deployment: 'production',
+      }),
+    );
+  });
+
   it('requires an exact confirmation for production and rejects a mismatch', () => {
     expect(() => requireTargetConfirmation('production', undefined)).toThrow(
       'production writes require --target production',
@@ -510,6 +530,11 @@ describe('operator CLI safety', () => {
         ]),
       ).inputs['request-ids'],
     ).toBe('req_a,req_b');
+    expect(previewOperatorMutation('idempotency:cleanup', new Map())).toEqual({
+      command: 'idempotency:cleanup',
+      action: 'delete expired idempotency records',
+      inputs: {},
+    });
     expect(() => previewOperatorMutation('key:create', new Map())).toThrow(
       'operator preview requires --org',
     );

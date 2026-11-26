@@ -32,4 +32,26 @@ describe('idempotency cleanup CLI', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Command failed');
   }, 15_000);
+
+  it('rejects an unknown option before any database work', async () => {
+    const result = await runCli(['idempotency:cleanup', '--bogus', 'x']);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('Invalid CLI arguments');
+  }, 15_000);
+
+  it('refuses a dry run and a target confirmation without a database', async () => {
+    const preview = await runCli(['idempotency:cleanup', '--dry-run', 'true']);
+    const targeted = await runCli([
+      'idempotency:cleanup',
+      '--target',
+      'production',
+    ]);
+
+    for (const result of [preview, targeted]) {
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('operator database URL is required');
+      expect(result.stderr).not.toContain('idempotency_cleanup_completed');
+    }
+  }, 15_000);
 });

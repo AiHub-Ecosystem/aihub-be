@@ -33,14 +33,6 @@ async function loadApiKeyGenerator() {
 const IDENTITY_CONFIG_ALGORITHMS = new Set(['RS256', 'ES256']);
 const DEFAULT_ASSERTION_TTL_SECONDS = 300;
 const MAX_ASSERTION_TTL_SECONDS = 3600;
-const prismaClientFactoryModule = new URL(
-  '../../dist/modules/persistence/infrastructure/prisma-client.js',
-  import.meta.url,
-);
-const idempotencyRepositoryModule = new URL(
-  '../../dist/modules/idempotency/infrastructure/postgres-idempotency.repository.js',
-  import.meta.url,
-);
 const PRIVATE_JWK_MEMBERS = new Set([
   'd',
   'p',
@@ -67,6 +59,7 @@ import {
   NATIVE_DRY_RUN_COMMANDS,
   classifyDatabase,
   effectiveMaintenanceTime,
+  formatOperatorTarget,
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
@@ -85,13 +78,6 @@ import {
 /** @typedef {import('../../src/modules/identity/domain/api-key.ts').GeneratedApiKey} GeneratedApiKey */
 /** @typedef {(id: string, environment?: string) => GeneratedApiKey} ApiKeyGenerator */
 /** @typedef {{generateApiKey?: ApiKeyGenerator; default?: {generateApiKey?: ApiKeyGenerator}}} ApiKeyGeneratorModule */
-/** @typedef {import('@prisma-client/client').PrismaClient} GeneratedPrismaClient */
-/** @typedef {{prisma: GeneratedPrismaClient; close: () => Promise<void>}} OperatorPrismaClient */
-/** @typedef {(role: 'runtime', databaseUrl: string) => OperatorPrismaClient} PrismaClientFactory */
-/** @typedef {new (prisma: GeneratedPrismaClient) => {cleanupExpired: (cutoff?: Date) => Promise<number>}} IdempotencyRepositoryConstructor */
-/** @typedef {{createOperatorPrismaClient?: unknown; default?: Record<string, unknown>}} PrismaClientFactoryModule */
-/** @typedef {{PostgresIdempotencyRepository?: unknown; default?: Record<string, unknown>}} IdempotencyRepositoryModule */
-
 /** @param {string} name @param {string} exportName @param {string} unavailableMessage */
 function cliRunnerDescriptor(name, exportName, unavailableMessage) {
   return {
@@ -184,6 +170,12 @@ const publicApiMajorReportDescriptor = cliRunnerDescriptor(
   'runPublicApiMajorReportCommand',
   'public API major report command is unavailable',
 );
+/** @type {CliRunnerDescriptor<typeof import('../../src/cli/idempotency-cleanup').runIdempotencyCleanupCommand>} */
+const idempotencyCleanupDescriptor = cliRunnerDescriptor(
+  'idempotency-cleanup',
+  'runIdempotencyCleanupCommand',
+  'idempotency cleanup command is unavailable',
+);
 /** @type {CliRunnerDescriptor<typeof import('../../src/cli/quota-reconcile').runQuotaReconciliationCommand>} */
 const quotaReconciliationDescriptor = cliRunnerDescriptor(
   'quota-reconcile',
@@ -255,6 +247,11 @@ const revokeAllRefreshSessionsDescriptor = cliRunnerDescriptor(
 async function runCliCommand(descriptor, ...args) {
   const runner = await loadCliRunner(descriptor);
   return runner(...args);
+}
+
+/** @param {Parameters<typeof import('../../src/cli/idempotency-cleanup').runIdempotencyCleanupCommand>[0]} input */
+async function runIdempotencyCleanup(input) {
+  return runCliCommand(idempotencyCleanupDescriptor, input);
 }
 
 /** @param {Parameters<typeof import('../../src/cli/user-account-status').runDisableUserAccountCommand>[0]} input */
@@ -880,15 +877,7 @@ async function prepareOperatorMutation(command, options) {
     requireStorageDeployment(target.deployment, runtimeScope);
   }
 
-  console.error(
-    JSON.stringify({
-      event: 'operator_cli_target',
-      host: target.host,
-      port: target.port,
-      database: target.database,
-      deployment: target.deployment,
-    }),
-  );
+  console.error(formatOperatorTarget(target));
   console.error(
     `database source: selected=${selectedDatabaseConfigurationSource(command)}; DATABASE_URL=${databaseConfigurationSource('DATABASE_URL')}; CONTROL_PLANE_DATABASE_URL=${databaseConfigurationSource('CONTROL_PLANE_DATABASE_URL')}`,
   );
@@ -1075,63 +1064,11 @@ async function cleanupIdempotency(options) {
   );
   if (safety?.previewed) return;
 
-  const databaseUrl = process.env.DATABASE_URL ?? '';
-  if (databaseUrl.trim().length === 0) {
-    throw new Error('DATABASE_URL is required');
-  }
-  if (
-    !existsSync(prismaClientFactoryModule) ||
-    !existsSync(idempotencyRepositoryModule)
-  ) {
-    throw new Error(
-      'Idempotency cleanup is unavailable. Run "bun run build" before "idempotency:cleanup".',
-    );
-  }
-
-  const [factoryModule, repositoryModule] = await Promise.all([
-    /** @type {Promise<PrismaClientFactoryModule>} */ (
-      import(prismaClientFactoryModule.href)
-    ),
-    /** @type {Promise<IdempotencyRepositoryModule>} */ (
-      import(idempotencyRepositoryModule.href)
-    ),
-  ]);
-  const createOperatorPrismaClientValue =
-    factoryModule.createOperatorPrismaClient ??
-    factoryModule.default?.createOperatorPrismaClient;
-  const idempotencyRepositoryValue =
-    repositoryModule.PostgresIdempotencyRepository ??
-    repositoryModule.default?.PostgresIdempotencyRepository;
-  if (
-    typeof createOperatorPrismaClientValue !== 'function' ||
-    typeof idempotencyRepositoryValue !== 'function'
-  ) {
-    throw new Error('Idempotency cleanup is unavailable.');
-  }
-  const createOperatorPrismaClient = /** @type {PrismaClientFactory} */ (
-    createOperatorPrismaClientValue
-  );
-  const PostgresIdempotencyRepository =
-    /** @type {IdempotencyRepositoryConstructor} */ (
-      idempotencyRepositoryValue
-    );
-  const client = createOperatorPrismaClient('runtime', databaseUrl);
-  try {
-    const repository = new PostgresIdempotencyRepository(client.prisma);
-    const deleted = await repository.cleanupExpired(
-      safety.maintenanceClock.now,
-    );
-    console.log(
-      JSON.stringify({
-        event: 'idempotency_cleanup_completed',
-        cutoff: safety.maintenanceClock.now.toISOString(),
-        cutoff_source: safety.maintenanceClock.source,
-        deleted,
-      }),
-    );
-  } finally {
-    await client.close();
-  }
+  await runIdempotencyCleanup({
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    now: safety.maintenanceClock.now,
+    cutoffSource: safety.maintenanceClock.source,
+  });
 }
 
 /** @param {CliOptions} options */

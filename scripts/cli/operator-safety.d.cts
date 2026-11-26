@@ -13,6 +13,13 @@ export interface OperatorMutationPreview {
   readonly target?: string;
 }
 
+export interface OperatorTargetDisplay {
+  readonly host: string;
+  readonly port: number;
+  readonly database: string;
+  readonly deployment: OperatorDeployment;
+}
+
 export const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>>;
 export const CONTROL_PLANE_COMMANDS: ReadonlySet<string>;
 export const MUTATING_COMMANDS: ReadonlySet<string>;
@@ -23,6 +30,7 @@ export function effectiveMaintenanceTime(
   processNow: Date,
   databaseNow: Date,
 ): MaintenanceClock;
+export function formatOperatorTarget(target: OperatorTargetDisplay): string;
 export function isMutatingCommand(
   command: string | undefined,
   options: ReadonlyMap<string, string>,

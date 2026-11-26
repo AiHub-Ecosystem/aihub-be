@@ -242,6 +242,19 @@ function effectiveMaintenanceTime(processNow, databaseNow) {
     : { now: databaseNow, source: 'database' };
 }
 
+/**
+ * @param {{host: string; port: number; database: string; deployment: string}} target
+ */
+function formatOperatorTarget(target) {
+  return JSON.stringify({
+    event: 'operator_cli_target',
+    host: target.host,
+    port: target.port,
+    database: target.database,
+    deployment: target.deployment,
+  });
+}
+
 /** @param {string} command @param {ReadonlyMap<string, string>} options @returns {OperatorMutationPreview} */
 function previewOperatorMutation(command, options) {
   if (!isMutatingCommand(command, options)) {
@@ -301,6 +314,7 @@ module.exports = {
   NATIVE_DRY_RUN_COMMANDS,
   classifyDatabase,
   effectiveMaintenanceTime,
+  formatOperatorTarget,
   isMutatingCommand,
   previewOperatorMutation,
   requireControlPlaneDatabase,
