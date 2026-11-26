@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-26
-- Amends: [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md) (decision 5, decision 6, and Update item 6), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md) (Avatar migration order)
+- Amends: [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md) (decision 5, decision 6, and Update item 6), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md) (Avatar migration order and decision 8)
 - Related issue: [#2052](https://github.com/AiHub-Ecosystem/aihub-be/issues/2052)
 - Follows: [design spec](../superpowers/specs/2026-11-26-avatar-upload-session-core-design.md)
 
@@ -13,6 +13,8 @@ ADR-0196 chose one upload-session core for Avatar, Speaking, and Writing. ADR-00
 ## Decision
 
 Decision 5, decision 6, and Update item 6 of ADR-0068 are amended: the existing grant row is Avatar's durable upload-session record. It is consumed on completion and swept when it never completes. The one-Avatar-per-account record remains conditional on the Avatar the caller read, and ADR-0195 still orders commit before old-object cleanup.
+
+Decision 8 of ADR-0196 is amended for the module boundary: `UploadsModule` stays a marker with no providers or exports. Each consumer binds `UPLOAD_SESSION_SERVICE` and `UPLOAD_SESSION_SWEEP` in its own module, composing the core with its own policy and adapters (ADR-0073). Consumers receive the core through the exported tokens, not a direct cross-module constructor; this is the documented choice, not an accident.
 
 ## Considered options
 

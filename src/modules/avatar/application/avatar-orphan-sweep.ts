@@ -3,6 +3,7 @@ import {
   AVATAR_SWEEP_GRACE_MS,
   isAvatarObjectKey,
 } from '@/modules/avatar/domain/avatar';
+import type { UploadSessionSweep } from '@/modules/uploads/public';
 
 import type { AvatarRepositoryPort } from './avatar-repository.port';
 import type {
@@ -102,12 +103,31 @@ export class AvatarOrphanSweep {
       | 'listStagingObjects'
       | 'deleteStagingObject'
     >,
+    private readonly core?: UploadSessionSweep,
   ) {}
 
   async run(input: {
     readonly dryRun: boolean;
     readonly now: Date;
   }): Promise<AvatarSweepSummary> {
+    if (this.core !== undefined) {
+      const summary = await this.core.run(input);
+      return {
+        scanned: summary.scanned,
+        unrecognised: 0,
+        orphaned: summary.eligible,
+        deleted: summary.deleted,
+        failed: summary.failed,
+        dryRun: input.dryRun,
+        ceilingExceeded: this.core.ceilingExceeded,
+        stagingScanned: summary.scanned,
+        stagingUnrecognised: 0,
+        stagingEligible: summary.eligible,
+        stagingDeleted: summary.deleted,
+        stagingFailed: summary.failed,
+      };
+    }
+
     const cutoff = input.now.getTime() - AVATAR_SWEEP_GRACE_MS;
     // Planning reads the records and every listed object first, so a database
     // that cannot be reached, or a run that would delete more than one run may,

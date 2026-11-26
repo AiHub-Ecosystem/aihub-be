@@ -1,13 +1,14 @@
 import { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
+import { uploadNotFound } from '@/common/errors/upload-errors';
 import {
   AVATAR_COMPLETION_WINDOW_MS,
-  AVATAR_SWEEP_GRACE_MS,
+  AVATAR_MAX_BYTES,
   AVATAR_UPLOAD_URL_TTL_SECONDS,
   type Avatar,
   type AvatarContentType,
   avatarObjectKey,
-  isAvatarObjectKey,
+  isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
 import type {
   PublishedUploadSession,
@@ -22,20 +23,25 @@ import type {
   AvatarAuditEvent,
   AvatarRepositoryPort,
 } from './avatar-repository.port';
-import type {
-  AvatarStoragePort,
-  ListedAvatarObject,
-} from './avatar-storage.port';
+import type { AvatarStoragePort } from './avatar-storage.port';
 import {
   AVATAR_OPEN_UPLOAD_MAX,
   AVATAR_UPLOAD_ISSUANCE_MAX,
   AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
 } from './avatar-upload.policy';
 
-function avatarChanged(): AppError {
+export function avatarChanged(): AppError {
   return new AppError({
     code: 'AVATAR_CHANGED',
     message: 'The Avatar was changed by another request',
+    retryable: false,
+  });
+}
+
+function storedTooLarge(): AppError {
+  return new AppError({
+    code: 'PAYLOAD_TOO_LARGE',
+    message: 'Avatar image is larger than 2 MiB',
     retryable: false,
   });
 }
@@ -94,6 +100,7 @@ export class AvatarCoreRepositoryAdapter
   constructor(
     private readonly repository: AvatarRepositoryPort,
     private readonly now: () => Date = () => new Date(),
+    private readonly storage?: AvatarCoreStorageAdapter,
   ) {}
 
   async createIntent(
@@ -124,7 +131,26 @@ export class AvatarCoreRepositoryAdapter
     }
     const grants = await this.repository.openUploadGrants(userId, this.now());
     const grant = grants.find((row) => row.assetId === owner.assetId);
-    if (grant === undefined) return { kind: 'missing' };
+    if (grant === undefined) {
+      // The grant is rate-limit bookkeeping, not a completion precondition:
+      // a direct caller may complete staged bytes it never requested a URL for.
+      const now = this.now();
+      return {
+        kind: 'intent',
+        intent: {
+          assetId: owner.assetId,
+          endUserId: userId,
+          environment: 'production',
+          stagingKey: avatarObjectKey(userId, owner.assetId),
+          publishedKey: avatarObjectKey(userId, owner.assetId),
+          contentType: 'image/jpeg',
+          byteSize: 0,
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + AVATAR_COMPLETION_WINDOW_MS),
+          status: 'open',
+        },
+      };
+    }
     return {
       kind: 'intent',
       intent: {
@@ -234,12 +260,18 @@ export class AvatarCoreRepositoryAdapter
   }): Promise<PublishedUploadSession | 'revoked' | undefined> {
     const gate = this.gates.get(input.owner.assetId);
     if (gate === undefined) return undefined;
+    const objectKey = avatarObjectKey(
+      input.owner.endUserId,
+      input.owner.assetId,
+    );
+    const landed = this.storage?.publishedDescriptor(objectKey);
     const avatar: Avatar = {
       assetId: input.owner.assetId,
       userId: input.owner.endUserId,
-      objectKey: avatarObjectKey(input.owner.endUserId, input.owner.assetId),
-      contentType: (input.contentType ?? 'image/jpeg') as AvatarContentType,
-      byteSize: input.byteSize ?? 0,
+      objectKey,
+      contentType:
+        landed?.contentType ?? (input.contentType as AvatarContentType),
+      byteSize: landed?.byteSize ?? input.byteSize ?? 0,
       acceptedAt: input.now,
     };
     gate.decide({ kind: 'accepted', avatar, requestId: input.requestId });
@@ -271,10 +303,23 @@ export class AvatarCoreRepositoryAdapter
 }
 
 export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
+  private readonly publishedDescriptors = new Map<
+    string,
+    { readonly contentType: AvatarContentType; readonly byteSize: number }
+  >();
+
   constructor(
     private readonly storage: AvatarStoragePort,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  publishedDescriptor(
+    publishedKey: string,
+  ):
+    | { readonly contentType: AvatarContentType; readonly byteSize: number }
+    | undefined {
+    return this.publishedDescriptors.get(publishedKey);
+  }
 
   async createUploadUrl(input: {
     readonly environment: string;
@@ -310,27 +355,52 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
       }
     | undefined
   > {
+    // Storage inspection runs on the completion deadline, not the request
+    // signal: a requester disconnect must not abort an in-flight re-encode.
+    const processing =
+      signal === undefined ? undefined : AbortSignal.any([signal]);
     const described = await this.storage.describeStagingObject(
       input.stagingKey,
-      signal,
+      processing,
     );
     if (described === undefined) return undefined;
-    if (
-      described.lastModified !== undefined &&
-      this.now().getTime() - described.lastModified.getTime() >
-        AVATAR_COMPLETION_WINDOW_MS
-    ) {
+    const age =
+      described.lastModified === undefined
+        ? undefined
+        : this.now().getTime() - described.lastModified.getTime();
+    if (age === undefined || age > AVATAR_COMPLETION_WINDOW_MS) {
+      await this.discardStaging(input.stagingKey, signal);
       return undefined;
+    }
+    const { contentType, byteSize } = described;
+    if (byteSize !== undefined && byteSize > AVATAR_MAX_BYTES) {
+      await this.discardStaging(input.stagingKey, signal);
+      throw storedTooLarge();
+    }
+    if (
+      !isAvatarContentType(contentType) ||
+      byteSize === undefined ||
+      byteSize < 1
+    ) {
+      await this.discardStaging(input.stagingKey, signal);
+      throw invalidRequest();
     }
     const staged = await this.storage.readStagingObject(
       input.stagingKey,
       described.etag,
-      signal,
+      processing,
     );
-    if (staged === undefined) return undefined;
+    if (staged === undefined) {
+      await this.discardStaging(input.stagingKey, signal);
+      return undefined;
+    }
+    if (staged.contentType !== contentType) {
+      await this.discardStaging(input.stagingKey, signal);
+      throw invalidRequest();
+    }
     return {
-      contentType: staged.contentType ?? described.contentType,
-      byteSize: described.byteSize ?? staged.bytes.byteLength,
+      contentType,
+      byteSize,
       bytes: staged.bytes,
       ...(described.lastModified === undefined
         ? {}
@@ -355,6 +425,45 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
       bytes: input.bytes,
       ...(signal === undefined ? {} : { signal }),
     });
+    const published = await this.storage.describeFinalObject(
+      input.publishedKey,
+      signal,
+    );
+    if (
+      published === undefined ||
+      !isAvatarContentType(published.contentType) ||
+      published.byteSize === undefined ||
+      published.byteSize < 1 ||
+      published.byteSize > AVATAR_MAX_BYTES
+    ) {
+      await this.storage
+        .deleteObject(input.publishedKey)
+        .catch(() => undefined);
+      await this.discardStaging(input.stagingKey, signal);
+      if (published === undefined) {
+        throw uploadNotFound('NOT_FOUND', 'Avatar upload was not found');
+      }
+      if (
+        published.byteSize !== undefined &&
+        published.byteSize > AVATAR_MAX_BYTES
+      ) {
+        throw storedTooLarge();
+      }
+      throw invalidRequest();
+    }
+    this.publishedDescriptors.set(input.publishedKey, {
+      contentType: published.contentType,
+      byteSize: published.byteSize,
+    });
+  }
+
+  private async discardStaging(
+    objectKey: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.storage
+      .deleteStagingObject(objectKey, signal)
+      .catch(() => undefined);
   }
 
   publicUrl(input: {
@@ -378,77 +487,3 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
     await this.storage.deleteObject(input.publishedKey, signal);
   }
 }
-
-export class AvatarCoreCandidateSource
-  implements
-    Pick<
-      UploadSessionRepositoryPort,
-      'cleanupCandidates' | 'removeCleanupCandidate'
-    >
-{
-  private readonly startAfter = new Map<string, string>();
-
-  constructor(
-    private readonly repository: AvatarRepositoryPort,
-    private readonly storage: AvatarStoragePort,
-  ) {}
-
-  async cleanupCandidates(input: {
-    readonly now: Date;
-    readonly orphanBefore: Date;
-    readonly limit: number;
-    readonly after?: { readonly createdAt: Date; readonly assetId: string };
-  }): Promise<readonly UploadSessionCleanupCandidate[]> {
-    const candidates: UploadSessionCleanupCandidate[] = [];
-    const afterKey =
-      input.after === undefined
-        ? undefined
-        : this.startAfter.get(input.after.assetId);
-    const listedObjects: ListedAvatarObject[] = [];
-    for await (const row of this.storage.listObjects('users/', afterKey)) {
-      listedObjects.push(row);
-    }
-    for await (const row of this.storage.listStagingObjects(
-      'users/',
-      afterKey,
-    )) {
-      listedObjects.push(row);
-    }
-    const seen = new Set<string>();
-    for (const listed of listedObjects) {
-      if (seen.has(listed.objectKey)) continue;
-      seen.add(listed.objectKey);
-      if (!isAvatarObjectKey(listed.objectKey)) continue;
-      if (
-        listed.lastModified !== undefined &&
-        listed.lastModified.getTime() > input.orphanBefore.getTime()
-      ) {
-        continue;
-      }
-      const parts = listed.objectKey.split('/');
-      const userId = parts[1] ?? '';
-      const assetId = parts[3] ?? '';
-      const recorded = await this.repository.recordedObjectKeys([
-        listed.objectKey,
-      ]);
-      if (recorded.has(listed.objectKey)) continue;
-      candidates.push({
-        kind: 'intent',
-        assetId,
-        environment: 'production',
-        stagingKey: listed.objectKey,
-        publishedKey: avatarObjectKey(userId, assetId),
-        createdAt: listed.lastModified ?? new Date(0),
-      });
-      this.startAfter.set(assetId, listed.objectKey);
-      if (candidates.length >= input.limit) break;
-    }
-    return candidates;
-  }
-
-  async removeCleanupCandidate(): Promise<boolean> {
-    return true;
-  }
-}
-
-export const AVATAR_SWEEP_ORPHAN_GRACE_MS = AVATAR_SWEEP_GRACE_MS;

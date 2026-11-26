@@ -6,6 +6,7 @@ import {
   type RasterImageProcessingAdmission,
   RasterImageProcessingCapacityError,
   sanitizeRasterImage,
+  serializeRasterImageProcessing,
 } from '@/common/image/raster-image';
 import {
   AVATAR_MAX_BYTES,
@@ -33,7 +34,7 @@ function rateLimited(): AppError {
   });
 }
 
-function storageUnavailable(): AppError {
+export function storageUnavailable(): AppError {
   return new AppError({
     code: 'AVATAR_STORAGE_UNAVAILABLE',
     message: 'Avatar storage is unavailable',
@@ -44,7 +45,7 @@ function storageUnavailable(): AppError {
 function payloadTooLarge(): AppError {
   return new AppError({
     code: 'PAYLOAD_TOO_LARGE',
-    message: 'Avatar image is larger than 2 MiB',
+    message: 'Avatar image is too large after processing; use a smaller image',
     retryable: false,
   });
 }
@@ -87,14 +88,19 @@ export function avatarUploadSessionPolicy(): UploadSessionPolicy {
         throw error;
       }
     },
-    verify: async ({ contentType, bytes, lease }) => {
+    verify: async ({ contentType, bytes, signal, lease }) => {
       try {
-        return await sanitizeRasterImage({
-          contentType: contentType as AvatarContentType,
-          bytes,
-          maxBytes: AVATAR_MAX_BYTES,
-          maxPixels: AVATAR_MAX_PIXELS,
-        });
+        return await serializeRasterImageProcessing(
+          lease as RasterImageProcessingAdmission,
+          signal,
+          () =>
+            sanitizeRasterImage({
+              contentType: contentType as AvatarContentType,
+              bytes,
+              maxBytes: AVATAR_MAX_BYTES,
+              maxPixels: AVATAR_MAX_PIXELS,
+            }),
+        );
       } catch (error) {
         if (error instanceof RasterImageProcessingAbortedError) {
           throw storageUnavailable();

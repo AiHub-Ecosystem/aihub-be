@@ -13,6 +13,13 @@ import {
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
+  UPLOAD_SESSION_SERVICE,
+  UPLOAD_SESSION_SWEEP,
+  UploadSessionService,
+  type UploadSessionServicePort,
+  UploadSessionSweep,
+} from '@/modules/uploads/public';
 import { AvatarOrphanSweep } from './application/avatar-orphan-sweep';
 import {
   AVATAR_REPOSITORY,
@@ -22,6 +29,12 @@ import {
   AVATAR_STORAGE,
   type AvatarStoragePort,
 } from './application/avatar-storage.port';
+import {
+  AvatarCoreRepositoryAdapter,
+  AvatarCoreStorageAdapter,
+} from './application/avatar-upload-session.adapters';
+import { AvatarCoreCandidateSource } from './application/avatar-upload-session.candidates';
+import { avatarUploadSessionPolicy } from './application/avatar-upload-session.policy';
 import { AvatarUploadService } from './application/avatar-upload.service';
 import { PostgresAvatarRepository } from './infrastructure/postgres-avatar.repository';
 import { S3AvatarStorage } from './infrastructure/s3-avatar.storage';
@@ -63,24 +76,59 @@ import { AvatarController } from './presentation/avatar.controller';
               }),
         }),
     },
+    {
+      provide: UPLOAD_SESSION_SERVICE,
+      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
+      useFactory: (
+        avatars: AvatarRepositoryPort,
+        storage: AvatarStoragePort,
+      ) => {
+        const storageAdapter = new AvatarCoreStorageAdapter(storage);
+        return new UploadSessionService(
+          new AvatarCoreRepositoryAdapter(avatars, undefined, storageAdapter),
+          storageAdapter,
+          avatarUploadSessionPolicy(),
+          prefixedIdGenerator('ava_'),
+        );
+      },
+    },
+    {
+      provide: UPLOAD_SESSION_SWEEP,
+      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
+      useFactory: (
+        avatars: AvatarRepositoryPort,
+        storage: AvatarStoragePort,
+      ) => {
+        const policy = avatarUploadSessionPolicy();
+        return new UploadSessionSweep(
+          new AvatarCoreRepositoryAdapter(avatars),
+          new AvatarCoreStorageAdapter(storage),
+          policy,
+          2_000,
+          2,
+          new AvatarCoreCandidateSource(avatars, storage),
+        );
+      },
+    },
     // Published for the operator sweep (`avatar:sweep`), which builds its own
     // instance from CLI-constructed adapters rather than booting Nest.
     {
       provide: AvatarOrphanSweep,
-      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
+      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE, UPLOAD_SESSION_SWEEP],
       useFactory: (
         avatars: AvatarRepositoryPort,
         storage: AvatarStoragePort,
-      ): AvatarOrphanSweep => new AvatarOrphanSweep(avatars, storage),
+        core: UploadSessionSweep,
+      ): AvatarOrphanSweep => new AvatarOrphanSweep(avatars, storage, core),
     },
     {
       provide: AvatarUploadService,
-      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE],
+      inject: [AVATAR_REPOSITORY, AVATAR_STORAGE, UPLOAD_SESSION_SERVICE],
       useFactory: (
         avatars: AvatarRepositoryPort,
         storage: AvatarStoragePort,
-      ): AvatarUploadService =>
-        new AvatarUploadService(avatars, storage, prefixedIdGenerator('ava_')),
+        core: UploadSessionServicePort,
+      ): AvatarUploadService => new AvatarUploadService(avatars, storage, core),
     },
   ],
   exports: [AvatarOrphanSweep],

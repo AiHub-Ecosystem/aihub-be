@@ -118,4 +118,43 @@ describe('UploadSessionService', () => {
     expect(second).toEqual(published);
     expect(storage.publishObject).not.toHaveBeenCalled();
   });
+
+  it('passes the stored descriptor to publication', async () => {
+    const { repository, storage, policy, service } = setup();
+    (policy as { invalidStoredObject?: () => undefined }).invalidStoredObject =
+      () => undefined;
+    repository.findUpload.mockResolvedValue({
+      kind: 'intent',
+      intent: {
+        assetId: ASSET,
+        organizationId: ORG,
+        endUserId: USER,
+        environment: 'production',
+        stagingKey: 'writing-charts/staging',
+        publishedKey: 'writing-charts/published',
+        contentType: 'image/jpeg',
+        byteSize: 0,
+        createdAt: NOW,
+        expiresAt: new Date(NOW.getTime() + 60_000),
+        status: 'open',
+      },
+    } as never);
+    storage.inspectObject.mockResolvedValue({
+      contentType: 'image/png',
+      byteSize: 12,
+      bytes: new Uint8Array(12),
+      lastModified: NOW,
+      etag: 'etag-1',
+    } as never);
+
+    await service.complete({ context: context(), assetId: ASSET });
+
+    expect(repository.markPublished).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'req_01J00000000000000000000000',
+        contentType: 'image/png',
+        byteSize: 12,
+      }),
+    );
+  });
 });
