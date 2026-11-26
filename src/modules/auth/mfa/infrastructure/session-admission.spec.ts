@@ -59,23 +59,20 @@ describe('a session insert', () => {
     expect(webCreate).not.toHaveBeenCalled();
   });
 
-  // These checks run in `bun run type-check`: each marked line must fail to
-  // compile, so a new path that stores a session cannot skip the second-factor
-  // check that mints a SessionAdmission. The attempts are never called.
-  it('does not compile without the admission the second-factor check mints', () => {
-    const { client } = clientThatStores();
-    const attempts = [
-      () =>
-        // @ts-expect-error a Refresh Session insert needs a SessionAdmission
-        insertRefreshSession(client, refreshRow),
-      () =>
-        // @ts-expect-error a Web Session insert needs a SessionAdmission
-        insertWebSession(client, webRow),
-      () =>
-        // @ts-expect-error an empty object is not an admission
-        insertRefreshSession(client, refreshRow, {}),
-    ];
-
-    expect(attempts).toBeDefined();
-  });
+  // These calls stay in `bun run type-check` so each marked line must keep
+  // failing to compile: a new path that stores a session cannot skip the
+  // second-factor check that mints a SessionAdmission. They are never called.
+  const { client } = clientThatStores();
+  const invalidAttempts = [
+    () =>
+      // @ts-expect-error a Refresh Session insert needs a SessionAdmission
+      insertRefreshSession(client, refreshRow),
+    () =>
+      // @ts-expect-error a Web Session insert needs a SessionAdmission
+      insertWebSession(client, webRow),
+    () =>
+      // @ts-expect-error an empty object is not an admission
+      insertRefreshSession(client, refreshRow, {}),
+  ];
+  void invalidAttempts;
 });
