@@ -139,3 +139,14 @@ needs no rule change: the chosen seam is a published seam.
 - The body of #676 remains stale on ADR-0066 and `pnpm`; this ADR is the
   authoritative correction. Cross-links are added to ADR-0070, ADR-0100,
   ADR-0068, ADR-0069, ADR-0194, and ADR-0195 without rewriting their decisions.
+
+## Update (2026-11-26): Writing's `deleted` published-asset status (#677)
+
+Decision 1 names `expired` as the canonical terminal session state. Writing's
+durable published-asset row already uses `deleted` for a published object that
+was revoked or aged out, and caller-visible behavior must not change in #677.
+The shared core therefore carries `deleted` on its published-asset view while
+Writing is the only consumer; `expired` remains the canonical session state.
+This is an adapter-facing alias, not a new session transition. A future
+migration that unifies the published-asset vocabulary must amend this record
+rather than silently rename the row status.

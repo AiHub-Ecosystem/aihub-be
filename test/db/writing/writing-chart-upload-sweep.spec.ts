@@ -2,6 +2,12 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import {
+  UploadSessionService,
+  UploadSessionSweep,
+} from '@/modules/uploads/public';
+import { writingChartUploadSessionPolicy } from '@/modules/writing/chart-uploads/application/writing-chart-upload-session.policy';
+import { WRITING_CHART_ORPHAN_GRACE_MS } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import type { WritingChartUploadOwner } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/chart-uploads/application/writing-chart-upload.service';
 import { WritingChartUploadSweep } from '@/modules/writing/chart-uploads/application/writing-chart-upload.sweep';
@@ -49,9 +55,12 @@ function context() {
 /** An open upload whose private object is staged in the bucket. */
 async function openUpload(bucket: ChartBucket) {
   const service = new WritingChartUploadService(
-    repository,
-    bucket.storage(),
-    (now) => `chart_${ulid(now.getTime())}`,
+    new UploadSessionService(
+      repository,
+      bucket.storage(),
+      writingChartUploadSessionPolicy(),
+      (now) => `chart_${ulid(now.getTime())}`,
+    ),
   );
   const { assetId } = await service.create({
     context: context(),
@@ -84,10 +93,11 @@ async function uploadStatus(assetId: string): Promise<string | undefined> {
 }
 
 function sweepAt(bucket: ChartBucket, now: Date) {
-  return new WritingChartUploadSweep(repository, bucket.storage()).run({
-    dryRun: false,
-    now,
-  });
+  return new WritingChartUploadSweep(
+    new UploadSessionSweep(repository, bucket.storage(), {
+      orphanGraceMs: WRITING_CHART_ORPHAN_GRACE_MS,
+    }),
+  ).run({ dryRun: false, now });
 }
 
 describe('Writing chart upload sweep', () => {

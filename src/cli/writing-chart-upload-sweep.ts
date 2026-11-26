@@ -1,6 +1,8 @@
 import process from 'node:process';
 
+import { UploadSessionSweep } from '@/modules/uploads/public';
 import {
+  WRITING_CHART_ORPHAN_GRACE_MS,
   type WritingChartUploadRepositoryPort,
   type WritingChartUploadStoragePort,
   WritingChartUploadSweep,
@@ -49,11 +51,14 @@ export async function runWritingChartUploadSweepCommand(
     storage = createCliWritingChartStorage(environment);
   }
   const sweep = new WritingChartUploadSweep(
-    repository,
-    storage as Pick<
-      WritingChartUploadStoragePort,
-      'deleteStagingObject' | 'deletePublishedObject'
-    >,
+    new UploadSessionSweep(
+      repository,
+      storage as Pick<
+        WritingChartUploadStoragePort,
+        'deleteStagingObject' | 'deletePublishedObject'
+      >,
+      { orphanGraceMs: WRITING_CHART_ORPHAN_GRACE_MS },
+    ),
   );
   const { result } = await runOperatorCommand(
     repository,

@@ -5,6 +5,7 @@ export {
 } from '@/modules/writing/chart-uploads/application/writing-chart-revocation-audit-retention';
 export {
   WRITING_CHART_MAX_BYTES,
+  WRITING_CHART_ORPHAN_GRACE_MS,
   WRITING_CHART_PUBLICATION_LEASE_MS,
 } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 export { WritingChartUploadSweep } from '@/modules/writing/chart-uploads/application/writing-chart-upload.sweep';

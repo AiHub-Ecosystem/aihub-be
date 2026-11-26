@@ -18,6 +18,16 @@ import {
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
 import {
+  UPLOAD_SESSION_SERVICE,
+  UPLOAD_SESSION_SWEEP,
+  UploadSessionService,
+  type UploadSessionServicePort,
+  UploadSessionSweep,
+} from '@/modules/uploads/public';
+import { UploadsModule } from '@/modules/uploads/uploads.module';
+import { writingChartUploadSessionPolicy } from './chart-uploads/application/writing-chart-upload-session.policy';
+import { WRITING_CHART_ORPHAN_GRACE_MS } from './chart-uploads/application/writing-chart-upload.policy';
+import {
   WRITING_CHART_UPLOAD_CLOCK,
   WRITING_CHART_UPLOAD_REPOSITORY,
   WRITING_CHART_UPLOAD_SERVICE,
@@ -43,6 +53,7 @@ import { WritingV2GradingController } from './grading/presentation/writing-v2-gr
     MeteringModule,
     PersistenceModule,
     SecretsModule,
+    UploadsModule,
   ],
   controllers: [
     WritingGradingController,
@@ -88,7 +99,7 @@ import { WritingV2GradingController } from './grading/presentation/writing-v2-gr
       useValue: () => new Date(),
     },
     {
-      provide: WRITING_CHART_UPLOAD_SERVICE,
+      provide: UPLOAD_SESSION_SERVICE,
       inject: [
         WRITING_CHART_UPLOAD_REPOSITORY,
         WRITING_CHART_UPLOAD_STORAGE,
@@ -99,20 +110,36 @@ import { WritingV2GradingController } from './grading/presentation/writing-v2-gr
         storage: WritingChartUploadStoragePort,
         clock: () => Date,
       ) =>
-        new WritingChartUploadService(
+        new UploadSessionService(
           repository,
           storage,
+          writingChartUploadSessionPolicy(),
           prefixedIdGenerator('chart_'),
           clock,
         ),
     },
     {
-      provide: WritingChartUploadSweep,
+      provide: UPLOAD_SESSION_SWEEP,
       inject: [WRITING_CHART_UPLOAD_REPOSITORY, WRITING_CHART_UPLOAD_STORAGE],
       useFactory: (
         repository: WritingChartUploadRepositoryPort,
         storage: WritingChartUploadStoragePort,
-      ) => new WritingChartUploadSweep(repository, storage),
+      ) =>
+        new UploadSessionSweep(repository, storage, {
+          orphanGraceMs: WRITING_CHART_ORPHAN_GRACE_MS,
+        }),
+    },
+    {
+      provide: WRITING_CHART_UPLOAD_SERVICE,
+      inject: [UPLOAD_SESSION_SERVICE],
+      useFactory: (core: UploadSessionServicePort) =>
+        new WritingChartUploadService(core),
+    },
+    {
+      provide: WritingChartUploadSweep,
+      inject: [UPLOAD_SESSION_SWEEP],
+      useFactory: (core: UploadSessionSweep) =>
+        new WritingChartUploadSweep(core),
     },
   ],
   exports: [WritingChartUploadSweep],

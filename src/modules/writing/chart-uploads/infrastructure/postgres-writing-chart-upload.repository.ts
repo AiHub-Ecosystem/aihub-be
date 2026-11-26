@@ -125,12 +125,13 @@ export class PostgresWritingChartUploadRepository
 {
   constructor(private readonly client: PrismaClient) {}
 
-  async createIntent(intent: WritingChartUploadIntent): Promise<boolean> {
+  async createIntent(
+    intent: WritingChartUploadIntent,
+    rateWindowMs: number = WRITING_CHART_RATE_WINDOW_MS,
+  ): Promise<boolean> {
     return this.transaction(intent.organizationId, async (client) => {
       await this.lock(client, advisoryKey(intent, 'intents'));
-      const since = new Date(
-        intent.createdAt.getTime() - WRITING_CHART_RATE_WINDOW_MS,
-      );
+      const since = new Date(intent.createdAt.getTime() - rateWindowMs);
       const count = await client.writingChartUpload.count({
         where: {
           organizationId: intent.organizationId,
@@ -192,6 +193,7 @@ export class PostgresWritingChartUploadRepository
   async beginPublication(input: {
     readonly owner: WritingChartUploadOwner;
     readonly now: Date;
+    readonly rateWindowMs?: number;
   }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
     return this.transaction(input.owner.organizationId, async (client) => {
       await this.lock(client, advisoryKey(input.owner, 'publications'));
@@ -220,7 +222,8 @@ export class PostgresWritingChartUploadRepository
       }
 
       const since = new Date(
-        input.now.getTime() - WRITING_CHART_RATE_WINDOW_MS,
+        input.now.getTime() -
+          (input.rateWindowMs ?? WRITING_CHART_RATE_WINDOW_MS),
       );
       const [published, publishing] = await Promise.all([
         client.writingChartUpload.count({

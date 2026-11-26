@@ -1,3 +1,4 @@
+import { UploadSessionSweep } from '@/modules/uploads/public';
 import type {
   WritingChartCleanupCandidate,
   WritingChartUploadRepositoryPort,
@@ -40,7 +41,11 @@ function makeSweep() {
     'deleteStagingObject' | 'deletePublishedObject'
   >;
   return {
-    sweep: new WritingChartUploadSweep(repository, storage),
+    sweep: new WritingChartUploadSweep(
+      new UploadSessionSweep(repository, storage, {
+        orphanGraceMs: 24 * 60 * 60 * 1000,
+      }),
+    ),
     repository,
     storage,
   };
