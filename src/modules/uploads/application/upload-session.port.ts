@@ -23,7 +23,11 @@ export interface UploadSessionRepositoryPort {
     rateWindowMs?: number,
   ): Promise<boolean>;
   findUpload(owner: UploadSessionOwner): Promise<UploadSessionLookup>;
-  rejectIntent(owner: UploadSessionOwner, now: Date): Promise<void>;
+  rejectIntent(
+    owner: UploadSessionOwner,
+    now: Date,
+    cleaned?: boolean,
+  ): Promise<void>;
   beginPublication(input: {
     readonly owner: UploadSessionOwner;
     readonly now: Date;
@@ -83,6 +87,7 @@ export interface UploadSessionStoragePort {
       readonly publishedKey: string;
       readonly contentType: string;
       readonly bytes: Uint8Array;
+      readonly byteSize?: number;
     },
     signal?: AbortSignal,
   ): Promise<void>;

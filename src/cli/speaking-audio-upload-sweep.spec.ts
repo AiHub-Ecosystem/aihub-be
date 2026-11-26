@@ -161,8 +161,8 @@ describe('Speaking Audio upload cleanup command', () => {
     });
     expect(storage.deleted).toEqual([
       speakingAudioStagingObjectKey(expired.organizationId, expired.assetId),
-      rejected.objectKey,
       speakingAudioStagingObjectKey(rejected.organizationId, rejected.assetId),
+      rejected.objectKey,
     ]);
     expect(repository.intents).toEqual([expired, tooYoung]);
     expect(repository.closed).toBe(true);

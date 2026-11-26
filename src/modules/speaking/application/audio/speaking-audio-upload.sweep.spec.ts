@@ -1,12 +1,22 @@
 import {
+  SPEAKING_AUDIO_ORPHAN_GRACE_MS,
   type SpeakingAudioUploadIntent,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import { UploadSessionSweep } from '@/modules/uploads/public';
+import {
+  SpeakingAudioCoreRepositoryAdapter,
+  SpeakingAudioCoreStorageAdapter,
+} from './speaking-audio-upload-session.adapters';
+import { speakingAudioUploadSessionPolicy } from './speaking-audio-upload-session.policy';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
 } from './speaking-audio-upload.port';
-import { SpeakingAudioUploadSweep } from './speaking-audio-upload.sweep';
+import {
+  DELETION_CEILING,
+  SpeakingAudioUploadSweep,
+} from './speaking-audio-upload.sweep';
 
 const intent: SpeakingAudioUploadIntent = {
   assetId: 'aud_01J00000000000000000000001',
@@ -36,6 +46,31 @@ function pagedCandidates(total: number): SpeakingAudioUploadIntent[][] {
   return pages;
 }
 
+function makeSweep(
+  repository: Pick<
+    SpeakingAudioUploadRepositoryPort,
+    'listCleanupCandidates' | 'removeCleanupCandidate'
+  >,
+  storage: Pick<SpeakingAudioAssetStoragePort, 'deleteObject'>,
+): SpeakingAudioUploadSweep {
+  return new SpeakingAudioUploadSweep(
+    new UploadSessionSweep(
+      new SpeakingAudioCoreRepositoryAdapter(
+        repository as SpeakingAudioUploadRepositoryPort,
+      ),
+      new SpeakingAudioCoreStorageAdapter(
+        storage as SpeakingAudioAssetStoragePort,
+        speakingAudioUploadSessionPolicy(
+          storage as SpeakingAudioAssetStoragePort,
+        ),
+      ),
+      { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
+      DELETION_CEILING,
+      2,
+    ),
+  );
+}
+
 describe('SpeakingAudioUploadSweep', () => {
   it('deletes staging and final objects before removing an expired intent', async () => {
     const repository = {
@@ -48,7 +83,7 @@ describe('SpeakingAudioUploadSweep', () => {
     const storage = {
       deleteObject: jest.fn().mockResolvedValue(undefined),
     } satisfies Pick<SpeakingAudioAssetStoragePort, 'deleteObject'>;
-    const sweep = new SpeakingAudioUploadSweep(repository, storage);
+    const sweep = makeSweep(repository, storage);
 
     await expect(
       sweep.run({ dryRun: false, now: new Date('2026-10-03T00:00:00.000Z') }),
@@ -89,7 +124,7 @@ describe('SpeakingAudioUploadSweep', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('staging delete failed')),
     } satisfies Pick<SpeakingAudioAssetStoragePort, 'deleteObject'>;
-    const sweep = new SpeakingAudioUploadSweep(repository, storage);
+    const sweep = makeSweep(repository, storage);
 
     await expect(
       sweep.run({ dryRun: false, now: new Date('2026-10-03T00:00:00.000Z') }),
@@ -131,7 +166,7 @@ describe('SpeakingAudioUploadSweep', () => {
         'listCleanupCandidates' | 'removeCleanupCandidate'
       >;
       const storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
-      const sweep = new SpeakingAudioUploadSweep(repository, storage);
+      const sweep = makeSweep(repository, storage);
 
       await expect(
         sweep.run({

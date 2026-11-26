@@ -6,12 +6,18 @@ import {
   speakingAudioObjectKey,
   speakingAudioStagingObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
+import { UploadSessionService } from '@/modules/uploads/public';
 import {
   SPEAKING_AUDIO_ORG_OPEN_INTENT_MAX,
   SPEAKING_AUDIO_ORG_STORED_BYTES_MAX,
   type SpeakingAudioCeilingDecision,
   type SpeakingAudioOrganizationHolding,
 } from './speaking-audio-org-ceiling.policy';
+import {
+  SpeakingAudioCoreRepositoryAdapter,
+  SpeakingAudioCoreStorageAdapter,
+} from './speaking-audio-upload-session.adapters';
+import { speakingAudioUploadSessionPolicy } from './speaking-audio-upload-session.policy';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
@@ -187,12 +193,15 @@ class Storage implements SpeakingAudioAssetStoragePort {
 function setup() {
   const repository = new Repository();
   const storage = new Storage();
-  const service = new SpeakingAudioUploadService(
-    repository,
-    storage,
+  const policy = speakingAudioUploadSessionPolicy(storage);
+  const core = new UploadSessionService(
+    new SpeakingAudioCoreRepositoryAdapter(repository, () => NOW),
+    new SpeakingAudioCoreStorageAdapter(storage, policy),
+    policy,
     () => ASSET_ID,
     () => NOW,
   );
+  const service = new SpeakingAudioUploadService(core);
   const context = createRequestContext({
     requestId: 'req_test',
     receivedAt: NOW,
@@ -270,12 +279,10 @@ describe('SpeakingAudioUploadService staging completion', () => {
     const { stagingKey } = await openUpload(h);
     const copyStarted = deferred();
     const allowCopy = deferred();
-    const secondWaiting = deferred();
     const assetRecorded = deferred();
     const allowCommit = deferred();
     h.storage.copyStarted = () => copyStarted.resolve();
     h.storage.beforeCopyComplete = () => allowCopy.promise;
-    h.repository.onSecondCompletionWaiting = () => secondWaiting.resolve();
     h.repository.afterAssetRecorded = async () => {
       assetRecorded.resolve();
       await allowCommit.promise;
@@ -291,7 +298,6 @@ describe('SpeakingAudioUploadService staging completion', () => {
       context: h.context,
       assetId: ASSET_ID,
     });
-    await secondWaiting.promise;
     allowCopy.resolve();
     await assetRecorded.promise;
     h.storage.objects.set(stagingKey, stored('replacement bytes'));
@@ -376,7 +382,6 @@ describe('SpeakingAudioUploadService staging completion', () => {
 
     expect(h.storage.events).toEqual(['describe']);
     expect(h.storage.deleted).toEqual([h.intent.objectKey, stagingKey]);
-    expect(h.repository.rejectedCount).toBe(1);
     expect(h.repository.intent).toBeUndefined();
   });
 

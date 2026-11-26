@@ -2,7 +2,7 @@ export type UploadSessionEnvironment = 'production' | 'sandbox';
 
 export type UploadSessionOwner = {
   readonly assetId: string;
-  readonly organizationId: string;
+  readonly organizationId?: string;
   readonly endUserId: string;
   readonly environment: UploadSessionEnvironment;
 };
@@ -23,6 +23,7 @@ export interface PublishedUploadSession
   readonly publishedAt: Date;
   readonly retentionExpiresAt: Date;
   readonly imageUrl: string;
+  readonly created?: boolean;
 }
 
 export type UploadSessionLookup =

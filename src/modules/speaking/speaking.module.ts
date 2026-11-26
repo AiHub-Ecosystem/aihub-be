@@ -22,7 +22,19 @@ import {
 } from '@/modules/persistence/persistence.module';
 import { SEAWEEDFS_S3_CLIENT } from '@/modules/secrets/application/seaweedfs-s3-client.port';
 import { SecretsModule } from '@/modules/secrets/secrets.module';
+import {
+  UPLOAD_SESSION_SERVICE,
+  UPLOAD_SESSION_SWEEP,
+  UploadSessionService,
+  type UploadSessionServicePort,
+  UploadSessionSweep,
+} from '@/modules/uploads/public';
 import { SPEAKING_AUDIO_STORAGE } from './application/audio/speaking-audio-storage.port';
+import {
+  SpeakingAudioCoreRepositoryAdapter,
+  SpeakingAudioCoreStorageAdapter,
+} from './application/audio/speaking-audio-upload-session.adapters';
+import { speakingAudioUploadSessionPolicy } from './application/audio/speaking-audio-upload-session.policy';
 import {
   SPEAKING_AUDIO_ASSET_STORAGE,
   SPEAKING_AUDIO_UPLOAD_CLOCK,
@@ -32,7 +44,10 @@ import {
   type SpeakingAudioUploadRepositoryPort,
 } from './application/audio/speaking-audio-upload.port';
 import { SpeakingAudioUploadService } from './application/audio/speaking-audio-upload.service';
-import { SpeakingAudioUploadSweep } from './application/audio/speaking-audio-upload.sweep';
+import {
+  DELETION_CEILING,
+  SpeakingAudioUploadSweep,
+} from './application/audio/speaking-audio-upload.sweep';
 import { SPEAKING_AUDIO_URL_REJECTION_RECORDER } from './application/audio/speaking-audio-url-rejection-recorder.port';
 import { SPEAKING_MULTIPART_PARSER } from './application/audio/speaking-multipart-parser.port';
 import { SpeakingRecordingAccess } from './application/audio/speaking-recording-access';
@@ -46,6 +61,7 @@ import {
   type SpeakingV2ResultOwnershipPort,
 } from './application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from './application/speaking-v2-workflow-engine';
+import { SPEAKING_AUDIO_ORPHAN_GRACE_MS } from './domain/speaking-audio-asset';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
 import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
@@ -369,7 +385,7 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       useValue: () => new Date(),
     },
     {
-      provide: SPEAKING_AUDIO_UPLOAD_SERVICE,
+      provide: UPLOAD_SESSION_SERVICE,
       inject: [
         SPEAKING_AUDIO_UPLOAD_REPOSITORY,
         SPEAKING_AUDIO_ASSET_STORAGE,
@@ -379,13 +395,22 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
         repository: SpeakingAudioUploadRepositoryPort,
         storage: SpeakingAudioAssetStoragePort,
         clock: () => Date,
-      ) =>
-        new SpeakingAudioUploadService(
-          repository,
-          storage,
+      ) => {
+        const policy = speakingAudioUploadSessionPolicy(storage);
+        return new UploadSessionService(
+          new SpeakingAudioCoreRepositoryAdapter(repository, clock),
+          new SpeakingAudioCoreStorageAdapter(storage, policy),
+          policy,
           prefixedIdGenerator('aud_'),
           clock,
-        ),
+        );
+      },
+    },
+    {
+      provide: SPEAKING_AUDIO_UPLOAD_SERVICE,
+      inject: [UPLOAD_SESSION_SERVICE],
+      useFactory: (core: UploadSessionServicePort) =>
+        new SpeakingAudioUploadService(core),
     },
     {
       provide: SpeakingRecordingAccess,
@@ -396,12 +421,27 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       ) => new SpeakingRecordingAccess(repository, clock),
     },
     {
-      provide: SpeakingAudioUploadSweep,
+      provide: UPLOAD_SESSION_SWEEP,
       inject: [SPEAKING_AUDIO_UPLOAD_REPOSITORY, SPEAKING_AUDIO_ASSET_STORAGE],
       useFactory: (
         repository: SpeakingAudioUploadRepositoryPort,
         storage: SpeakingAudioAssetStoragePort,
-      ) => new SpeakingAudioUploadSweep(repository, storage),
+      ) => {
+        const policy = speakingAudioUploadSessionPolicy(storage);
+        return new UploadSessionSweep(
+          new SpeakingAudioCoreRepositoryAdapter(repository),
+          new SpeakingAudioCoreStorageAdapter(storage, policy),
+          { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
+          DELETION_CEILING,
+          2,
+        );
+      },
+    },
+    {
+      provide: SpeakingAudioUploadSweep,
+      inject: [UPLOAD_SESSION_SWEEP],
+      useFactory: (core: UploadSessionSweep) =>
+        new SpeakingAudioUploadSweep(core),
     },
     SuccessEnvelopeInterceptor,
     {

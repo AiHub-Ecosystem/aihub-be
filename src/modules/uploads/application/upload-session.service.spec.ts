@@ -67,11 +67,19 @@ function setup() {
     intentTtlMs: 60 * 60 * 1000,
     rateWindowMs: 60 * 60 * 1000,
     orphanGraceMs: 24 * 60 * 60 * 1000,
+    owner: () => ({
+      assetId: ASSET,
+      organizationId: ORG,
+      endUserId: USER,
+      environment: 'production' as const,
+    }),
     isContentType: (value: string) =>
       value === 'image/png' || value === 'image/jpeg' || value === 'image/webp',
     isAssetId: (value: string) => value === ASSET,
-    stagingKey: (assetId: string) => `writing-charts/${assetId}/staging`,
-    publishedKey: (assetId: string) => `writing-charts/${assetId}/published`,
+    stagingKey: (owner: { readonly assetId: string }) =>
+      `writing-charts/${owner.assetId}/staging`,
+    publishedKey: (owner: { readonly assetId: string }) =>
+      `writing-charts/${owner.assetId}/published`,
     reserveVerification: () => ({ release: () => undefined }),
     verify: async () => ({
       kind: 'sanitized' as const,

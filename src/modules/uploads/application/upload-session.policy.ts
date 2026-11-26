@@ -1,4 +1,9 @@
 import type { AppError } from '@/common/errors/app-error';
+import type { RequestContext } from '@/common/request-context/request-context';
+import type {
+  UploadSessionIntent,
+  UploadSessionOwner,
+} from '@/modules/uploads/domain/upload-session';
 
 export type UploadSessionVerification =
   | { readonly kind: 'sanitized'; readonly bytes: Uint8Array }
@@ -16,13 +21,30 @@ export interface UploadSessionVerificationLease {
  */
 export interface UploadSessionPolicy {
   readonly maxBytes: number;
+  readonly minBytes?: number;
   readonly intentTtlMs: number;
   readonly rateWindowMs: number;
   readonly orphanGraceMs: number;
+  owner(context: RequestContext, assetId: string): UploadSessionOwner;
   isContentType(value: string): boolean;
   isAssetId(value: string): boolean;
-  stagingKey(assetId: string): string;
-  publishedKey(assetId: string): string;
+  stagingKey(owner: UploadSessionOwner): string;
+  publishedKey(owner: UploadSessionOwner): string;
+  completionSignal?(signal: AbortSignal): AbortSignal;
+  /** Features with more than one staged key replace the refusal cleanup here. */
+  deleteOnRefusal?(
+    intent: UploadSessionIntent,
+    signal: AbortSignal,
+  ): Promise<boolean>;
+  /** Features whose storage is HEAD-only replace the byte-equality rule here. */
+  invalidStoredObject?(
+    stored: {
+      readonly contentType: string | undefined;
+      readonly byteSize: number | undefined;
+      readonly bytes: Uint8Array;
+    },
+    intent: UploadSessionIntent,
+  ): AppError | undefined;
   reserveVerification(): UploadSessionVerificationLease;
   verify(input: {
     readonly contentType: string;

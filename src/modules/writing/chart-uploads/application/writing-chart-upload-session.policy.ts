@@ -52,10 +52,24 @@ export function writingChartUploadSessionPolicy(): UploadSessionPolicy {
     intentTtlMs: WRITING_CHART_INTENT_TTL_MS,
     rateWindowMs: WRITING_CHART_RATE_WINDOW_MS,
     orphanGraceMs: WRITING_CHART_ORPHAN_GRACE_MS,
+    owner: (context, assetId) => {
+      const { organizationId, userId, environment } = context;
+      if (
+        organizationId === undefined ||
+        userId === undefined ||
+        (environment !== 'production' && environment !== 'sandbox')
+      ) {
+        throw storageUnavailable(
+          'WRITING_CHART_STORAGE_UNAVAILABLE',
+          'Writing chart storage is unavailable',
+        );
+      }
+      return { assetId, organizationId, endUserId: userId, environment };
+    },
     isContentType: (value) => isWritingChartContentType(value),
     isAssetId: (value) => isWritingChartAssetId(value),
-    stagingKey: (assetId) => writingChartStagingKey(assetId),
-    publishedKey: (assetId) => writingChartPublishedKey(assetId),
+    stagingKey: (owner) => writingChartStagingKey(owner.assetId),
+    publishedKey: (owner) => writingChartPublishedKey(owner.assetId),
     reserveVerification: () => {
       try {
         return reserveWritingChartRasterImageProcessing();

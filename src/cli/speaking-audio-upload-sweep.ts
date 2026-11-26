@@ -1,11 +1,17 @@
 import {
+  DELETION_CEILING,
+  SPEAKING_AUDIO_ORPHAN_GRACE_MS,
   type SpeakingAudioAssetStoragePort,
+  SpeakingAudioCoreRepositoryAdapter,
+  SpeakingAudioCoreStorageAdapter,
   type SpeakingAudioUploadRepositoryPort,
   SpeakingAudioUploadSweep,
+  speakingAudioUploadSessionPolicy,
 } from '@/modules/speaking/public/speaking-audio-upload-sweep';
+import { UploadSessionSweep } from '@/modules/uploads/public';
 import { createCliSpeakingAudioAssetStorage } from './speaking-audio-storage';
 
-import { runOperatorCommand } from './operator-command-context';
+import { runUploadSessionSweepCli } from './upload-session-sweep-cli';
 
 type ClosableUploadRepository = Pick<
   SpeakingAudioUploadRepositoryPort,
@@ -44,18 +50,27 @@ export async function runSpeakingAudioUploadSweepCommand(
 ): Promise<Awaited<ReturnType<SpeakingAudioUploadSweep['run']>>> {
   const repository = await openRepository(input);
   const storage = input.storage ?? createCliSpeakingAudioAssetStorage();
-  const sweep = new SpeakingAudioUploadSweep(repository, storage);
-  const { result } = await runOperatorCommand(
+  const policy = speakingAudioUploadSessionPolicy(
+    storage as SpeakingAudioAssetStoragePort,
+  );
+  const sweep = new SpeakingAudioUploadSweep(
+    new UploadSessionSweep(
+      new SpeakingAudioCoreRepositoryAdapter(
+        repository as unknown as SpeakingAudioUploadRepositoryPort,
+      ),
+      new SpeakingAudioCoreStorageAdapter(
+        storage as SpeakingAudioAssetStoragePort,
+        policy,
+      ),
+      { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
+      DELETION_CEILING,
+      2,
+    ),
+  );
+  return runUploadSessionSweepCli({
     repository,
-    input.now,
-    ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
     storage,
-  );
-  (input.emit ?? console.log)(
-    JSON.stringify({
-      ...result,
-      cutoff_source: input.clockSource ?? 'process',
-    }),
-  );
-  return result;
+    sweep,
+    options: input,
+  });
 }

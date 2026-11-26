@@ -2,6 +2,11 @@ import type { Pool } from 'pg';
 import { ulid } from 'ulid';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import {
+  SpeakingAudioCoreRepositoryAdapter,
+  SpeakingAudioCoreStorageAdapter,
+} from '@/modules/speaking/application/audio/speaking-audio-upload-session.adapters';
+import { speakingAudioUploadSessionPolicy } from '@/modules/speaking/application/audio/speaking-audio-upload-session.policy';
 import type { SpeakingAudioAssetStoragePort } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import { SpeakingAudioUploadService } from '@/modules/speaking/application/audio/speaking-audio-upload.service';
 import {
@@ -10,6 +15,7 @@ import {
   speakingAudioObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { PostgresSpeakingAudioUploadRepository } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
+import { UploadSessionService } from '@/modules/uploads/public';
 
 import { createSpeakingAudioQueryClient } from '../shared/postgres-speaking-audio-upload.fixture-client';
 
@@ -264,11 +270,18 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
   it('answers not-found for another Organization using the same End-User ID', async () => {
     const upload = intent();
     await repository.createIntent(upload);
+    const policy = speakingAudioUploadSessionPolicy(storage);
     const service = new SpeakingAudioUploadService(
-      repository,
-      storage,
-      () => `aud_${ulid()}`,
-      () => new Date('2026-10-03T04:10:00.000Z'),
+      new UploadSessionService(
+        new SpeakingAudioCoreRepositoryAdapter(
+          repository,
+          () => new Date('2026-10-03T04:10:00.000Z'),
+        ),
+        new SpeakingAudioCoreStorageAdapter(storage, policy),
+        policy,
+        () => `aud_${ulid()}`,
+        () => new Date('2026-10-03T04:10:00.000Z'),
+      ),
     );
 
     // The control: the same call succeeds for the Organization that owns it.

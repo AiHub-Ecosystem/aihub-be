@@ -17,6 +17,8 @@ export interface UploadSessionSweepSummary {
 
 /** Deletes private or retention-expired objects and their durable records. */
 export class UploadSessionSweep {
+  ceilingExceeded = false;
+
   constructor(
     private readonly repository: Pick<
       UploadSessionRepositoryPort,
@@ -27,16 +29,16 @@ export class UploadSessionSweep {
       'deleteStagingObject' | 'deletePublishedObject'
     >,
     private readonly policy: Pick<UploadSessionPolicy, 'orphanGraceMs'>,
+    private readonly deletionCeiling?: number,
+    private readonly keysPerCandidate = 1,
   ) {}
 
   async run(input: {
     readonly dryRun: boolean;
     readonly now: Date;
   }): Promise<UploadSessionSweepSummary> {
-    let scanned = 0;
-    let eligible = 0;
-    let deleted = 0;
-    let failed = 0;
+    this.ceilingExceeded = false;
+    const all: UploadSessionCleanupCandidate[] = [];
     let after:
       | { readonly createdAt: Date; readonly assetId: string }
       | undefined;
@@ -48,21 +50,36 @@ export class UploadSessionSweep {
         limit: BATCH_SIZE,
         ...(after === undefined ? {} : { after }),
       });
-      scanned += candidates.length;
-      eligible += candidates.length;
-      if (candidates.length === 0) break;
-
-      if (!input.dryRun) {
-        for (const candidate of candidates) {
-          if (await this.deleteCandidate(candidate)) deleted += 1;
-          else failed += 1;
-        }
-      }
-
+      all.push(...candidates);
+      if (candidates.length === 0 || candidates.length < BATCH_SIZE) break;
       const last = candidates.at(-1);
       if (last !== undefined)
         after = { createdAt: last.createdAt, assetId: last.assetId };
-      if (candidates.length < BATCH_SIZE) break;
+    }
+
+    const scanned = all.length;
+    const eligible = all.length;
+    if (
+      this.deletionCeiling !== undefined &&
+      eligible * this.keysPerCandidate > this.deletionCeiling
+    ) {
+      this.ceilingExceeded = true;
+      return {
+        scanned,
+        eligible,
+        deleted: 0,
+        failed: 0,
+        dryRun: input.dryRun,
+      };
+    }
+
+    let deleted = 0;
+    let failed = 0;
+    if (!input.dryRun) {
+      for (const candidate of all) {
+        if (await this.deleteCandidate(candidate)) deleted += 1;
+        else failed += 1;
+      }
     }
     return { scanned, eligible, deleted, failed, dryRun: input.dryRun };
   }

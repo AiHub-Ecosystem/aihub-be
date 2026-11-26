@@ -9,7 +9,7 @@ import {
 } from '@/modules/writing/public/chart-uploads';
 import { createCliWritingChartStorage } from './writing-chart-storage';
 
-import { runOperatorCommand } from './operator-command-context';
+import { runUploadSessionSweepCli } from './upload-session-sweep-cli';
 
 type ClosableRepository = Pick<
   WritingChartUploadRepositoryPort,
@@ -60,17 +60,10 @@ export async function runWritingChartUploadSweepCommand(
       { orphanGraceMs: WRITING_CHART_ORPHAN_GRACE_MS },
     ),
   );
-  const { result } = await runOperatorCommand(
+  return runUploadSessionSweepCli({
     repository,
-    input.now,
-    ({ occurredAt }) => sweep.run({ dryRun: input.dryRun, now: occurredAt }),
     storage,
-  );
-  (input.emit ?? console.log)(
-    JSON.stringify({
-      ...result,
-      cutoff_source: input.clockSource ?? 'process',
-    }),
-  );
-  return result;
+    sweep,
+    options: input,
+  });
 }
