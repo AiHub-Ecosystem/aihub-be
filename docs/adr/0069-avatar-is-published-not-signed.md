@@ -3,7 +3,7 @@
 - Status: Accepted; the 2026-11-07 private-staging completion is amended by [ADR-0194](0194-avatar-uploads-are-re-encoded-and-audited.md) (completion re-encodes instead of copying)
 - Date: 2026-10-02
 - Related issue: [#216](https://github.com/AiHub-Ecosystem/aihub-be/issues/216)
-- Related: [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md)
+- Related: [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)
 
 ## Context
 

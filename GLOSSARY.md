@@ -258,6 +258,25 @@ customer's input. A circuit breaker counts it, and an idempotency attempt it
 ends is kept as failed. Other 4xx answers blame the request; 408 and 425 are
 retryable but are not a downstream fault.
 
+**Upload session**:
+A bounded customer upload: the private bytes staged for it, the published artifact
+they may become, and the owner and environment bound at creation. A Writing chart
+upload is one specialization.
+_Avoid_: upload intent, upload request
+
+**Staged object**:
+The private, not-yet-public bytes of one upload session.
+_Avoid_: staging blob
+
+**Published artifact**:
+The immutable public object an upload session becomes after verification.
+_Avoid_: final object
+
+**Publication record**:
+The durable record binding a published artifact to its owner, environment, and
+retention deadline.
+_Avoid_: completed upload
+
 **Writing chart upload**:
 The short-lived record of one customer chart upload: a private staging object and
 the public object it becomes. It is `open` until completed, `rejected` when

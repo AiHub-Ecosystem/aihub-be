@@ -4,6 +4,7 @@
 - Date: 2026-11-16
 - Related issue: [#509](https://github.com/AiHub-Ecosystem/aihub-be/issues/509)
 - Amends: [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), decision 6
+- Related: [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)
 
 ## Context
 

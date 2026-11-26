@@ -4,7 +4,7 @@
 - Date: 2026-10-14
 - Related issue: [#580](https://github.com/AiHub-Ecosystem/aihub-be/issues/580)
 - Amends: [ADR-0099](0099-writing-task1-charts-remain-caller-hosted.md), which declined chart uploads
-- Related: [ADR-0084](0084-writing-task1-public-image-fetch-boundary.md), [ADR-0070](0070-speaking-audio-upload-intent-and-retention.md), [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md), [ADR-0018](0018-monthly-quota-enforcement.md), [ADR-0056](0056-customer-sandbox-test-tier.md), [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md), [#376](https://github.com/AiHub-Ecosystem/aihub-be/issues/376), [#568](https://github.com/AiHub-Ecosystem/aihub-be/issues/568)
+- Related: [ADR-0084](0084-writing-task1-public-image-fetch-boundary.md), [ADR-0070](0070-speaking-audio-upload-intent-and-retention.md), [ADR-0060](0060-writing-task1-sample-image-is-published-not-signed.md), [ADR-0018](0018-monthly-quota-enforcement.md), [ADR-0056](0056-customer-sandbox-test-tier.md), [ADR-0095](0095-demo-environments-and-sandbox-allowance-policy.md), [#376](https://github.com/AiHub-Ecosystem/aihub-be/issues/376), [#568](https://github.com/AiHub-Ecosystem/aihub-be/issues/568), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)
 
 ## Context
 

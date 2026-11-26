@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-16
 - Related issue: [#429](https://github.com/AiHub-Ecosystem/aihub-be/issues/429)
-- Related: [ADR-0069](0069-avatar-is-published-not-signed.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0035](0035-organization-audit-trail-boundary.md)
+- Related: [ADR-0069](0069-avatar-is-published-not-signed.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0035](0035-organization-audit-trail-boundary.md), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)
 - Amends: [ADR-0069](0069-avatar-is-published-not-signed.md) (the 2026-11-07 private-staging clause: completion now reads and re-encodes instead of copying)
 
 ## Context
