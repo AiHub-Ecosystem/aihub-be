@@ -510,6 +510,99 @@ backlog. The Speaking Audio upload sweep also caps planned object-key deletion
 attempts at 2,000; each eligible intent contributes its final and staging key,
 and an over-limit run exits non-zero.
 
+### Bounding Avatar uploads at the S3 ingress
+
+ADR-0196 bounds the Avatar upload body at the existing storage ingress rather
+than at completion. The shared S3 ingress is operator-owned:
+`/etc/nginx/nginx.conf` includes `/etc/nginx/sites-enabled/*`, and the HTTPS
+`server_name s3.wispace.app` in `/etc/nginx/sites-enabled/s3.wispace.app`
+proxies `location /` to `http://127.0.0.1:8333` with `client_max_body_size
+500M`. That file is not deployed by CD and is not one of the AIHUB virtual
+hosts; changing it is a separate operator change.
+
+[`ops/nginx/s3-wispace-avatar-upload-limit.conf`](../../ops/nginx/s3-wispace-avatar-upload-limit.conf)
+is the reviewed fragment for that server block. It matches only the two default
+Avatar staging buckets, sets `client_max_body_size 2097152`, keeps the observed
+`proxy_pass`, `Host`, and forwarding headers, and answers the oversized upload
+with a `413` the three deployed Customer Web origins can read. Every other
+bucket keeps the server's `500M` policy, and the ACME, `/seaweed/`, and
+`/healthz` locations keep their own blocks because the fragment's `location`
+regex matches none of them.
+
+nginx reads the whole request body before it contacts the upstream (the default
+`proxy_request_buffering`), so a body over the ceiling is rejected while it is
+still being received and never reaches SeaweedFS. A rejected upload therefore
+creates no staging object. nginx spools the body to a temporary file past its
+small `client_body_buffer_size` and removes it on rejection. Do not add
+`proxy_request_buffering off` or `proxy_intercept_errors on` to the fragment:
+the first lets an oversized body stream to SeaweedFS, and the second would
+replace SeaweedFS's own `413` responses.
+
+If a deployment sets `SEAWEEDFS_USER_ASSET_STAGING_BUCKET`, its bucket name
+replaces one of the two defaults and the fragment must list that exact name.
+Check both tiers before installing:
+
+```sh
+sudo docker exec aihub-production printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET
+sudo docker exec aihub-sandbox printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET
+```
+
+An empty or absent value means the default bucket for that tier. Add any
+non-default name to the fragment's `location ~` alternation before installing
+it, and keep it when a later release changes the override.
+
+Install during a change window, with the same backup and validation the other
+host changes use:
+
+```sh
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+sudo cp -a /etc/nginx/sites-enabled/s3.wispace.app \
+  "/root/s3.wispace.app.$stamp"
+sudo install -o root -g root -m 0644 \
+  ops/nginx/s3-wispace-avatar-upload-limit.conf \
+  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+```
+
+Insert one include inside the HTTPS `s3.wispace.app` server block, after its
+`location /` block and before the server's closing brace:
+
+```nginx
+include /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf;
+```
+
+Then validate and reload once:
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Verify from outside the host that the ceiling holds. A body of exactly
+2,097,152 bytes must still reach SeaweedFS, one byte more must return `413`,
+and the same one-byte-over request sent with `Transfer-Encoding: chunked` must
+also return `413` without creating a staging object. Repeat both `413` checks
+with `Origin` set to each of `https://aihubproduction.com`,
+`https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`,
+and confirm each response carries a matching `Access-Control-Allow-Origin` and
+`Vary: Origin` so the browser can read the status. Confirm a normal presigned
+`PUT` still completes and a different bucket still accepts a larger body.
+
+Roll back by restoring the backup and reloading:
+
+```sh
+sudo cp -a "/root/s3.wispace.app.$stamp" \
+  /etc/nginx/sites-enabled/s3.wispace.app
+sudo rm -f /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The fragment is checked in CI against a local nginx and a stub S3 upstream:
+`test/ops/avatar-upload-limit.spec.sh` proves the exact ceiling, chunked
+rejection, no upstream request for a rejected body, the preserved upstream and
+headers, the readable `413`, and that other routes and buckets are unchanged.
+Those are local checks. The provider-backed Sandbox evidence ADR-0196 requires
+is still outstanding, and the ceiling is not enforced on the live host until
+this change is installed.
+
 #### Recovering a backlog that trips the safety ceiling
 
 When the dry-run counts describe a real backlog, drain it with a separate

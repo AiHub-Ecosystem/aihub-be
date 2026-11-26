@@ -208,6 +208,10 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
           specs.add(`test/ops/${entry}`);
         }
       }
+    } else if (file === 'ops/nginx/s3-wispace-avatar-upload-limit.conf') {
+      // #2008: the operator-installed S3 ingress fragment proves itself against
+      // the real file, so a change to it runs that proof.
+      specs.add('test/ops/avatar-upload-limit.spec.sh');
     } else {
       const dir = file.slice(0, file.lastIndexOf('/'));
       for (const entry of listDir(dir)) {
@@ -555,6 +559,12 @@ function classifyPathGates(p) {
     return ['lint', 'test:commit-messages'];
   }
 
+  // #2008: the S3 ingress fragment is operator-installed, so its gate is the
+  // spec that exercises it rather than the AIHUB virtual-host header check.
+  if (path === 'ops/nginx/s3-wispace-avatar-upload-limit.conf') {
+    return ['check:doc-drift', 'test:shell-specs'];
+  }
+
   if (path.includes('nginx')) {
     return ['check:nginx-headers', 'lint'];
   }
@@ -652,6 +662,7 @@ export function gateInvocation(gate, files, exists = existsSync, listDir) {
           (file) =>
             ((file.startsWith('scripts/ops/') && file.endsWith('.sh')) ||
               file === 'ops/nginx/aihub-nginx-apply' ||
+              file === 'ops/nginx/s3-wispace-avatar-upload-limit.conf' ||
               file.startsWith('ops/logs/')) &&
             exists(file),
         ),

@@ -36,6 +36,40 @@ verification must show acceptance at the ceiling, rejection above it with
 bounded request handling and no staged object, and a valid browser upload
 through private staging and completion.
 
+## Recorded evidence
+
+A read-only inspection on 2026-11-26 established the enforcement point and
+coverage. `/etc/nginx/nginx.conf` includes `/etc/nginx/sites-enabled/*`, and
+`/etc/nginx/sites-enabled/s3.wispace.app` is a regular operator-managed file
+whose HTTPS `server_name s3.wispace.app` proxies `location /` to
+`http://127.0.0.1:8333` with `client_max_body_size 500M`, `Host $host`, the
+forwarding headers, and 300-second connect and read timeouts. No request
+buffering, CORS, rewrite, or other request transformation is configured there.
+The only nginx file that mentions the S3 upstream is this one vhost, Docker
+publishes SeaweedFS S3 on `127.0.0.1` only, and the backend signer uses
+path-style URLs, so both configured staging buckets reach the ingress on the
+same supported path. `nginx -t` passed with nginx 1.28.3 (Ubuntu). The live
+SeaweedFS is 4.41 (`de34a1a87`, image `chrislusf/seaweedfs:4.41`, digest
+`sha256:43b768cd62b00d132439cda881b93fd1adebf1b315e996e794087743821d771d`).
+
+A read-only `OPTIONS` through that vhost returned `200` with a matching
+`Access-Control-Allow-Origin` and `Vary: Origin` for both default staging
+buckets and each of `https://aihubproduction.com`,
+`https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`.
+Those are the origins the ingress-generated `413` reuses; it introduces no
+broader grant and does not change proxied responses.
+
+`ops/nginx/s3-wispace-avatar-upload-limit.conf` is the reviewed, operator-
+installed fragment for that server, with install, verification, and rollback in
+`docs/operations/deploy-vps.md`. `test/ops/avatar-upload-limit.spec.sh` runs it
+against a local nginx and a stub S3 upstream and shows acceptance at exactly
+2,097,152 bytes, rejection of one byte more including a chunked body, no
+upstream request for a rejected body, a readable `413` from the three origins,
+and unchanged other routes and buckets. These are local checks against the
+artifact, not live evidence. The host change is not authorized or applied, so
+provider-backed Sandbox verification and the production rollout remain
+outstanding, and this decision stays Proposed until they are recorded.
+
 If the ingress cannot cover every supported upload path or the operator cannot
 take on the scoped change, keep #2008 open and revisit the enforcement point.
 Changing the upload origin, method, or routing through AIHUB requires a new
