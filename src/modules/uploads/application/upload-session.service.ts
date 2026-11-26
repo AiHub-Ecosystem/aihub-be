@@ -174,7 +174,7 @@ export class UploadSessionService implements UploadSessionServicePort {
         const verification =
           refusal === undefined
             ? await policy.verify({
-                contentType: found.intent.contentType,
+                contentType: stored.contentType ?? found.intent.contentType,
                 bytes: stored.bytes,
                 signal,
                 lease,
@@ -219,9 +219,9 @@ export class UploadSessionService implements UploadSessionServicePort {
               environment: found.intent.environment,
               stagingKey: found.intent.stagingKey,
               publishedKey: found.intent.publishedKey,
-              contentType: found.intent.contentType,
+              contentType: stored.contentType ?? found.intent.contentType,
               bytes,
-              byteSize: found.intent.byteSize,
+              byteSize: stored.byteSize ?? found.intent.byteSize,
             },
             signal,
           );
@@ -242,6 +242,9 @@ export class UploadSessionService implements UploadSessionServicePort {
             now: this.now(),
             publicationStartedAt,
             imageUrl,
+            requestId: input.context.requestId,
+            contentType: stored.contentType ?? found.intent.contentType,
+            byteSize: stored.byteSize ?? found.intent.byteSize,
           });
         } catch (error) {
           await this.releaseAfterFailedMark(owner, publicationStartedAt);

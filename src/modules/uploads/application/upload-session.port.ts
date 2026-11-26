@@ -38,6 +38,9 @@ export interface UploadSessionRepositoryPort {
     readonly now: Date;
     readonly publicationStartedAt: Date;
     readonly imageUrl: string;
+    readonly requestId?: string;
+    readonly contentType?: string;
+    readonly byteSize?: number;
   }): Promise<PublishedUploadSession | 'revoked' | undefined>;
   releasePublication(
     owner: UploadSessionOwner,
@@ -77,6 +80,8 @@ export interface UploadSessionStoragePort {
         readonly contentType: string | undefined;
         readonly byteSize: number | undefined;
         readonly bytes: Uint8Array;
+        readonly lastModified?: Date;
+        readonly etag?: string;
       }
     | undefined
   >;

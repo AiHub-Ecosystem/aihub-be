@@ -21,7 +21,7 @@ export interface PublishedUploadSession
   extends Omit<UploadSessionIntent, 'status'> {
   readonly status: 'published' | 'deleted';
   readonly publishedAt: Date;
-  readonly retentionExpiresAt: Date;
+  readonly retentionExpiresAt?: Date;
   readonly imageUrl: string;
   readonly created?: boolean;
 }

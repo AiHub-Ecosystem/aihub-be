@@ -20,7 +20,7 @@ export class UploadSessionSweep {
   ceilingExceeded = false;
 
   constructor(
-    private readonly repository: Pick<
+    repository: Pick<
       UploadSessionRepositoryPort,
       'cleanupCandidates' | 'removeCleanupCandidate'
     >,
@@ -31,6 +31,10 @@ export class UploadSessionSweep {
     private readonly policy: Pick<UploadSessionPolicy, 'orphanGraceMs'>,
     private readonly deletionCeiling?: number,
     private readonly keysPerCandidate = 1,
+    private readonly candidateSource: Pick<
+      UploadSessionRepositoryPort,
+      'cleanupCandidates' | 'removeCleanupCandidate'
+    > = repository,
   ) {}
 
   async run(input: {
@@ -44,7 +48,7 @@ export class UploadSessionSweep {
       | undefined;
 
     while (true) {
-      const candidates = await this.repository.cleanupCandidates({
+      const candidates = await this.candidateSource.cleanupCandidates({
         now: input.now,
         orphanBefore: new Date(input.now.getTime() - this.policy.orphanGraceMs),
         limit: BATCH_SIZE,
@@ -108,7 +112,7 @@ export class UploadSessionSweep {
     }
     if (failed) return false;
     try {
-      return await this.repository.removeCleanupCandidate(candidate);
+      return await this.candidateSource.removeCleanupCandidate(candidate);
     } catch {
       return false;
     }

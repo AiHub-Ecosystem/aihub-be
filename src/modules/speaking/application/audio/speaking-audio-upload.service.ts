@@ -72,7 +72,8 @@ export class SpeakingAudioUploadService
         contentType: published.contentType as SpeakingAudioContentType,
         byteSize: published.byteSize,
         acceptedAt: published.publishedAt,
-        retentionExpiresAt: published.retentionExpiresAt,
+        retentionExpiresAt:
+          published.retentionExpiresAt ?? published.publishedAt,
       },
       created: published.created ?? false,
     };
