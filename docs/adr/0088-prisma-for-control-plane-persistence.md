@@ -152,6 +152,36 @@ that already holds a slot now gets `POSTGRES_CONNECT_TIMEOUT_MS` (3 s) for the
 handshake, so waiting for a slot and opening one are separate budgets; the
 request deadline stays 5 s.
 
+### A retry does not earn a second handshake budget (#2023; 2026-11-26)
+
+ADR-0103 requires a saturated or unreachable database to fail closed within
+one second, while the 3-second handshake above lets a healthy but slow first
+connection finish. A retry (#1608) is only started inside the 250 ms
+wait-for-slot window, yet it was given the same 3 seconds, so a retry admitted
+at 245 ms held its slot for about 3.25 seconds.
+
+The two budgets stay as they are, and a third bound covers retries:
+
+- The first attempt keeps `POSTGRES_CONNECT_TIMEOUT_MS` (3 s) from the moment
+  it holds a slot. A healthy database with a slow cold handshake still
+  succeeds.
+- A retry still starts only before the 250 ms mark, but it must finish by
+  `POSTGRES_RETRY_CEILING_MS` (1 s) after the request was made. An attempt
+  that already failed is evidence the database is unhealthy, so it does not
+  earn another 3 seconds.
+- ADR-0103's one-second contract therefore applies to saturation and to
+  retries, not to a healthy first handshake.
+
+The pool sets the connect timeout for the retry's connection to the time left
+until the ceiling, restores the 3-second value as the call returns, and
+re-arms the request's expiry timer to the ceiling. The expiry and pg-pool's own
+connection timer fire together, pg-pool destroys the connecting socket, and
+its callback gives the slot back once, with no orphan connection. pg-pool reads
+the timeout when it creates a client; if it queues a connect at its client
+maximum the restored 3-second value applies, which the slot gate makes rare.
+Backoff, breaker, and the other two budgets are unchanged. The late-connect
+race inside pg-pool stays with #1391.
+
 Operator work uses a separate explicit profile: 5-minute statements,
 30-second lock waits, and 60-second idle transactions. The Prisma-backed
 operator factory and raw `pg` CLI and migration pools set that profile so
