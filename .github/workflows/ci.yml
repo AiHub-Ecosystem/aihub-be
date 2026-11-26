@@ -22,6 +22,7 @@ on:
       - "!**/*.md"
       - "CHANGELOG.md"
       - "docs/adr/0060-writing-task1-sample-image-is-published-not-signed.md"
+      - "docs/agents/duplication-register.md"
       - "docs/history/aihub-deliverable-1-historical-contract.md"
       - "docs/integration-guide.md"
       - "docs/local-demo.md"
