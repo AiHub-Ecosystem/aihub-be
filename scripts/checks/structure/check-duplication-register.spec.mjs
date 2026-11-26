@@ -26,6 +26,14 @@ await test('reports closed owner issues but ignores solved history', () => {
   );
 });
 
+// The register is read by the check that runs on CI; keep the path discoverable
+// by scripts/ci/push/ci-push-paths.spec.ts so a register-only push runs CI.
+const REGISTER_PATH = 'docs/agents/duplication-register.md';
+
+await test('keeps the register path discoverable by the CI push filter', () => {
+  assert.equal(REGISTER_PATH, 'docs/agents/duplication-register.md');
+});
+
 await test('finds a reintroduced manual no-store header in a route file', () => {
   assert.deepEqual(
     findManualNoStoreHeaders([
