@@ -83,6 +83,8 @@ function harness(
     readonly acquireError?: unknown;
     readonly markDispatchStarted?: boolean;
     readonly advanceClockMs?: number;
+    readonly succeed?: boolean;
+    readonly jobAfterSucceed?: SpeakingGradingJob | null;
   } = {},
 ) {
   let clock = new Date(NOW);
@@ -97,7 +99,12 @@ function harness(
     markDispatchStarted: jest.fn(
       async () => options.markDispatchStarted ?? true,
     ),
-    succeed: jest.fn(async () => true),
+    findOwned: jest.fn(async () =>
+      options.jobAfterSucceed === null
+        ? undefined
+        : (options.jobAfterSucceed ?? { ...job, status: 'running' as const }),
+    ),
+    succeed: jest.fn(async () => options.succeed ?? true),
     releaseQuotaReservation: jest.fn(async () => true),
     fail: jest.fn(async () => true),
   } satisfies Pick<
@@ -105,6 +112,7 @@ function harness(
     | 'claim'
     | 'returnToQueue'
     | 'markDispatchStarted'
+    | 'findOwned'
     | 'succeed'
     | 'releaseQuotaReservation'
     | 'fail'
@@ -356,6 +364,45 @@ describe('ProcessSpeakingGradingJob', () => {
       subject.repository.releaseQuotaReservation.mock.invocationCallOrder[0]!,
     );
     expect(subject.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('finalizes a dispatched success when erasure removed the job before completion', async () => {
+    const subject = harness({ succeed: false, jobAfterSucceed: null });
+
+    await subject.processor.execute({
+      jobId: job.jobId,
+      environment: job.environment,
+    });
+
+    expect(subject.repository.findOwned).toHaveBeenCalledWith(
+      {
+        organizationId: job.organizationId,
+        endUserId: job.endUserId,
+        environment: job.environment,
+      },
+      job.jobId,
+    );
+    expect(subject.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'success', modelCalled: true }),
+    );
+    expect(subject.repository.releaseQuotaReservation).toHaveBeenCalledWith(
+      job.jobId,
+    );
+  });
+
+  it('does not finalize a dispatched success when the job still exists after completion fails', async () => {
+    const subject = harness({
+      succeed: false,
+      jobAfterSucceed: { ...job, status: 'failed' },
+    });
+
+    await subject.processor.execute({
+      jobId: job.jobId,
+      environment: job.environment,
+    });
+
+    expect(subject.finalize).not.toHaveBeenCalled();
+    expect(subject.repository.releaseQuotaReservation).not.toHaveBeenCalled();
   });
 
   it('leaves a failed reservation release to the sweep instead of failing the worker', async () => {

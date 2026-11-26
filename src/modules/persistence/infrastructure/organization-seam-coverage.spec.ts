@@ -288,6 +288,11 @@ const groups: readonly Group[] = [
           gradingOwner,
           gradingJob.jobId,
         ),
+      eraseByEndUser: (client) =>
+        new PostgresSpeakingGradingJobRepository(client).eraseByEndUser({
+          organizationId: ORG,
+          endUserId: gradingJob.endUserId,
+        }),
       findByIdempotencyKey: (client) =>
         new PostgresSpeakingGradingJobRepository(client).findByIdempotencyKey({
           organizationId: ORG,

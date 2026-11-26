@@ -122,6 +122,7 @@ import { BullmqSpeakingGradingJobQueue } from './infrastructure/grading-jobs/bul
 import { PostgresSpeakingGradingJobRepository } from './infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { SpeakingGradingJobSweepScheduler } from './infrastructure/grading-jobs/speaking-grading-job-sweep-scheduler';
 import { SpeakingQuotaReservationRegistration } from './infrastructure/grading-jobs/speaking-quota-reservation-registration';
+import { EraseSpeakingGradingJobs } from './public/speaking-grading-job-erasure';
 
 /**
  * Jobs a worker grades at once in this process, per Environment queue. The
@@ -156,6 +157,12 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       runtime: PrismaClientHolder,
     ): SpeakingGradingJobRepositoryPort =>
       new PostgresSpeakingGradingJobRepository(runtime.prisma),
+  },
+  {
+    provide: EraseSpeakingGradingJobs,
+    inject: [SPEAKING_GRADING_JOB_REPOSITORY],
+    useFactory: (repository: SpeakingGradingJobRepositoryPort) =>
+      new EraseSpeakingGradingJobs(repository),
   },
   {
     provide: SpeakingQuotaReservationRegistration,
@@ -468,6 +475,6 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       useValue: new InFlightCeiling(SPEAKING_UPLOADS_IN_FLIGHT_MAX),
     },
   ],
-  exports: [SpeakingAudioUploadSweep],
+  exports: [SpeakingAudioUploadSweep, EraseSpeakingGradingJobs],
 })
 export class SpeakingModule {}

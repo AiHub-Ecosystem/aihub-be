@@ -35,6 +35,7 @@ export interface ProcessSpeakingGradingJobDependencies {
     | 'claim'
     | 'returnToQueue'
     | 'markDispatchStarted'
+    | 'findOwned'
     | 'succeed'
     | 'releaseQuotaReservation'
     | 'fail'
@@ -291,7 +292,13 @@ export class ProcessSpeakingGradingJob {
         result: result.data,
         completedAt: this.now(),
       });
-      if (!succeeded) return;
+      if (
+        !succeeded &&
+        (await this.dependencies.repository.findOwned(owner, job.jobId)) !==
+          undefined
+      ) {
+        return;
+      }
     } catch (error) {
       const failure = jobError(error);
       await this.dependencies.repository.fail({

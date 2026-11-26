@@ -8,6 +8,8 @@ import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 const client = createFixturePrismaClient(testDatabaseUrl());
 const repository = new PostgresSpeakingGradingJobRepository(client);
+const workerClient = createFixturePrismaClient(testDatabaseUrl());
+const workerRepository = new PostgresSpeakingGradingJobRepository(workerClient);
 const NOW = new Date('2026-11-08T12:00:00.000Z');
 
 function makeJob(
@@ -47,6 +49,17 @@ function owner(job: NewSpeakingGradingJob) {
     endUserId: job.endUserId,
     environment: job.environment,
   };
+}
+
+async function claimJobForWorker(job: NewSpeakingGradingJob): Promise<void> {
+  await expect(
+    workerRepository.claim({
+      jobId: job.jobId,
+      now: NOW,
+      leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+    }),
+  ).resolves.toMatchObject({ status: 'running' });
 }
 
 const RESULT: SpeakingV2QuestionResult = {
@@ -113,7 +126,7 @@ const RESULT: SpeakingV2QuestionResult = {
 };
 
 describe('Speaking grading job repository in PostgreSQL', () => {
-  afterAll(async () => client.close());
+  afterAll(async () => Promise.all([client.close(), workerClient.close()]));
 
   async function createClaimedSucceededJob(
     organizationId: string,
@@ -764,6 +777,108 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBeGreaterThanOrEqual(1);
     await expect(
       repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('erases only one Organization and End-User across environment values', async () => {
+    const organizationId = 'org_' + ulid();
+    const endUserId = 'learner-shared';
+    const production = makeJob({ organizationId, endUserId });
+    const sandbox = makeJob({
+      organizationId,
+      endUserId,
+      environment: 'sandbox',
+    });
+    const sameUserOtherOrganization = makeJob({
+      organizationId: 'org_' + ulid(),
+      endUserId,
+      environment: 'sandbox',
+    });
+    const otherUserSameOrganization = makeJob({
+      organizationId,
+      endUserId: 'learner-other',
+    });
+    await Promise.all(
+      [
+        production,
+        sandbox,
+        sameUserOtherOrganization,
+        otherUserSameOrganization,
+      ].map((job) => repository.create(job)),
+    );
+
+    const subject = { organizationId, endUserId };
+    await expect(repository.eraseByEndUser(subject)).resolves.toBe(2);
+    await expect(repository.eraseByEndUser(subject)).resolves.toBe(0);
+    await expect(
+      repository.findOwned(owner(production), production.jobId),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.findOwned(owner(sandbox), sandbox.jobId),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.findOwned(
+        owner(sameUserOtherOrganization),
+        sameUserOtherOrganization.jobId,
+      ),
+    ).resolves.toMatchObject({ jobId: sameUserOtherOrganization.jobId });
+    await expect(
+      repository.findOwned(
+        owner(otherUserSameOrganization),
+        otherUserSameOrganization.jobId,
+      ),
+    ).resolves.toMatchObject({ jobId: otherUserSameOrganization.jobId });
+  });
+
+  it('stops a claimed worker from dispatching or restoring a job erased first', async () => {
+    const job = makeJob();
+    await repository.create(job);
+    await claimJobForWorker(job);
+
+    await expect(
+      repository.eraseByEndUser({
+        organizationId: job.organizationId,
+        endUserId: job.endUserId,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      workerRepository.markDispatchStarted(job.jobId, NOW),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.succeed({
+        jobId: job.jobId,
+        result: RESULT,
+        completedAt: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('does not recreate an erased job when an already-dispatched worker succeeds', async () => {
+    const job = makeJob();
+    await repository.create(job);
+    await claimJobForWorker(job);
+    await expect(
+      workerRepository.markDispatchStarted(job.jobId, NOW),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.eraseByEndUser({
+        organizationId: job.organizationId,
+        endUserId: job.endUserId,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      workerRepository.succeed({
+        jobId: job.jobId,
+        result: RESULT,
+        completedAt: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.findOwned(owner(job), job.jobId),
     ).resolves.toBeUndefined();
   });
 });

@@ -255,6 +255,19 @@ export class PostgresSpeakingGradingJobRepository
     });
   }
 
+  async eraseByEndUser(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+  }): Promise<number> {
+    return this.scoped(input.organizationId, (transaction) =>
+      transaction.$executeRawUnsafe(
+        'DELETE FROM speaking_grading_jobs WHERE organization_id = $1 AND end_user_id = $2',
+        input.organizationId,
+        input.endUserId,
+      ),
+    );
+  }
+
   async findByIdempotencyKey(input: {
     readonly organizationId: string;
     readonly endUserId: string;
