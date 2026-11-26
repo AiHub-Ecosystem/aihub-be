@@ -40,7 +40,13 @@ export const REQUEST_POSTGRES_TIMEOUTS = {
 /** How long past statement_timeout the client waits before giving up itself. */
 export const QUERY_TIMEOUT_MARGIN_MS = 1_000;
 
-/** Leaves time for PgBouncer's queue timeout and the HTTP error response. */
+/**
+ * Leaves time for PgBouncer's queue timeout and the HTTP error response.
+ *
+ * This is the wait for a slot only. ADR-0103 asks a saturated database to
+ * fail within one second, so a request that never gets a slot ends here, well
+ * inside that ceiling.
+ */
 export const POSTGRES_ACQUISITION_TIMEOUT_MS = 250;
 
 /**
@@ -53,8 +59,27 @@ export const POSTGRES_ACQUISITION_TIMEOUT_MS = 250;
  * Connection reset by peer` in the same second as the refusal. Observed
  * durations on the production host ran to 2656 ms, and the request deadline is
  * 5000 ms, so the attempt is bounded well inside it.
+ *
+ * Only the first attempt gets this much, so ADR-0103's one-second bound does
+ * not cover a healthy first handshake. A retry follows a failed attempt, so it
+ * is bounded by the one-second `POSTGRES_RETRY_CEILING_MS` instead (#2023).
  */
 export const POSTGRES_CONNECT_TIMEOUT_MS = 3_000;
+
+/**
+ * The latest a retried attempt may still hold its slot, counted from the moment
+ * the request was made (#2023).
+ *
+ * Three budgets, in order: a request waits at most 250 ms for a slot
+ * (`POSTGRES_ACQUISITION_TIMEOUT_MS`); its first attempt may then take 3 s to
+ * open a connection (`POSTGRES_CONNECT_TIMEOUT_MS`); a retry only starts inside
+ * the 250 ms mark and must finish by this ceiling. ADR-0103 requires a
+ * saturated or unreachable database to fail closed within one second, and a
+ * first attempt that already failed is evidence the database is unhealthy, so
+ * the retry does not earn another 3 s handshake. Without the cap a retry
+ * admitted at 245 ms ran a full handshake and held the slot for about 3.25 s.
+ */
+export const POSTGRES_RETRY_CEILING_MS = 1_000;
 
 export const OPERATOR_POSTGRES_TIMEOUTS = {
   statement_timeout: 300_000,
@@ -108,8 +133,8 @@ type PoolConnectCallback = (
  * Nothing is retried once a query has run; the caller already holds its error.
  *
  * Opening a connection is retried (#1608): a failed attempt waits a
- * decorrelated jittered delay and tries again inside the request's acquisition
- * deadline. Requests that finally fail feed a starvation breaker; while it is
+ * decorrelated jittered delay and tries again, starting inside the request's
+ * acquisition deadline and finishing by its one-second retry ceiling (#2023). Requests that finally fail feed a starvation breaker; while it is
  * open, new and queued requests are refused at once instead of waiting.
  */
 class TransactionSafePool extends Pool {
@@ -168,6 +193,7 @@ class TransactionSafePool extends Pool {
       backoffMs: 0,
       retryTimer: undefined,
       deadline: Date.now() + POSTGRES_ACQUISITION_TIMEOUT_MS,
+      ceiling: Date.now() + POSTGRES_RETRY_CEILING_MS,
       timer: setTimeout(
         () => this.expire(request),
         POSTGRES_ACQUISITION_TIMEOUT_MS,
@@ -202,13 +228,26 @@ class TransactionSafePool extends Pool {
     this.attempt(request);
   }
 
+  /**
+   * A retry may hold the slot only until the request's ceiling (#2023). The
+   * request expires with it, so the caller and the connecting socket give up
+   * together and the slot is not held for a further handshake budget.
+   */
+  private capRetry(request: PendingConnect): void {
+    const remaining = Math.max(1, request.ceiling - Date.now());
+    this.options.connectionTimeoutMillis = remaining;
+    // The ceiling is always earlier than the first attempt's 3 s expiry, which
+    // counts from a slot held no earlier than the request was made.
+    clearTimeout(request.timer);
+    request.timer = setTimeout(() => this.expire(request), remaining);
+  }
+
   private attempt(request: PendingConnect): void {
     const attemptStarted = Date.now();
     const retried = request.attempts > 0;
     request.attempts += 1;
 
-    // pg-pool's own query() borrows through this callback form.
-    super.connect((error, client, done) => {
+    const onConnect: PoolConnectCallback = (error, client, done) => {
       if (request.settled) {
         if (client !== undefined) done(true);
         this.releaseSlot();
@@ -254,7 +293,21 @@ class TransactionSafePool extends Pool {
         guarded.release(releaseError);
       });
       request.resolve?.(guarded);
-    });
+    };
+
+    // pg-pool reads its connect timeout when it creates the client, so a retry
+    // gets a shorter one for this call only.
+    // ponytail: if pg-pool queues the connect at its client maximum, it creates
+    // the client later and reads the restored value; the slot gate makes that
+    // rare. Override newClient if it ever matters.
+    const handshakeMs = this.options.connectionTimeoutMillis;
+    if (retried) this.capRetry(request);
+    try {
+      // pg-pool's own query() borrows through this callback form.
+      super.connect(onConnect);
+    } finally {
+      this.options.connectionTimeoutMillis = handshakeMs;
+    }
   }
 
   private expire(request: PendingConnect): void {
@@ -371,6 +424,8 @@ interface PendingConnect {
   timer: ReturnType<typeof setTimeout>;
   /** When the request's acquisition budget, retries included, runs out. */
   readonly deadline: number;
+  /** The latest a retried attempt may hold the slot, from request creation. */
+  readonly ceiling: number;
   settled: boolean;
   started: boolean;
   attempts: number;

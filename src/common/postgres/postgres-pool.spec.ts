@@ -314,3 +314,124 @@ describe('Postgres pool reconnect backoff (#1608)', () => {
     );
   });
 });
+
+describe('Postgres pool retry ceiling (#2023)', () => {
+  const refused = Object.assign(new Error('connect ECONNREFUSED'), {
+    code: 'ECONNREFUSED',
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  /** Lets the promise reactions of a settled checkout run. */
+  async function settle(): Promise<void> {
+    for (let turn = 0; turn < 3; turn += 1) await Promise.resolve();
+  }
+
+  /** Records the connect timeout pg-pool would apply to each attempt. */
+  function recordAttempts() {
+    jest.useFakeTimers();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const timeouts: (number | undefined)[] = [];
+    const callbacks: ConnectCallback[] = [];
+    jest.spyOn(Pool.prototype, 'connect').mockImplementation(function (
+      this: Pool,
+      callback: ConnectCallback,
+    ) {
+      timeouts.push(this.options.connectionTimeoutMillis);
+      callbacks.push(callback);
+    } as never);
+    const pool = createPostgresPool('integration-test', {
+      max: 1,
+      connectionTimeoutMillis: POSTGRES_CONNECT_TIMEOUT_MS,
+    });
+    return { pool, timeouts, callbacks };
+  }
+
+  it('caps a retry handshake at one second from the request, not 3 s from the retry', () => {
+    // 0.999 draws the longest first delay: 30 ms.
+    jest.spyOn(Math, 'random').mockReturnValue(0.999);
+    const { pool, timeouts, callbacks } = recordAttempts();
+
+    void pool.connect().catch(() => undefined);
+    expect(timeouts).toEqual([3_000]);
+
+    // The first attempt fails at 215 ms; its 30 ms delay lands the retry at
+    // 245 ms, just inside the 250 ms mark that gates a retry.
+    jest.advanceTimersByTime(215);
+    callbacks[0]?.(refused, undefined, () => undefined);
+    jest.advanceTimersByTime(30);
+
+    expect(timeouts).toEqual([3_000, 755]);
+    // The cap applies to that attempt only.
+    expect(pool.options.connectionTimeoutMillis).toBe(3_000);
+  });
+
+  /** Fails three attempts quickly, then leaves the fourth, at 220 ms, hanging. */
+  async function stallRetryChain() {
+    // 0.999 draws the longest delays: 30, 90, then 100 ms.
+    jest.spyOn(Math, 'random').mockReturnValue(0.999);
+    const attempts = recordAttempts();
+    const { pool, timeouts, callbacks } = attempts;
+    let outcome: unknown = 'pending';
+    void pool
+      .connect()
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      )
+      .then((settled) => {
+        outcome = settled;
+        return settled;
+      });
+    const fail = () => callbacks.at(-1)?.(refused, undefined, () => undefined);
+    fail();
+    jest.advanceTimersByTime(30);
+    fail();
+    jest.advanceTimersByTime(90);
+    fail();
+    jest.advanceTimersByTime(100);
+    expect(timeouts).toEqual([3_000, 970, 880, 780]);
+    await settle();
+    return { ...attempts, outcome: () => outcome };
+  }
+
+  it('rejects a stalled retry chain at the ceiling and frees the slot', async () => {
+    const { pool, callbacks, outcome } = await stallRetryChain();
+
+    // 220 ms in; the hanging retry has until 1000 ms, not 3.22 s.
+    jest.advanceTimersByTime(779);
+    await settle();
+    expect(outcome()).toBe('pending');
+
+    jest.advanceTimersByTime(1);
+    await settle();
+    expect(outcome()).toMatchObject({ code: 'P2024' });
+
+    // pg-pool's own timer destroys the connecting socket at the same instant.
+    const attemptsBefore = callbacks.length;
+    callbacks.at(-1)?.(
+      new Error('Connection terminated due to connection timeout'),
+      undefined,
+      () => undefined,
+    );
+    void pool.connect().catch(() => undefined);
+    expect(callbacks).toHaveLength(attemptsBefore + 1);
+  });
+
+  it('destroys a connection that opens after its request expired', async () => {
+    const { pool, callbacks } = await stallRetryChain();
+    jest.advanceTimersByTime(780);
+    await settle();
+
+    const done = jest.fn();
+    callbacks.at(-1)?.(undefined, {} as PoolClient, done);
+
+    expect(done).toHaveBeenCalledWith(true);
+    const attemptsBefore = callbacks.length;
+    void pool.connect().catch(() => undefined);
+    expect(callbacks).toHaveLength(attemptsBefore + 1);
+  });
+});
