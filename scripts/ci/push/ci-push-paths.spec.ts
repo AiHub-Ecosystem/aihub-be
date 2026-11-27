@@ -14,6 +14,9 @@ const NODE_TEST_MARKDOWN = [
 ];
 /** Markdown the Public API release gate reads on every push (#1398). */
 const RELEASE_GATE_MARKDOWN = ['CHANGELOG.md'];
+// Read by scripts/checks/structure/check-duplication-register.mjs. The scan
+// below discovers it from this literal, keeping the CI allowlist in sync.
+const CHECK_SCRIPT_MARKDOWN = 'docs/agents/duplication-register.md';
 const MARKDOWN_PATH_PATTERN = /['"`]((?:docs|ops)\/[^'"`\r\n]*\.md)['"`]/g;
 
 function testReadMarkdownPaths(): string[] {
@@ -63,6 +66,11 @@ describe('CI push path filter', () => {
   it('skips a docs-only push that tests do not read', () => {
     const docsOnlyFile = ['docs/agents/triage-labels', '.md'].join('');
     expect(pushRunsCi([docsOnlyFile])).toBe(false);
+  });
+
+  it('runs CI for the duplication register a check script reads', () => {
+    expect(markdownInputs).toContain(CHECK_SCRIPT_MARKDOWN);
+    expect(pushRunsCi([CHECK_SCRIPT_MARKDOWN])).toBe(true);
   });
 
   it('runs CI when a docs-only push changes a Markdown input read by a test', () => {
