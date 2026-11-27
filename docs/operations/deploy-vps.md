@@ -1981,6 +1981,52 @@ The Production handoff matrix is split by safety boundary:
   successful blue-green history. Blue-green automatic rollback covers failed
   cutover gates; a later latency or error-rate regression needs operator action.
 
+### Activate coordinated Speaking audio publication
+
+[ADR-0198](../adr/0198-speaking-audio-publication-and-cleanup-coordinate-through-postgres.md)
+uses two releases. Deploy the bridge with the switch disabled. After a later
+release passes CD, run [the deployed state check](#checking-deployed-state)
+against that release's full SHA. Confirm the recorded rollback target for each
+enabled tier is the bridge or newer, the previous application slots have
+stopped, and CD drained the old host jobs. Confirm both migrations
+`0072_speaking_audio_publication_coordination.sql` and
+`0073_validate_speaking_audio_publication_coordination.sql` are present in
+`schema_migrations` on each enabled database.
+
+Activate Sandbox first if it is enabled. Set `db=aihub_sandbox` for Sandbox and
+`db=aihub` for Production. Run this as the approved database operator once per
+tier, after the release checks:
+
+```bash
+: "${db:?set db to aihub_sandbox or aihub}"
+case "$db" in aihub|aihub_sandbox) ;; *) exit 1 ;; esac
+sudo -n docker exec -i aihub-db psql -X -w -U aihub_admin -d "$db" \
+  -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '15s';
+UPDATE speaking_audio_publication_protocol
+SET activated_at = clock_timestamp()
+WHERE id = true AND activated_at IS NULL;
+SELECT activated_at FROM speaking_audio_publication_protocol WHERE id = true;
+COMMIT;
+SQL
+```
+
+Require one non-null timestamp. This switch is one-way. An application
+rollback must keep the timestamp and use the bridge or a newer revision.
+
+Use a dedicated test Organization, a tier-specific key with `speaking.grade`,
+and a non-customer audio fixture to follow the
+[recording upload flow](../integration-guide.md#retaining-a-speaking-recording).
+Require completion to return `201` and replay to return `200` with the same
+asset ID. In the matching database, verify the test asset's
+`speaking_audio_assets.object_key` has the `/publication/pub_` segment and
+`accepted_at` is at or after the switch timestamp. Record the verdict without
+logging the API key, user assertion, or signed upload URL. This upload probe
+does not dispatch a grading request. Complete the Sandbox probe before turning
+on Production, then repeat the probe and deployed state check on Production.
+
 ## Rollback
 
 CD deploys with `scripts/ops/blue-green/blue-green-host.sh`. Each successful blue-green
