@@ -8,10 +8,6 @@ import {
 
 const WORKFLOW_PATH = '.github/workflows/ci.yml';
 const TEST_FILE_PATTERN = /\.(?:spec|test)\.tsx?$/;
-/** Markdown read by the Node test files the pattern above does not scan. */
-const NODE_TEST_MARKDOWN = [
-  ['docs', 'agents', 'duplication-register.md'].join('/'),
-];
 /** Markdown the Public API release gate reads on every push (#1398). */
 const RELEASE_GATE_MARKDOWN = ['CHANGELOG.md'];
 // Read by scripts/checks/structure/check-duplication-register.mjs. The scan
@@ -55,11 +51,7 @@ describe('CI push path filter', () => {
       (pattern) => !pattern.startsWith('!') && pattern.endsWith('.md'),
     );
     expect(configured.sort()).toEqual(
-      [
-        ...markdownInputs,
-        ...NODE_TEST_MARKDOWN,
-        ...RELEASE_GATE_MARKDOWN,
-      ].sort(),
+      [...markdownInputs, ...RELEASE_GATE_MARKDOWN].sort(),
     );
   });
 
