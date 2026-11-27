@@ -1,8 +1,9 @@
-# ADR-0196: Bound Avatar uploads at the storage ingress
+# ADR-0199: Bound Avatar uploads at the storage ingress
 
 - Status: Proposed, pending verification with the shared storage operator
 - Date: 2026-11-26
 - Related issue: [#2008](https://github.com/AiHub-Ecosystem/aihub-be/issues/2008)
+- Related: [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)
 - Builds on: [ADR-0069](0069-avatar-is-published-not-signed.md) and
   [ADR-0194](0194-avatar-uploads-are-re-encoded-and-audited.md)
 

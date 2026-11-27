@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Proves the operator-installed Avatar upload bound (ADR-0196, #2008) against
+# Proves the operator-installed Avatar upload bound (ADR-0199, #2008) against
 # the real artifact in ops/nginx/s3-wispace-avatar-upload-limit.conf.
 #
 # The runtime half needs nginx. It builds a synthetic stand-in for the observed

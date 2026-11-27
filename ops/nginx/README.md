@@ -10,7 +10,7 @@ for the one-time supervised migration and helper bootstrap.
 `s3-wispace-avatar-upload-limit.conf` is not an AIHUB virtual host and is not
 deployed by CD. It is the reviewed fragment an operator installs into the
 shared, operator-owned `s3.wispace.app` server block to bound Avatar uploads at
-2 MiB (ADR-0196, #2008). See [Bounding Avatar uploads at the S3
+2 MiB (ADR-0199, #2008). See [Bounding Avatar uploads at the S3
 ingress](../../docs/operations/deploy-vps.md#bounding-avatar-uploads-at-the-s3-ingress)
 for installation, verification, and rollback. `test/ops/avatar-upload-limit.spec.sh`
 runs it against a local nginx and a stub S3 upstream.

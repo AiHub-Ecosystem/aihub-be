@@ -512,7 +512,7 @@ and an over-limit run exits non-zero.
 
 ### Bounding Avatar uploads at the S3 ingress
 
-ADR-0196 bounds the Avatar upload body at the existing storage ingress rather
+ADR-0199 bounds the Avatar upload body at the existing storage ingress rather
 than at completion. The shared S3 ingress is operator-owned:
 `/etc/nginx/nginx.conf` includes `/etc/nginx/sites-enabled/*`, and the HTTPS
 `server_name s3.wispace.app` in `/etc/nginx/sites-enabled/s3.wispace.app`
@@ -845,7 +845,7 @@ rejection, that no rejected or incomplete body reaches the upstream, the exact
 signed request target and `Host`, the preserved routes, the readable `413`, and
 that an upstream `413` is not rewritten, with a hostile parent that inherits
 buffering off and error interception on. Those are local checks. The
-provider-backed Sandbox evidence ADR-0196 requires is still outstanding, and the
+provider-backed Sandbox evidence ADR-0199 requires is still outstanding, and the
 ceiling is not enforced on the live host until this change is installed.
 
 #### Recovering a backlog that trips the safety ceiling
