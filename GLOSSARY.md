@@ -268,6 +268,10 @@ _Avoid_: upload intent, upload request
 The private, not-yet-public bytes of one upload session.
 _Avoid_: staging blob
 
+**Byte verification**:
+The check and re-encoding a feature applies to staged bytes before they become a published artifact. A feature whose storage only describes an object publishes that object without byte verification.
+_Avoid_: sanitization, verification stub
+
 **Published artifact**:
 The immutable public object an upload session becomes after verification.
 _Avoid_: final object
