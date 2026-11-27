@@ -70,6 +70,12 @@ const speakingOwner = {
   endUserId: speakingIntent.endUserId,
   environment: speakingIntent.environment,
 };
+const speakingReservationId = 'pub_00000000-0000-4000-8000-000000000001';
+const speakingCleanup = {
+  ...speakingIntent,
+  kind: 'intent' as const,
+  candidateId: speakingIntent.assetId,
+};
 const chartIntent = {
   assetId: 'chart_01J00000000000000000000001',
   organizationId: ORG,
@@ -232,9 +238,50 @@ const groups: readonly Group[] = [
             throw new Error('not reached by the scripted client');
           },
         }),
+      beginPublication: (client) =>
+        new PostgresSpeakingAudioUploadRepository(client).beginPublication({
+          owner: speakingOwner,
+          now: NOW,
+          reservationTtlMs: 30_000,
+        }),
+      finalizePublication: (client) =>
+        new PostgresSpeakingAudioUploadRepository(client).finalizePublication({
+          owner: speakingOwner,
+          reservationId: speakingReservationId,
+          acceptedAt: NOW,
+          retentionExpiresAt: NOW,
+        }),
+      releasePublication: (client) =>
+        new PostgresSpeakingAudioUploadRepository(client).releasePublication({
+          owner: speakingOwner,
+          reservationId: speakingReservationId,
+        }),
+      claimRefusal: (client) =>
+        new PostgresSpeakingAudioUploadRepository(client).claimRefusal(
+          speakingOwner,
+          speakingReservationId,
+        ),
+      claimDurableCleanupCandidate: (client) =>
+        new PostgresSpeakingAudioUploadRepository(
+          client,
+        ).claimDurableCleanupCandidate({
+          candidate: speakingCleanup,
+          orphanBefore: NOW,
+          claimId: 'claim_1',
+          leaseMs: 60_000,
+        }),
+      removeDurableCleanupCandidate: (client) =>
+        new PostgresSpeakingAudioUploadRepository(
+          client,
+        ).removeDurableCleanupCandidate({
+          candidate: speakingCleanup,
+          expiredBefore: NOW,
+          claimId: 'claim_1',
+        }),
     },
     unscoped: {
       listCleanupCandidates: SWEEP,
+      listDurableCleanupCandidates: SWEEP,
       removeCleanupCandidate: SWEEP,
       findAsset: HELPER,
       transaction: HELPER,
