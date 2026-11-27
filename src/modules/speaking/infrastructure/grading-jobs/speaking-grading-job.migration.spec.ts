@@ -44,8 +44,11 @@ describe('Speaking grading jobs migration', () => {
     );
 
     expect(sql).toContain(
-      'CREATE INDEX CONCURRENTLY IF NOT EXISTS speaking_grading_jobs_org_end_user_idx',
+      'CREATE INDEX IF NOT EXISTS speaking_grading_jobs_org_end_user_idx',
     );
+    expect(sql).toContain('squawk-ignore require-concurrent-index-creation');
+    expect(sql).toContain('approved: #1967');
+    expect(sql).not.toContain('CREATE INDEX CONCURRENTLY');
     expect(sql).toContain(
       'ON speaking_grading_jobs (organization_id, end_user_id)',
     );
