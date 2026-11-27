@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Req } from '@nestjs/common';
+import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { parseRequestQuery } from '@/common/http/parsing/parse-request-query';
@@ -20,8 +20,10 @@ import {
   FETCH_LEGACY_CONTENT_PORT,
   type FetchLegacyContentPort,
 } from '@/modules/content-proxy/application/legacy-content.port';
+import { ContentRateLimitGuard } from './content-rate-limit.guard';
 
 @Controller()
+@UseGuards(ContentRateLimitGuard)
 export class ContentProxyController {
   constructor(
     @Inject(FETCH_LEGACY_CONTENT_PORT)
