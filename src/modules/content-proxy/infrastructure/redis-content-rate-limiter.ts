@@ -21,7 +21,7 @@ export const CONTENT_RATE_LIMIT_WINDOW_SCRIPT = `
 local ttl = redis.call('PTTL', KEYS[1])
 if ttl == -2 then
   local created = redis.call('SET', KEYS[1], '0', 'PX', ARGV[1], 'NX')
-  if created ~= 'OK' then
+  if not created then
     return redis.error_reply('content rate limit window was not created')
   end
 elseif ttl == -1 then
@@ -66,7 +66,6 @@ export class RedisContentRateLimiter implements ContentRateLimiterPort {
     } else if (redisUrl.trim().length > 0) {
       this.redis = createRedisClient(redisUrl, {
         commandTimeoutMs: 400,
-        lazyConnect: true,
         ...REDIS_NO_REPLAY_OPTIONS,
       });
     }
