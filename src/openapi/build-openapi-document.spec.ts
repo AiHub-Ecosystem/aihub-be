@@ -1096,6 +1096,43 @@ describe('buildOpenApiDocument', () => {
     );
   });
 
+  it('documents the per-address retry header on all five IELTS content routes', () => {
+    const major = findPublicApiMajor(2);
+    expect(major).toBeDefined();
+    const doc = buildOpenApiDocument(major) as OpenApiDocument;
+    const contentRoutes = [
+      doc.paths['/v2/ielts/writing/task1/templates']?.get,
+      doc.paths['/v2/ielts/writing/task2/templates']?.get,
+      doc.paths['/v2/ielts/speaking/library']?.get,
+      doc.paths['/v2/ielts/listening/tests']?.get,
+      doc.paths['/v2/ielts/reading/tests']?.get,
+    ];
+
+    expect(contentRoutes.map((route) => route?.responses['429'])).toEqual(
+      contentRoutes.map(() => ({
+        $ref: '#/components/responses/ClientAddressRateLimited',
+      })),
+    );
+    expect(doc.components.responses['ClientAddressRateLimited']).toMatchObject({
+      headers: {
+        'Retry-After': {
+          schema: { type: 'string', pattern: '^[0-9]+$' },
+        },
+      },
+      content: {
+        'application/json': {
+          schema: {
+            properties: {
+              error: {
+                properties: { code: { 'x-extensible-enum': ['RATE_LIMITED'] } },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('publishes only verification-specific Web Session failures', () => {
     const responses =
       build().paths['/v1/auth/web-sessions/verification']?.post?.responses;
@@ -1106,6 +1143,12 @@ describe('buildOpenApiDocument', () => {
     expect(JSON.stringify(responses?.['400'])).toContain(
       'AUTH_VERIFICATION_TOKEN_INVALID',
     );
+  });
+
+  it('keeps the v2-only content rate-limit response out of the v1 document', () => {
+    expect(
+      build().components.responses['ClientAddressRateLimited'],
+    ).toBeUndefined();
   });
 
   it('labels the Web Session route as server-to-server for the Customer Web BFF', () => {

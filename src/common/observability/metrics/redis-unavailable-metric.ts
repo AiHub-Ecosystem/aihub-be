@@ -15,6 +15,7 @@ export type RedisProtectionSeam =
   | 'auth_rate_limit'
   | 'jwks_cache'
   | 'email_send_rate'
+  | 'content_rate_limit'
   | 'shedding_level'
   | 'token_revocation'
   | 'dpop_replay';
@@ -38,6 +39,7 @@ const REDIS_PROTECTION_SEAMS = [
   'auth_rate_limit',
   'jwks_cache',
   'email_send_rate',
+  'content_rate_limit',
   'shedding_level',
   'token_revocation',
   'dpop_replay',

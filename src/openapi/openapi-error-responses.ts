@@ -60,6 +60,7 @@ const RATE_LIMIT_HEADERS = {
 
 export function buildErrorResponses(
   groupedErrors: ReadonlyMap<HttpStatus, readonly ErrorCode[]>,
+  includeClientAddressRateLimited = false,
 ): Record<string, unknown> {
   const responses: Record<string, unknown> = {};
   for (const [status, codes] of groupedErrors) {
@@ -94,5 +95,17 @@ export function buildErrorResponses(
       },
     },
   };
+  if (includeClientAddressRateLimited) {
+    responses['ClientAddressRateLimited'] = {
+      description:
+        'The shared per-address content request budget is exhausted. Wait for the remaining window shown in `retry_after_ms` and `Retry-After` before trying again.',
+      headers: { 'Retry-After': RETRY_AFTER_HEADER },
+      content: {
+        'application/json': {
+          schema: errorResponseSchema(['RATE_LIMITED']),
+        },
+      },
+    };
+  }
   return responses;
 }

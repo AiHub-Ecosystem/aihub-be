@@ -9,6 +9,14 @@ such as `` `PRECONDITION_FAILED` ``, under `Added` in the dated entry that
 introduced it. `pnpm check:api-compatibility` refuses a release that leaves one
 out.
 
+## [2.13.0] - 2026-11-27
+
+### Changed
+
+- The five anonymous IELTS practice content routes share a budget of 30
+  requests per client IP in a 60-second window. Excess requests return
+  `429 RATE_LIMITED` with `Retry-After` and `error.retry_after_ms`.
+
 ## [2.12.0] - 2026-11-21
 
 ### Added

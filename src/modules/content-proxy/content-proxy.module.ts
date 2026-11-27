@@ -3,14 +3,31 @@ import type { ConfigType } from '@nestjs/config';
 
 import { appConfig } from '@/config/runtime-configuration';
 import { RuntimeConfigurationModule } from '@/config/runtime-configuration.module';
+import {
+  RUNTIME_CONNECTION_CONFIGURATION,
+  type RuntimeConnectionConfigurationPort,
+} from '@/modules/secrets/application/runtime-connection-configuration.port';
+import { SecretsModule } from '@/modules/secrets/secrets.module';
+import { CONTENT_RATE_LIMITER } from './application/content-rate-limiter.port';
 import { FETCH_LEGACY_CONTENT_PORT } from './application/legacy-content.port';
 import { HttpLegacyContentClient } from './infrastructure/http-legacy-content.client';
+import { RedisContentRateLimiter } from './infrastructure/redis-content-rate-limiter';
 import { ContentProxyController } from './presentation/content-proxy.controller';
+import { ContentRateLimitGuard } from './presentation/content-rate-limit.guard';
 
 @Module({
-  imports: [RuntimeConfigurationModule],
+  imports: [RuntimeConfigurationModule, SecretsModule],
   controllers: [ContentProxyController],
   providers: [
+    ContentRateLimitGuard,
+    {
+      provide: CONTENT_RATE_LIMITER,
+      inject: [RUNTIME_CONNECTION_CONFIGURATION],
+      useFactory: (
+        configuration: RuntimeConnectionConfigurationPort,
+      ): RedisContentRateLimiter =>
+        new RedisContentRateLimiter(configuration.redisUrl ?? ''),
+    },
     {
       provide: FETCH_LEGACY_CONTENT_PORT,
       inject: [appConfig.KEY],

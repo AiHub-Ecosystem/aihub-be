@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AIHUB API",
-    "version": "2.12.0"
+    "version": "2.13.0"
   },
   "servers": [
     {
@@ -730,6 +730,58 @@
         "headers": {
           "Retry-After": {
             "description": "Whole seconds to wait before retrying, rounded up from the longest exhausted window.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": true,
+              "type": "object",
+              "required": ["error"],
+              "properties": {
+                "error": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": ["code", "message", "request_id", "retryable"],
+                  "properties": {
+                    "code": {
+                      "x-extensible-enum": ["RATE_LIMITED"],
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    },
+                    "retry_after_ms": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ClientAddressRateLimited": {
+        "description": "The shared per-address content request budget is exhausted. Wait for the remaining window shown in `retry_after_ms` and `Retry-After` before trying again.",
+        "headers": {
+          "Retry-After": {
+            "description": "Present whenever the error includes retry_after_ms: the same wait in whole seconds, rounded up.",
             "schema": {
               "type": "string",
               "pattern": "^[0-9]+$"
@@ -10549,6 +10601,9 @@
           "400": {
             "$ref": "#/components/responses/Error400"
           },
+          "429": {
+            "$ref": "#/components/responses/ClientAddressRateLimited"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
@@ -10605,6 +10660,9 @@
             }
           },
           "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
             "description": "Same status as GET, without a response body."
           },
           "500": {
@@ -10786,6 +10844,9 @@
           "400": {
             "$ref": "#/components/responses/Error400"
           },
+          "429": {
+            "$ref": "#/components/responses/ClientAddressRateLimited"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
@@ -10842,6 +10903,9 @@
             }
           },
           "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
             "description": "Same status as GET, without a response body."
           },
           "500": {
@@ -11015,6 +11079,9 @@
           "400": {
             "$ref": "#/components/responses/Error400"
           },
+          "429": {
+            "$ref": "#/components/responses/ClientAddressRateLimited"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
@@ -11071,6 +11138,9 @@
             }
           },
           "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
             "description": "Same status as GET, without a response body."
           },
           "500": {
@@ -11254,6 +11324,9 @@
           "400": {
             "$ref": "#/components/responses/Error400"
           },
+          "429": {
+            "$ref": "#/components/responses/ClientAddressRateLimited"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
@@ -11310,6 +11383,9 @@
             }
           },
           "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
             "description": "Same status as GET, without a response body."
           },
           "500": {
@@ -11484,6 +11560,9 @@
           "400": {
             "$ref": "#/components/responses/Error400"
           },
+          "429": {
+            "$ref": "#/components/responses/ClientAddressRateLimited"
+          },
           "500": {
             "$ref": "#/components/responses/Error500"
           },
@@ -11540,6 +11619,9 @@
             }
           },
           "400": {
+            "description": "Same status as GET, without a response body."
+          },
+          "429": {
             "description": "Same status as GET, without a response body."
           },
           "500": {

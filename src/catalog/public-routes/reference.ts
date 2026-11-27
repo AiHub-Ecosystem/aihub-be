@@ -83,7 +83,7 @@ export const REFERENCE_PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: WritingTask1TemplatesResponseSchema,
-    errorStatuses: [400, 500, 502, 503, 504],
+    errorStatuses: [400, 429, 500, 502, 503, 504],
   },
   'writing.v2.task2.templates': {
     cacheControl: {
@@ -106,7 +106,7 @@ export const REFERENCE_PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: WritingTask2TemplatesResponseSchema,
-    errorStatuses: [400, 500, 502, 503, 504],
+    errorStatuses: [400, 429, 500, 502, 503, 504],
   },
   'speaking.v2.library': {
     cacheControl: {
@@ -129,7 +129,7 @@ export const REFERENCE_PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: SpeakingLibraryResponseSchema,
-    errorStatuses: [400, 500, 502, 503, 504],
+    errorStatuses: [400, 429, 500, 502, 503, 504],
   },
   'listening.v2.tests': {
     cacheControl: {
@@ -151,7 +151,7 @@ export const REFERENCE_PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ListeningTestsResponseSchema,
-    errorStatuses: [400, 500, 502, 503, 504],
+    errorStatuses: [400, 429, 500, 502, 503, 504],
   },
   'reading.v2.tests': {
     cacheControl: {
@@ -173,6 +173,6 @@ export const REFERENCE_PUBLIC_ROUTES = {
     idempotency: 'none',
     requestSchema: null,
     responseSchema: ReadingTestsResponseSchema,
-    errorStatuses: [400, 500, 502, 503, 504],
+    errorStatuses: [400, 429, 500, 502, 503, 504],
   },
 } as const;

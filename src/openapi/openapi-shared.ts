@@ -110,13 +110,22 @@ export function routeSecurityOf(
 }
 
 /**
- * Every `429` on an authentication route is the one refusal the auth module
- * builds, so every one of them answers with the retry hint. The gateway's
- * per-operation limit is a different refusal on routes that carry an API key,
- * and it carries no header; that difference is what this keeps separate.
+ * Authentication lockouts and IELTS content limits include the wait. The
+ * gateway's per-operation API-key limit is a different refusal without a hint.
  */
+const CLIENT_ADDRESS_RATE_LIMITED_ROUTES: ReadonlySet<PublicRouteId> = new Set([
+  'writing.v2.task1.templates',
+  'writing.v2.task2.templates',
+  'speaking.v2.library',
+  'listening.v2.tests',
+  'reading.v2.tests',
+]);
+
 function carriesRetryAfterHeader(routeId: PublicRouteId): boolean {
-  return routeId.startsWith('auth.');
+  return (
+    routeId.startsWith('auth.') ||
+    CLIENT_ADDRESS_RATE_LIMITED_ROUTES.has(routeId)
+  );
 }
 
 /**
@@ -163,7 +172,9 @@ export function routeErrorResponsesOf(
       {
         $ref:
           status === 429 && carriesRetryAfterHeader(routeId)
-            ? '#/components/responses/AuthRateLimited'
+            ? routeId.startsWith('auth.')
+              ? '#/components/responses/AuthRateLimited'
+              : '#/components/responses/ClientAddressRateLimited'
             : `#/components/responses/Error${status}`,
       },
     ]),
