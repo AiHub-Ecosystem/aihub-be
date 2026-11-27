@@ -6,7 +6,6 @@ import {
   SpeakingAudioCoreStorageAdapter,
   type SpeakingAudioUploadRepositoryPort,
   SpeakingAudioUploadSweep,
-  speakingAudioUploadSessionPolicy,
 } from '@/modules/speaking/public/speaking-audio-upload-sweep';
 import { UploadSessionSweep } from '@/modules/uploads/public';
 import { createCliSpeakingAudioAssetStorage } from './speaking-audio-storage';
@@ -50,9 +49,6 @@ export async function runSpeakingAudioUploadSweepCommand(
 ): Promise<Awaited<ReturnType<SpeakingAudioUploadSweep['run']>>> {
   const repository = await openRepository(input);
   const storage = input.storage ?? createCliSpeakingAudioAssetStorage();
-  const policy = speakingAudioUploadSessionPolicy(
-    storage as SpeakingAudioAssetStoragePort,
-  );
   const sweep = new SpeakingAudioUploadSweep(
     new UploadSessionSweep(
       new SpeakingAudioCoreRepositoryAdapter(
@@ -60,7 +56,6 @@ export async function runSpeakingAudioUploadSweepCommand(
       ),
       new SpeakingAudioCoreStorageAdapter(
         storage as SpeakingAudioAssetStoragePort,
-        policy,
       ),
       { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
       DELETION_CEILING,

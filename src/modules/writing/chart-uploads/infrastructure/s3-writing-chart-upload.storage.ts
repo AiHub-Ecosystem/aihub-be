@@ -18,6 +18,7 @@ import type { WritingChartUploadStoragePort } from '@/modules/writing/chart-uplo
 import {
   type WritingChartContentType,
   type WritingChartEnvironment,
+  isWritingChartContentType,
 } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import {
   WRITING_CHART_BUCKETS,
@@ -177,7 +178,9 @@ export class S3WritingChartUploadStorage
       const size = head.ContentLength;
       if (size > WRITING_CHART_MAX_BYTES || size !== input.byteSize) {
         return {
-          contentType: head.ContentType,
+          contentType: isWritingChartContentType(head.ContentType)
+            ? head.ContentType
+            : undefined,
           byteSize: size,
           bytes: new Uint8Array(),
         };
@@ -191,7 +194,9 @@ export class S3WritingChartUploadStorage
         signal,
       );
       return {
-        contentType: head.ContentType,
+        contentType: isWritingChartContentType(head.ContentType)
+          ? head.ContentType
+          : undefined,
         byteSize: size,
         bytes,
       };

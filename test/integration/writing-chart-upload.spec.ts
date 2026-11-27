@@ -46,6 +46,7 @@ import {
   type WritingChartContentType,
   type WritingChartEnvironment,
   type WritingChartUploadIntent,
+  isWritingChartContentType,
 } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 
 import { fixtureJson } from '../support/json-fixtures';
@@ -276,7 +277,14 @@ class FakeStorage implements WritingChartUploadStoragePort {
           setTimeout(resolve, this.inspectionDelayMs),
         );
       }
-      return this.objects.get(input.stagingKey);
+      const found = this.objects.get(input.stagingKey);
+      if (found === undefined) return undefined;
+      return {
+        ...found,
+        contentType: isWritingChartContentType(found.contentType)
+          ? found.contentType
+          : undefined,
+      };
     } finally {
       this.activeInspections -= 1;
     }

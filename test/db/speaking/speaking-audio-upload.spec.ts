@@ -270,14 +270,14 @@ describe('Speaking Audio upload completion against PostgreSQL', () => {
   it('answers not-found for another Organization using the same End-User ID', async () => {
     const upload = intent();
     await repository.createIntent(upload);
-    const policy = speakingAudioUploadSessionPolicy(storage);
+    const policy = speakingAudioUploadSessionPolicy();
     const service = new SpeakingAudioUploadService(
       new UploadSessionService(
         new SpeakingAudioCoreRepositoryAdapter(
           repository,
           () => new Date('2026-10-03T04:10:00.000Z'),
         ),
-        new SpeakingAudioCoreStorageAdapter(storage, policy),
+        new SpeakingAudioCoreStorageAdapter(storage),
         policy,
         () => `aud_${ulid()}`,
         () => new Date('2026-10-03T04:10:00.000Z'),

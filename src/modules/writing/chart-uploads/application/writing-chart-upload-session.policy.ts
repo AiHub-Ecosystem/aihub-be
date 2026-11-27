@@ -10,11 +10,17 @@ import {
   type RasterImageProcessingAdmission,
   RasterImageProcessingCapacityError,
 } from '@/common/image/raster-image';
-import type { UploadSessionPolicy } from '@/modules/uploads/public';
+import {
+  type UploadSessionPolicy,
+  type UploadSessionVerificationPort,
+  byteEqualityRefusal,
+} from '@/modules/uploads/public';
 import {
   type WritingChartContentType,
+  type WritingChartEnvironment,
   isWritingChartAssetId,
   isWritingChartContentType,
+  isWritingChartEnvironment,
   writingChartPublishedKey,
   writingChartStagingKey,
 } from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
@@ -46,7 +52,24 @@ function rasterCapacityReached(): AppError {
   });
 }
 
-export function writingChartUploadSessionPolicy(): UploadSessionPolicy {
+function chartPayloadTooLarge(): AppError {
+  return payloadTooLarge(
+    'PAYLOAD_TOO_LARGE',
+    'Writing chart image is larger than 2 MiB',
+  );
+}
+
+function chartStorageUnavailable(message?: string): AppError {
+  return storageUnavailable(
+    'WRITING_CHART_STORAGE_UNAVAILABLE',
+    message ?? 'Writing chart storage is unavailable',
+  );
+}
+
+export function writingChartUploadSessionPolicy(): UploadSessionPolicy<
+  WritingChartContentType,
+  WritingChartEnvironment
+> {
   return {
     maxBytes: WRITING_CHART_MAX_BYTES,
     intentTtlMs: WRITING_CHART_INTENT_TTL_MS,
@@ -57,12 +80,10 @@ export function writingChartUploadSessionPolicy(): UploadSessionPolicy {
       if (
         organizationId === undefined ||
         userId === undefined ||
-        (environment !== 'production' && environment !== 'sandbox')
+        environment === undefined ||
+        !isWritingChartEnvironment(environment)
       ) {
-        throw storageUnavailable(
-          'WRITING_CHART_STORAGE_UNAVAILABLE',
-          'Writing chart storage is unavailable',
-        );
+        throw chartStorageUnavailable();
       }
       return { assetId, organizationId, endUserId: userId, environment };
     },
@@ -70,6 +91,21 @@ export function writingChartUploadSessionPolicy(): UploadSessionPolicy {
     isAssetId: (value) => isWritingChartAssetId(value),
     stagingKey: (owner) => writingChartStagingKey(owner.assetId),
     publishedKey: (owner) => writingChartPublishedKey(owner.assetId),
+    invalidRequest: () => invalidRequest(),
+    payloadTooLarge: chartPayloadTooLarge,
+    rateLimited: () => rateLimited(),
+    storageUnavailable: (message) => chartStorageUnavailable(message),
+    notFound: () =>
+      uploadNotFound('NOT_FOUND', 'Writing chart upload was not found'),
+  };
+}
+
+/** Writing's storage reads staged bytes, so it supplies byte verification. */
+export function writingChartUploadVerification(): UploadSessionVerificationPort<
+  WritingChartContentType,
+  WritingChartEnvironment
+> {
+  return {
     reserveVerification: () => {
       try {
         return reserveWritingChartRasterImageProcessing();
@@ -87,33 +123,22 @@ export function writingChartUploadSessionPolicy(): UploadSessionPolicy {
           signal,
           () =>
             sanitizeWritingChartImage({
-              contentType: contentType as WritingChartContentType,
+              contentType,
               bytes,
             }),
         );
       } catch (error) {
         if (error instanceof RasterImageProcessingAbortedError) {
-          throw storageUnavailable(
-            'WRITING_CHART_STORAGE_UNAVAILABLE',
-            'Writing chart storage is unavailable',
-          );
+          throw chartStorageUnavailable();
         }
         throw error;
       }
     },
-    invalidRequest: () => invalidRequest(),
-    payloadTooLarge: () =>
-      payloadTooLarge(
-        'PAYLOAD_TOO_LARGE',
-        'Writing chart image is larger than 2 MiB',
-      ),
-    rateLimited: () => rateLimited(),
-    storageUnavailable: (message) =>
-      storageUnavailable(
-        'WRITING_CHART_STORAGE_UNAVAILABLE',
-        message ?? 'Writing chart storage is unavailable',
-      ),
-    notFound: () =>
-      uploadNotFound('NOT_FOUND', 'Writing chart upload was not found'),
+    invalidStoredObject: (stored, intent) =>
+      byteEqualityRefusal(stored, intent, {
+        maxBytes: WRITING_CHART_MAX_BYTES,
+        invalidRequest: () => invalidRequest(),
+        payloadTooLarge: chartPayloadTooLarge,
+      }),
   };
 }

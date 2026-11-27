@@ -8,7 +8,6 @@ import {
   SpeakingAudioCoreRepositoryAdapter,
   SpeakingAudioCoreStorageAdapter,
 } from './speaking-audio-upload-session.adapters';
-import { speakingAudioUploadSessionPolicy } from './speaking-audio-upload-session.policy';
 import type {
   SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadRepositoryPort,
@@ -60,9 +59,6 @@ function makeSweep(
       ),
       new SpeakingAudioCoreStorageAdapter(
         storage as SpeakingAudioAssetStoragePort,
-        speakingAudioUploadSessionPolicy(
-          storage as SpeakingAudioAssetStoragePort,
-        ),
       ),
       { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
       DELETION_CEILING,

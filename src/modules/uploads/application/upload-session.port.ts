@@ -2,14 +2,15 @@ import type { RequestContext } from '@/common/request-context/request-context';
 import type {
   PublishedUploadSession,
   UploadSessionCleanupCandidate,
+  UploadSessionEnvironment,
   UploadSessionIntent,
   UploadSessionLookup,
   UploadSessionOwner,
 } from '@/modules/uploads/domain/upload-session';
 
-export interface UploadSessionGrant {
+export interface UploadSessionGrant<C extends string = string> {
   readonly assetId: string;
-  readonly contentType: string;
+  readonly contentType: C;
   readonly byteSize: number;
   readonly uploadUrl: string;
   readonly uploadFields: Readonly<Record<string, string>>;
@@ -17,33 +18,39 @@ export interface UploadSessionGrant {
   readonly intentExpiresAt: Date;
 }
 
-export interface UploadSessionRepositoryPort {
+export interface UploadSessionRepositoryPort<
+  C extends string = string,
+  E extends string = UploadSessionEnvironment,
+  P extends PublishedUploadSession<C, E> = PublishedUploadSession<C, E>,
+> {
   createIntent(
-    intent: UploadSessionIntent,
+    intent: UploadSessionIntent<C, E>,
     rateWindowMs?: number,
   ): Promise<boolean>;
-  findUpload(owner: UploadSessionOwner): Promise<UploadSessionLookup>;
+  findUpload(
+    owner: UploadSessionOwner<E>,
+  ): Promise<UploadSessionLookup<C, E, P>>;
   rejectIntent(
-    owner: UploadSessionOwner,
+    owner: UploadSessionOwner<E>,
     now: Date,
     cleaned?: boolean,
   ): Promise<void>;
   beginPublication(input: {
-    readonly owner: UploadSessionOwner;
+    readonly owner: UploadSessionOwner<E>;
     readonly now: Date;
     readonly rateWindowMs?: number;
   }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'>;
   markPublished(input: {
-    readonly owner: UploadSessionOwner;
+    readonly owner: UploadSessionOwner<E>;
     readonly now: Date;
     readonly publicationStartedAt: Date;
     readonly imageUrl: string;
     readonly requestId?: string;
-    readonly contentType?: string;
+    readonly contentType?: C;
     readonly byteSize?: number;
-  }): Promise<PublishedUploadSession | 'revoked' | undefined>;
+  }): Promise<P | 'revoked' | undefined>;
   releasePublication(
-    owner: UploadSessionOwner,
+    owner: UploadSessionOwner<E>,
     publicationStartedAt: Date,
   ): Promise<void>;
   cleanupCandidates(input: {
@@ -51,17 +58,20 @@ export interface UploadSessionRepositoryPort {
     readonly orphanBefore: Date;
     readonly limit: number;
     readonly after?: { readonly createdAt: Date; readonly assetId: string };
-  }): Promise<readonly UploadSessionCleanupCandidate[]>;
+  }): Promise<readonly UploadSessionCleanupCandidate<E>[]>;
   removeCleanupCandidate(
-    candidate: UploadSessionCleanupCandidate,
+    candidate: UploadSessionCleanupCandidate<E>,
   ): Promise<boolean>;
 }
 
-export interface UploadSessionStoragePort {
+export interface UploadSessionStoragePort<
+  C extends string = string,
+  E extends string = UploadSessionEnvironment,
+> {
   createUploadUrl(input: {
-    readonly environment: string;
+    readonly environment: E;
     readonly stagingKey: string;
-    readonly contentType: string;
+    readonly contentType: C;
     readonly byteSize: number;
   }): Promise<{
     readonly url: string;
@@ -70,14 +80,15 @@ export interface UploadSessionStoragePort {
   }>;
   inspectObject(
     input: {
-      readonly environment: string;
+      readonly environment: E;
       readonly stagingKey: string;
+      readonly contentType?: C;
       readonly byteSize: number;
     },
     signal?: AbortSignal,
   ): Promise<
     | {
-        readonly contentType: string | undefined;
+        readonly contentType: C | undefined;
         readonly byteSize: number | undefined;
         readonly bytes: Uint8Array;
         readonly lastModified?: Date;
@@ -87,41 +98,50 @@ export interface UploadSessionStoragePort {
   >;
   publishObject(
     input: {
-      readonly environment: string;
+      readonly environment: E;
       readonly stagingKey: string;
       readonly publishedKey: string;
-      readonly contentType: string;
+      readonly contentType: C;
       readonly bytes: Uint8Array;
       readonly byteSize?: number;
     },
     signal?: AbortSignal,
   ): Promise<void>;
   publicUrl(input: {
-    readonly environment: string;
+    readonly environment: E;
     readonly publishedKey: string;
   }): string;
+  /** Features with more than one staged key replace the refusal cleanup here. */
+  deleteRefusedObject?(
+    intent: UploadSessionIntent<C, E>,
+    signal: AbortSignal,
+  ): Promise<boolean>;
   deleteStagingObject(
-    input: { readonly environment: string; readonly stagingKey: string },
+    input: { readonly environment: E; readonly stagingKey: string },
     signal?: AbortSignal,
   ): Promise<void>;
   deletePublishedObject(
-    input: { readonly environment: string; readonly publishedKey: string },
+    input: { readonly environment: E; readonly publishedKey: string },
     signal?: AbortSignal,
   ): Promise<void>;
 }
 
-export interface UploadSessionServicePort {
+export interface UploadSessionServicePort<
+  C extends string = string,
+  E extends string = UploadSessionEnvironment,
+  P extends PublishedUploadSession<C, E> = PublishedUploadSession<C, E>,
+> {
   create(input: {
     readonly context: RequestContext;
     readonly contentType: string;
     readonly byteSize: number;
-  }): Promise<UploadSessionGrant>;
+  }): Promise<UploadSessionGrant<C>>;
   refresh(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): Promise<UploadSessionGrant>;
+  }): Promise<UploadSessionGrant<C>>;
   complete(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): Promise<PublishedUploadSession>;
+  }): Promise<P>;
 }

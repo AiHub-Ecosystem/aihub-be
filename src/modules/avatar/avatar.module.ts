@@ -34,8 +34,12 @@ import {
   AvatarCoreStorageAdapter,
 } from './application/avatar-upload-session.adapters';
 import { AvatarCoreCandidateSource } from './application/avatar-upload-session.candidates';
-import { avatarUploadSessionPolicy } from './application/avatar-upload-session.policy';
+import {
+  avatarUploadSessionPolicy,
+  avatarUploadSessionVerification,
+} from './application/avatar-upload-session.policy';
 import { AvatarUploadService } from './application/avatar-upload.service';
+import { type AvatarContentType } from './domain/avatar';
 import { PostgresAvatarRepository } from './infrastructure/postgres-avatar.repository';
 import { S3AvatarStorage } from './infrastructure/s3-avatar.storage';
 import { AvatarController } from './presentation/avatar.controller';
@@ -84,11 +88,13 @@ import { AvatarController } from './presentation/avatar.controller';
         storage: AvatarStoragePort,
       ) => {
         const storageAdapter = new AvatarCoreStorageAdapter(storage);
-        return new UploadSessionService(
+        return new UploadSessionService<AvatarContentType, 'production'>(
           new AvatarCoreRepositoryAdapter(avatars, undefined, storageAdapter),
           storageAdapter,
           avatarUploadSessionPolicy(),
           prefixedIdGenerator('ava_'),
+          undefined,
+          avatarUploadSessionVerification(),
         );
       },
     },
@@ -127,7 +133,7 @@ import { AvatarController } from './presentation/avatar.controller';
       useFactory: (
         avatars: AvatarRepositoryPort,
         storage: AvatarStoragePort,
-        core: UploadSessionServicePort,
+        core: UploadSessionServicePort<AvatarContentType, 'production'>,
       ): AvatarUploadService => new AvatarUploadService(avatars, storage, core),
     },
   ],

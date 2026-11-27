@@ -81,7 +81,7 @@ export interface WritingChartUploadStoragePort {
     signal?: AbortSignal,
   ): Promise<
     | {
-        readonly contentType: string | undefined;
+        readonly contentType: WritingChartContentType | undefined;
         readonly byteSize: number | undefined;
         readonly bytes: Uint8Array;
       }

@@ -6,11 +6,19 @@ import {
   UploadSessionService,
   UploadSessionSweep,
 } from '@/modules/uploads/public';
-import { writingChartUploadSessionPolicy } from '@/modules/writing/chart-uploads/application/writing-chart-upload-session.policy';
+import {
+  writingChartUploadSessionPolicy,
+  writingChartUploadVerification,
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload-session.policy';
 import { WRITING_CHART_ORPHAN_GRACE_MS } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import type { WritingChartUploadOwner } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/chart-uploads/application/writing-chart-upload.service';
 import { WritingChartUploadSweep } from '@/modules/writing/chart-uploads/application/writing-chart-upload.sweep';
+import type {
+  WritingChartAsset,
+  WritingChartContentType,
+  WritingChartEnvironment,
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
 import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
@@ -55,11 +63,17 @@ function context() {
 /** An open upload whose private object is staged in the bucket. */
 async function openUpload(bucket: ChartBucket) {
   const service = new WritingChartUploadService(
-    new UploadSessionService(
+    new UploadSessionService<
+      WritingChartContentType,
+      WritingChartEnvironment,
+      WritingChartAsset
+    >(
       repository,
       bucket.storage(),
       writingChartUploadSessionPolicy(),
       (now) => `chart_${ulid(now.getTime())}`,
+      undefined,
+      writingChartUploadVerification(),
     ),
   );
   const { assetId } = await service.create({

@@ -11,14 +11,20 @@ import {
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
 import type {
-  PublishedUploadSession,
-  UploadSessionCleanupCandidate,
-  UploadSessionIntent,
-  UploadSessionLookup,
-  UploadSessionOwner,
+  UploadSessionCleanupCandidate as CleanupBase,
+  UploadSessionIntent as IntentBase,
+  UploadSessionLookup as LookupBase,
+  UploadSessionOwner as OwnerBase,
+  PublishedUploadSession as PubBase,
   UploadSessionRepositoryPort,
   UploadSessionStoragePort,
 } from '@/modules/uploads/public';
+
+type CorePublished = PubBase<AvatarContentType, 'production'>;
+type CoreCandidate = CleanupBase<'production'>;
+type CoreIntent = IntentBase<AvatarContentType, 'production'>;
+type CoreLookup = LookupBase<AvatarContentType, 'production'>;
+type CoreOwner = OwnerBase<'production'>;
 import type {
   AvatarAuditEvent,
   AvatarRepositoryPort,
@@ -46,7 +52,7 @@ function storedTooLarge(): AppError {
   });
 }
 
-function coreAsset(avatar: Avatar, created: boolean): PublishedUploadSession {
+function coreAsset(avatar: Avatar, created: boolean): CorePublished {
   return {
     assetId: avatar.assetId,
     endUserId: avatar.userId,
@@ -90,7 +96,7 @@ type GateResult =
   | { readonly kind: 'rejected' };
 
 export class AvatarCoreRepositoryAdapter
-  implements UploadSessionRepositoryPort
+  implements UploadSessionRepositoryPort<AvatarContentType, 'production'>
 {
   private readonly gates = new Map<
     string,
@@ -104,7 +110,7 @@ export class AvatarCoreRepositoryAdapter
   ) {}
 
   async createIntent(
-    intent: UploadSessionIntent,
+    intent: CoreIntent,
     rateWindowMs?: number,
   ): Promise<boolean> {
     return this.repository.grantUpload(
@@ -123,7 +129,7 @@ export class AvatarCoreRepositoryAdapter
     );
   }
 
-  async findUpload(owner: UploadSessionOwner): Promise<UploadSessionLookup> {
+  async findUpload(owner: CoreOwner): Promise<CoreLookup> {
     const userId = owner.endUserId;
     const current = await this.repository.findByUser(userId);
     if (current?.assetId === owner.assetId) {
@@ -170,12 +176,12 @@ export class AvatarCoreRepositoryAdapter
     };
   }
 
-  async rejectIntent(owner: UploadSessionOwner): Promise<void> {
+  async rejectIntent(owner: CoreOwner): Promise<void> {
     await this.repository.consumeUploadGrant(owner.endUserId, owner.assetId);
   }
 
   async beginPublication(input: {
-    readonly owner: UploadSessionOwner;
+    readonly owner: CoreOwner;
     readonly now: Date;
   }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
     const found = await this.findUpload(input.owner);
@@ -250,14 +256,14 @@ export class AvatarCoreRepositoryAdapter
   }
 
   async markPublished(input: {
-    readonly owner: UploadSessionOwner;
+    readonly owner: CoreOwner;
     readonly now: Date;
     readonly publicationStartedAt: Date;
     readonly imageUrl: string;
     readonly requestId?: string;
-    readonly contentType?: string;
+    readonly contentType?: AvatarContentType;
     readonly byteSize?: number;
-  }): Promise<PublishedUploadSession | 'revoked' | undefined> {
+  }): Promise<CorePublished | 'revoked' | undefined> {
     const gate = this.gates.get(input.owner.assetId);
     if (gate === undefined) return undefined;
     const objectKey = avatarObjectKey(
@@ -265,12 +271,15 @@ export class AvatarCoreRepositoryAdapter
       input.owner.assetId,
     );
     const landed = this.storage?.publishedDescriptor(objectKey);
+    // The core always supplies a content type; the placeholder matches the
+    // one `findUpload` declares for an Avatar intent.
+    const contentType =
+      landed?.contentType ?? input.contentType ?? 'image/jpeg';
     const avatar: Avatar = {
       assetId: input.owner.assetId,
       userId: input.owner.endUserId,
       objectKey,
-      contentType:
-        landed?.contentType ?? (input.contentType as AvatarContentType),
+      contentType,
       byteSize: landed?.byteSize ?? input.byteSize ?? 0,
       acceptedAt: input.now,
     };
@@ -285,7 +294,7 @@ export class AvatarCoreRepositoryAdapter
     return coreAsset(result.avatar, result.created);
   }
 
-  async releasePublication(owner: UploadSessionOwner): Promise<void> {
+  async releasePublication(owner: CoreOwner): Promise<void> {
     const gate = this.gates.get(owner.assetId);
     if (gate === undefined) return;
     gate.decide({ kind: 'refused', refusal: invalidRequest() });
@@ -293,7 +302,7 @@ export class AvatarCoreRepositoryAdapter
     this.gates.delete(owner.assetId);
   }
 
-  async cleanupCandidates(): Promise<readonly UploadSessionCleanupCandidate[]> {
+  async cleanupCandidates(): Promise<readonly CoreCandidate[]> {
     return [];
   }
 
@@ -302,7 +311,9 @@ export class AvatarCoreRepositoryAdapter
   }
 }
 
-export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
+export class AvatarCoreStorageAdapter
+  implements UploadSessionStoragePort<AvatarContentType, 'production'>
+{
   private readonly publishedDescriptors = new Map<
     string,
     { readonly contentType: AvatarContentType; readonly byteSize: number }
@@ -322,9 +333,9 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
   }
 
   async createUploadUrl(input: {
-    readonly environment: string;
+    readonly environment: 'production';
     readonly stagingKey: string;
-    readonly contentType: string;
+    readonly contentType: AvatarContentType;
     readonly byteSize: number;
   }): Promise<{
     readonly url: string;
@@ -333,21 +344,22 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
   }> {
     const signed = await this.storage.createUploadUrl({
       objectKey: input.stagingKey,
-      contentType: input.contentType as AvatarContentType,
+      contentType: input.contentType,
     });
     return { ...signed, fields: {} };
   }
 
   async inspectObject(
     input: {
-      readonly environment: string;
+      readonly environment: 'production';
       readonly stagingKey: string;
+      readonly contentType?: AvatarContentType;
       readonly byteSize: number;
     },
     signal?: AbortSignal,
   ): Promise<
     | {
-        readonly contentType: string | undefined;
+        readonly contentType: AvatarContentType | undefined;
         readonly byteSize: number | undefined;
         readonly bytes: Uint8Array;
         readonly lastModified?: Date;
@@ -411,17 +423,18 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
 
   async publishObject(
     input: {
-      readonly environment: string;
+      readonly environment: 'production';
       readonly stagingKey: string;
       readonly publishedKey: string;
-      readonly contentType: string;
+      readonly contentType: AvatarContentType;
       readonly bytes: Uint8Array;
+      readonly byteSize?: number;
     },
     signal?: AbortSignal,
   ): Promise<void> {
     await this.storage.putFinalObject({
       objectKey: input.publishedKey,
-      contentType: input.contentType as AvatarContentType,
+      contentType: input.contentType,
       bytes: input.bytes,
       ...(signal === undefined ? {} : { signal }),
     });
@@ -467,21 +480,27 @@ export class AvatarCoreStorageAdapter implements UploadSessionStoragePort {
   }
 
   publicUrl(input: {
-    readonly environment: string;
+    readonly environment: 'production';
     readonly publishedKey: string;
   }): string {
     return this.storage.publicUrl(input.publishedKey);
   }
 
   async deleteStagingObject(
-    input: { readonly environment: string; readonly stagingKey: string },
+    input: {
+      readonly environment: 'production';
+      readonly stagingKey: string;
+    },
     signal?: AbortSignal,
   ): Promise<void> {
     await this.storage.deleteStagingObject(input.stagingKey, signal);
   }
 
   async deletePublishedObject(
-    input: { readonly environment: string; readonly publishedKey: string },
+    input: {
+      readonly environment: 'production';
+      readonly publishedKey: string;
+    },
     signal?: AbortSignal,
   ): Promise<void> {
     await this.storage.deleteObject(input.publishedKey, signal);

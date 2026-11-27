@@ -29,7 +29,7 @@ function setup() {
     stagingKey: `writing-charts/${ASSET}/staging`,
     publishedKey: `writing-charts/${ASSET}/published`,
     status: 'published' as const,
-    contentType: 'image/png',
+    contentType: 'image/png' as const,
     byteSize: 12,
     createdAt: NOW,
     expiresAt: new Date(NOW.getTime() + 60_000),
@@ -80,16 +80,18 @@ function setup() {
       `writing-charts/${owner.assetId}/staging`,
     publishedKey: (owner: { readonly assetId: string }) =>
       `writing-charts/${owner.assetId}/published`,
-    reserveVerification: () => ({ release: () => undefined }),
-    verify: async () => ({
-      kind: 'sanitized' as const,
-      bytes: new Uint8Array(12),
-    }),
     invalidRequest: (): AppError => new Error('invalid') as AppError,
     payloadTooLarge: (): AppError => new Error('too large') as AppError,
     rateLimited: (): AppError => new Error('rate limited') as AppError,
     storageUnavailable: (): AppError => new Error('unavailable') as AppError,
     notFound: (): AppError => new Error('not found') as AppError,
+  };
+  const verification = {
+    reserveVerification: () => ({ release: () => undefined }),
+    verify: async () => ({
+      kind: 'sanitized' as const,
+      bytes: new Uint8Array(12),
+    }),
   };
   const service = new UploadSessionService(
     repository,
@@ -97,8 +99,9 @@ function setup() {
     policy,
     () => ASSET,
     () => NOW,
+    verification,
   );
-  return { service, repository, storage, policy, published };
+  return { service, repository, storage, policy, verification, published };
 }
 
 describe('UploadSessionService', () => {
@@ -120,9 +123,10 @@ describe('UploadSessionService', () => {
   });
 
   it('passes the stored descriptor to publication', async () => {
-    const { repository, storage, policy, service } = setup();
-    (policy as { invalidStoredObject?: () => undefined }).invalidStoredObject =
-      () => undefined;
+    const { repository, storage, verification, service } = setup();
+    (
+      verification as { invalidStoredObject?: () => undefined }
+    ).invalidStoredObject = () => undefined;
     repository.findUpload.mockResolvedValue({
       kind: 'intent',
       intent: {
@@ -155,6 +159,46 @@ describe('UploadSessionService', () => {
         contentType: 'image/png',
         byteSize: 12,
       }),
+    );
+  });
+
+  it('completes a HEAD-only upload without byte verification', async () => {
+    const { repository, storage, policy } = setup();
+    const bytes = new Uint8Array();
+    repository.findUpload.mockResolvedValue({
+      kind: 'intent',
+      intent: {
+        assetId: ASSET,
+        organizationId: ORG,
+        endUserId: USER,
+        environment: 'production',
+        stagingKey: 'writing-charts/staging',
+        publishedKey: 'writing-charts/published',
+        contentType: 'audio/wav',
+        byteSize: 12,
+        createdAt: NOW,
+        expiresAt: new Date(NOW.getTime() + 60_000),
+        status: 'open',
+      },
+    } as never);
+    storage.inspectObject.mockResolvedValue({
+      contentType: 'audio/wav',
+      byteSize: 12,
+      bytes,
+    } as never);
+    const service = new UploadSessionService(
+      repository,
+      storage,
+      policy,
+      () => ASSET,
+      () => NOW,
+    );
+
+    await service.complete({ context: context(), assetId: ASSET });
+
+    expect(storage.publishObject).toHaveBeenCalledWith(
+      expect.objectContaining({ bytes, contentType: 'audio/wav' }),
+      expect.anything(),
     );
   });
 });

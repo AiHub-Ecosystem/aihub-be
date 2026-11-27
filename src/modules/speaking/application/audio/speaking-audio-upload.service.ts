@@ -17,7 +17,12 @@ export class SpeakingAudioUploadService
 {
   private readonly policy = speakingAudioUploadSessionPolicy();
 
-  constructor(private readonly core: UploadSessionServicePort) {}
+  constructor(
+    private readonly core: UploadSessionServicePort<
+      SpeakingAudioContentType,
+      SpeakingAudioEnvironment
+    >,
+  ) {}
 
   async requestUpload(input: {
     readonly context: RequestContext;
@@ -29,7 +34,7 @@ export class SpeakingAudioUploadService
     return {
       assetId: grant.assetId,
       objectKey: this.policy.publishedKey(owner),
-      contentType: grant.contentType as SpeakingAudioContentType,
+      contentType: grant.contentType,
       byteSize: grant.byteSize,
       uploadUrl: grant.uploadUrl,
       uploadUrlExpiresAt: grant.uploadUrlExpiresAt,
@@ -46,7 +51,7 @@ export class SpeakingAudioUploadService
     return {
       assetId: grant.assetId,
       objectKey: this.policy.publishedKey(owner),
-      contentType: grant.contentType as SpeakingAudioContentType,
+      contentType: grant.contentType,
       byteSize: grant.byteSize,
       uploadUrl: grant.uploadUrl,
       uploadUrlExpiresAt: grant.uploadUrlExpiresAt,
@@ -67,9 +72,9 @@ export class SpeakingAudioUploadService
         assetId: published.assetId,
         organizationId: published.organizationId ?? '',
         endUserId: published.endUserId,
-        environment: published.environment as SpeakingAudioEnvironment,
+        environment: published.environment,
         objectKey: published.publishedKey,
-        contentType: published.contentType as SpeakingAudioContentType,
+        contentType: published.contentType,
         byteSize: published.byteSize,
         acceptedAt: published.publishedAt,
         retentionExpiresAt:

@@ -61,7 +61,11 @@ import {
   type SpeakingV2ResultOwnershipPort,
 } from './application/speaking-v2-result-ownership.port';
 import { SpeakingV2WorkflowEngine } from './application/speaking-v2-workflow-engine';
-import { SPEAKING_AUDIO_ORPHAN_GRACE_MS } from './domain/speaking-audio-asset';
+import {
+  SPEAKING_AUDIO_ORPHAN_GRACE_MS,
+  type SpeakingAudioContentType,
+  type SpeakingAudioEnvironment,
+} from './domain/speaking-audio-asset';
 import { PostgresSpeakingAudioUploadRepository } from './infrastructure/postgres-speaking-audio-upload.repository';
 import { PostgresSpeakingV2ResultOwnershipRepository } from './infrastructure/postgres-speaking-v2-result-ownership.repository';
 import { S3SpeakingAudioAssetStorage } from './infrastructure/s3-speaking-audio-asset.storage';
@@ -396,10 +400,10 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
         storage: SpeakingAudioAssetStoragePort,
         clock: () => Date,
       ) => {
-        const policy = speakingAudioUploadSessionPolicy(storage);
+        const policy = speakingAudioUploadSessionPolicy();
         return new UploadSessionService(
           new SpeakingAudioCoreRepositoryAdapter(repository, clock),
-          new SpeakingAudioCoreStorageAdapter(storage, policy),
+          new SpeakingAudioCoreStorageAdapter(storage),
           policy,
           prefixedIdGenerator('aud_'),
           clock,
@@ -409,8 +413,12 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
     {
       provide: SPEAKING_AUDIO_UPLOAD_SERVICE,
       inject: [UPLOAD_SESSION_SERVICE],
-      useFactory: (core: UploadSessionServicePort) =>
-        new SpeakingAudioUploadService(core),
+      useFactory: (
+        core: UploadSessionServicePort<
+          SpeakingAudioContentType,
+          SpeakingAudioEnvironment
+        >,
+      ) => new SpeakingAudioUploadService(core),
     },
     {
       provide: SpeakingRecordingAccess,
@@ -427,10 +435,9 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
         repository: SpeakingAudioUploadRepositoryPort,
         storage: SpeakingAudioAssetStoragePort,
       ) => {
-        const policy = speakingAudioUploadSessionPolicy(storage);
         return new UploadSessionSweep(
           new SpeakingAudioCoreRepositoryAdapter(repository),
-          new SpeakingAudioCoreStorageAdapter(storage, policy),
+          new SpeakingAudioCoreStorageAdapter(storage),
           { orphanGraceMs: SPEAKING_AUDIO_ORPHAN_GRACE_MS },
           DELETION_CEILING,
           2,

@@ -1,6 +1,10 @@
 export { UploadSessionService } from '@/modules/uploads/application/upload-session.service';
 export { UploadSessionSweep } from '@/modules/uploads/application/upload-session.sweep';
 export type { UploadSessionPolicy } from '@/modules/uploads/application/upload-session.policy';
+export {
+  byteEqualityRefusal,
+  type UploadSessionVerificationPort,
+} from '@/modules/uploads/application/upload-session.verification';
 export type {
   UploadSessionRepositoryPort,
   UploadSessionServicePort,
