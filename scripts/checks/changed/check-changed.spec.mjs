@@ -376,6 +376,10 @@ const pathCases = [
     gates: ['check:doc-drift', 'check:nginx-headers', 'lint'],
   },
   {
+    path: 'ops/nginx/s3-wispace-avatar-upload-limit.conf',
+    gates: ['check:doc-drift', 'test:shell-specs'],
+  },
+  {
     path: 'src/contracts/date-time-format.ts',
     gates: [
       'arch-check',
@@ -826,6 +830,7 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
     if (dir === 'test/ops') {
       return [
         'app-log-sink-config.spec.sh',
+        'avatar-upload-limit.spec.sh',
         'blue-green-readiness.spec.sh',
         'blue-green-config-retention.spec.sh',
         'blue-green-resume.spec.sh',
@@ -887,6 +892,19 @@ await test('the shell-spec gate selects test/ suites for blue-green and log wrap
     {
       script: 'test:shell-specs',
       args: ['test/ops/app-log-sink-config.spec.sh'],
+    },
+  );
+  // #2008: the operator-installed S3 ingress fragment selects its own proof.
+  assert.deepEqual(
+    gateInvocation(
+      'test:shell-specs',
+      ['ops/nginx/s3-wispace-avatar-upload-limit.conf'],
+      () => true,
+      listDir,
+    ),
+    {
+      script: 'test:shell-specs',
+      args: ['test/ops/avatar-upload-limit.spec.sh'],
     },
   );
 

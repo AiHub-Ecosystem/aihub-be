@@ -574,6 +574,14 @@ jobs:
       - name: Exercise Speaking gateway smoke identity handling with stubs
         run: bash test/ops/speaking-gateway-smoke.spec.sh
 
+      - name: Install nginx for the Avatar upload ingress check
+        run: sudo apt-get update && sudo apt-get install --yes nginx
+
+      - name: Exercise the Avatar upload body bound at the S3 ingress
+        env:
+          AVATAR_UPLOAD_LIMIT_REQUIRE_RUNTIME: "1"
+        run: bash test/ops/avatar-upload-limit.spec.sh
+
   dev-restart-budget:
     name: Dev restart budget
     runs-on: ubuntu-24.04
