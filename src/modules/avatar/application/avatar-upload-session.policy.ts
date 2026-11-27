@@ -18,7 +18,10 @@ import {
   isAvatarAssetId,
   isAvatarContentType,
 } from '@/modules/avatar/domain/avatar';
-import type { UploadSessionPolicy } from '@/modules/uploads/public';
+import type {
+  UploadSessionPolicy,
+  UploadSessionVerificationPort,
+} from '@/modules/uploads/public';
 import {
   AVATAR_COMPLETION_DEADLINE_MS,
   AVATAR_UPLOAD_ISSUANCE_WINDOW_MS,
@@ -50,7 +53,10 @@ function payloadTooLarge(): AppError {
   });
 }
 
-export function avatarUploadSessionPolicy(): UploadSessionPolicy {
+export function avatarUploadSessionPolicy(): UploadSessionPolicy<
+  AvatarContentType,
+  'production'
+> {
   return {
     maxBytes: AVATAR_MAX_BYTES,
     intentTtlMs: AVATAR_UPLOAD_URL_TTL_SECONDS * 1000,
@@ -73,6 +79,20 @@ export function avatarUploadSessionPolicy(): UploadSessionPolicy {
     isAssetId: (value) => isAvatarAssetId(value),
     stagingKey: (owner) => avatarObjectKey(owner.endUserId, owner.assetId),
     publishedKey: (owner) => avatarObjectKey(owner.endUserId, owner.assetId),
+    invalidRequest: () => invalidRequest(),
+    payloadTooLarge: () => payloadTooLarge(),
+    rateLimited: () => rateLimited(),
+    storageUnavailable: () => storageUnavailable(),
+    notFound: () => uploadNotFound('NOT_FOUND', 'Avatar upload was not found'),
+  };
+}
+
+/** Avatar's staged image is decoded and re-encoded before publication. */
+export function avatarUploadSessionVerification(): UploadSessionVerificationPort<
+  AvatarContentType,
+  'production'
+> {
+  return {
     reserveVerification: () => {
       try {
         return reserveAvatarRasterImageProcessing();
@@ -95,7 +115,7 @@ export function avatarUploadSessionPolicy(): UploadSessionPolicy {
           signal,
           () =>
             sanitizeRasterImage({
-              contentType: contentType as AvatarContentType,
+              contentType,
               bytes,
               maxBytes: AVATAR_MAX_BYTES,
               maxPixels: AVATAR_MAX_PIXELS,
@@ -117,10 +137,5 @@ export function avatarUploadSessionPolicy(): UploadSessionPolicy {
       if (!isAvatarContentType(stored.contentType)) return invalidRequest();
       return undefined;
     },
-    invalidRequest: () => invalidRequest(),
-    payloadTooLarge: () => payloadTooLarge(),
-    rateLimited: () => rateLimited(),
-    storageUnavailable: () => storageUnavailable(),
-    notFound: () => uploadNotFound('NOT_FOUND', 'Avatar upload was not found'),
   };
 }

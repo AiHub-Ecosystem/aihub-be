@@ -193,10 +193,10 @@ class Storage implements SpeakingAudioAssetStoragePort {
 function setup() {
   const repository = new Repository();
   const storage = new Storage();
-  const policy = speakingAudioUploadSessionPolicy(storage);
+  const policy = speakingAudioUploadSessionPolicy();
   const core = new UploadSessionService(
     new SpeakingAudioCoreRepositoryAdapter(repository, () => NOW),
-    new SpeakingAudioCoreStorageAdapter(storage, policy),
+    new SpeakingAudioCoreStorageAdapter(storage),
     policy,
     () => ASSET_ID,
     () => NOW,

@@ -7,8 +7,10 @@ import type {
   UploadSessionServicePort,
   UploadSessionStoragePort,
 } from '@/modules/uploads/application/upload-session.port';
+import type { UploadSessionVerificationPort } from '@/modules/uploads/application/upload-session.verification';
 import type {
   PublishedUploadSession,
+  UploadSessionEnvironment,
   UploadSessionIntent,
   UploadSessionOwner,
 } from '@/modules/uploads/domain/upload-session';
@@ -35,20 +37,26 @@ function serializeCompletion<T>(
   return result;
 }
 
-export class UploadSessionService implements UploadSessionServicePort {
+export class UploadSessionService<
+  C extends string = string,
+  E extends string = UploadSessionEnvironment,
+  P extends PublishedUploadSession<C, E> = PublishedUploadSession<C, E>,
+> implements UploadSessionServicePort<C, E, P>
+{
   constructor(
-    private readonly repository: UploadSessionRepositoryPort,
-    private readonly storage: UploadSessionStoragePort,
-    private readonly policy: UploadSessionPolicy,
+    private readonly repository: UploadSessionRepositoryPort<C, E, P>,
+    private readonly storage: UploadSessionStoragePort<C, E>,
+    private readonly policy: UploadSessionPolicy<C, E>,
     private readonly newAssetId: (createdAt: Date) => string,
     private readonly now: () => Date = () => new Date(),
+    private readonly verification?: UploadSessionVerificationPort<C, E>,
   ) {}
 
   async create(input: {
     readonly context: RequestContext;
     readonly contentType: string;
     readonly byteSize: number;
-  }): Promise<UploadSessionGrant> {
+  }): Promise<UploadSessionGrant<C>> {
     const { policy } = this;
     if (!policy.isContentType(input.contentType)) throw policy.invalidRequest();
     if (
@@ -62,7 +70,7 @@ export class UploadSessionService implements UploadSessionServicePort {
     const createdAt = this.now();
     const assetId = this.newAssetId(createdAt);
     const owner = policy.owner(input.context, assetId);
-    const intent: UploadSessionIntent = {
+    const intent: UploadSessionIntent<C, E> = {
       ...owner,
       stagingKey: policy.stagingKey(owner),
       publishedKey: policy.publishedKey(owner),
@@ -95,7 +103,7 @@ export class UploadSessionService implements UploadSessionServicePort {
   async refresh(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): Promise<UploadSessionGrant> {
+  }): Promise<UploadSessionGrant<C>> {
     const { policy } = this;
     if (!policy.isAssetId(input.assetId)) throw policy.invalidRequest();
     const owner = policy.owner(input.context, input.assetId);
@@ -136,7 +144,7 @@ export class UploadSessionService implements UploadSessionServicePort {
   async complete(input: {
     readonly context: RequestContext;
     readonly assetId: string;
-  }): Promise<PublishedUploadSession> {
+  }): Promise<P> {
     const { policy } = this;
     if (!policy.isAssetId(input.assetId)) throw policy.invalidRequest();
     const owner = policy.owner(input.context, input.assetId);
@@ -159,38 +167,58 @@ export class UploadSessionService implements UploadSessionServicePort {
         publishedKey: found.intent.publishedKey,
       });
 
-      const lease = policy.reserveVerification();
+      const verificationPort = this.verification;
+      const lease = verificationPort?.reserveVerification();
       try {
-        const stored = await this.storage.inspectObject(
-          {
-            environment: found.intent.environment,
-            stagingKey: found.intent.stagingKey,
-            byteSize: found.intent.byteSize,
-          },
-          signal,
-        );
-        if (stored === undefined) throw policy.notFound();
-        const refusal = this.invalidStoredObject(stored, found.intent);
-        const verification =
-          refusal === undefined
-            ? await policy.verify({
-                contentType: stored.contentType ?? found.intent.contentType,
-                bytes: stored.bytes,
-                signal,
-                lease,
-              })
-            : undefined;
-        const bytes =
-          verification?.kind === 'sanitized' ? verification.bytes : undefined;
-        if (refusal !== undefined || bytes === undefined) {
-          const cleaned = await this.deleteRefused(found.intent, signal);
-          await this.repository.rejectIntent(owner, this.now(), cleaned);
-          throw (
-            refusal ??
-            (verification?.kind === 'too_large'
-              ? policy.payloadTooLarge()
-              : policy.invalidRequest())
+        let stored;
+        try {
+          stored = await this.storage.inspectObject(
+            {
+              environment: found.intent.environment,
+              stagingKey: found.intent.stagingKey,
+              contentType: found.intent.contentType,
+              byteSize: found.intent.byteSize,
+            },
+            signal,
           );
+        } catch (error) {
+          if (error instanceof UploadSessionVerificationRefusal) {
+            const cleaned = await this.deleteRefused(found.intent, signal);
+            await this.repository.rejectIntent(owner, this.now(), cleaned);
+            throw error.refusal;
+          }
+          throw error;
+        }
+        if (stored === undefined) throw policy.notFound();
+        let bytes = stored.bytes;
+        if (verificationPort !== undefined && lease !== undefined) {
+          const refusal = verificationPort.invalidStoredObject?.(
+            stored,
+            found.intent,
+          );
+          const verification =
+            refusal === undefined
+              ? await verificationPort.verify({
+                  contentType: stored.contentType ?? found.intent.contentType,
+                  bytes: stored.bytes,
+                  signal,
+                  lease,
+                })
+              : undefined;
+          bytes =
+            verification?.kind === 'sanitized'
+              ? verification.bytes
+              : stored.bytes;
+          if (refusal !== undefined || verification?.kind !== 'sanitized') {
+            const cleaned = await this.deleteRefused(found.intent, signal);
+            await this.repository.rejectIntent(owner, this.now(), cleaned);
+            throw (
+              refusal ??
+              (verification?.kind === 'too_large'
+                ? policy.payloadTooLarge()
+                : policy.invalidRequest())
+            );
+          }
         }
 
         if (signal.aborted) throw policy.storageUnavailable();
@@ -235,7 +263,7 @@ export class UploadSessionService implements UploadSessionServicePort {
           throw error;
         }
 
-        let asset: PublishedUploadSession | 'revoked' | undefined;
+        let asset: P | 'revoked' | undefined;
         try {
           asset = await this.repository.markPublished({
             owner,
@@ -267,45 +295,18 @@ export class UploadSessionService implements UploadSessionServicePort {
         await this.deleteStaging(found.intent, signal);
         return asset;
       } finally {
-        lease.release();
+        lease?.release();
       }
     });
   }
 
-  private invalidStoredObject(
-    stored: {
-      readonly contentType: string | undefined;
-      readonly byteSize: number | undefined;
-      readonly bytes: Uint8Array;
-    },
-    intent: UploadSessionIntent,
-  ): ReturnType<UploadSessionPolicy['invalidRequest']> | undefined {
-    if (this.policy.invalidStoredObject !== undefined) {
-      return this.policy.invalidStoredObject(stored, intent);
-    }
-    if (
-      stored.byteSize !== undefined &&
-      stored.byteSize > this.policy.maxBytes
-    ) {
-      return this.policy.payloadTooLarge();
-    }
-    if (
-      stored.byteSize !== intent.byteSize ||
-      stored.contentType !== intent.contentType ||
-      stored.bytes.byteLength !== stored.byteSize
-    ) {
-      return this.policy.invalidRequest();
-    }
-    return undefined;
-  }
-
   private async deleteRefused(
-    intent: UploadSessionIntent,
+    intent: UploadSessionIntent<C, E>,
     signal: AbortSignal,
   ): Promise<boolean> {
-    if (this.policy.deleteOnRefusal !== undefined) {
+    if (this.storage.deleteRefusedObject !== undefined) {
       try {
-        return await this.policy.deleteOnRefusal(intent, signal);
+        return await this.storage.deleteRefusedObject(intent, signal);
       } catch {
         return false;
       }
@@ -319,7 +320,7 @@ export class UploadSessionService implements UploadSessionServicePort {
   }
 
   private async deleteStaging(
-    intent: UploadSessionIntent,
+    intent: UploadSessionIntent<C, E>,
     signal?: AbortSignal,
   ): Promise<void> {
     try {
@@ -336,7 +337,7 @@ export class UploadSessionService implements UploadSessionServicePort {
   }
 
   private async releaseAfterFailedMark(
-    owner: UploadSessionOwner,
+    owner: UploadSessionOwner<E>,
     publicationStartedAt: Date,
   ): Promise<void> {
     try {

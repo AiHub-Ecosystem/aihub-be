@@ -25,7 +25,10 @@ import {
   UploadSessionSweep,
 } from '@/modules/uploads/public';
 import { UploadsModule } from '@/modules/uploads/uploads.module';
-import { writingChartUploadSessionPolicy } from './chart-uploads/application/writing-chart-upload-session.policy';
+import {
+  writingChartUploadSessionPolicy,
+  writingChartUploadVerification,
+} from './chart-uploads/application/writing-chart-upload-session.policy';
 import { WRITING_CHART_ORPHAN_GRACE_MS } from './chart-uploads/application/writing-chart-upload.policy';
 import {
   WRITING_CHART_UPLOAD_CLOCK,
@@ -37,6 +40,11 @@ import {
 } from './chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from './chart-uploads/application/writing-chart-upload.service';
 import { WritingChartUploadSweep } from './chart-uploads/application/writing-chart-upload.sweep';
+import {
+  type WritingChartAsset,
+  type WritingChartContentType,
+  type WritingChartEnvironment,
+} from './chart-uploads/domain/writing-chart-upload';
 import { PostgresWritingChartUploadRepository } from './chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { S3WritingChartUploadStorage } from './chart-uploads/infrastructure/s3-writing-chart-upload.storage';
 import { WritingChartUploadController } from './chart-uploads/presentation/writing-chart-upload.controller';
@@ -116,6 +124,7 @@ import { WritingV2GradingController } from './grading/presentation/writing-v2-gr
           writingChartUploadSessionPolicy(),
           prefixedIdGenerator('chart_'),
           clock,
+          writingChartUploadVerification(),
         ),
     },
     {
@@ -132,8 +141,13 @@ import { WritingV2GradingController } from './grading/presentation/writing-v2-gr
     {
       provide: WRITING_CHART_UPLOAD_SERVICE,
       inject: [UPLOAD_SESSION_SERVICE],
-      useFactory: (core: UploadSessionServicePort) =>
-        new WritingChartUploadService(core),
+      useFactory: (
+        core: UploadSessionServicePort<
+          WritingChartContentType,
+          WritingChartEnvironment,
+          WritingChartAsset
+        >,
+      ) => new WritingChartUploadService(core),
     },
     {
       provide: WritingChartUploadSweep,

@@ -1,4 +1,9 @@
 import type { UploadSessionServicePort } from '@/modules/uploads/public';
+import type {
+  WritingChartAsset,
+  WritingChartContentType,
+  WritingChartEnvironment,
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import { WritingChartUploadService } from './writing-chart-upload.service';
 
 const NOW = new Date('2026-11-17T00:00:00.000Z');
@@ -6,7 +11,7 @@ const ASSET = 'chart_01J00000000000000000000001';
 
 const grant = {
   assetId: ASSET,
-  contentType: 'image/png',
+  contentType: 'image/png' as const,
   byteSize: 12,
   uploadUrl: 'private',
   uploadFields: {},
@@ -21,7 +26,7 @@ const asset = {
   environment: 'production' as const,
   stagingKey: `writing-charts/${ASSET}/staging`,
   publishedKey: `writing-charts/${ASSET}/published`,
-  contentType: 'image/png',
+  contentType: 'image/png' as const,
   byteSize: 12,
   createdAt: NOW,
   expiresAt: new Date(NOW.getTime() + 3_600_000),
@@ -47,7 +52,11 @@ function setup() {
   const create = jest.fn(async () => grant);
   const refresh = jest.fn(async () => grant);
   const complete = jest.fn(async () => asset);
-  const core: UploadSessionServicePort = { create, refresh, complete };
+  const core: UploadSessionServicePort<
+    WritingChartContentType,
+    WritingChartEnvironment,
+    WritingChartAsset
+  > = { create, refresh, complete };
   return {
     create,
     refresh,

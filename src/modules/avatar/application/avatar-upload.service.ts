@@ -23,6 +23,7 @@ import {
 } from './avatar-upload-session.adapters';
 import {
   avatarUploadSessionPolicy,
+  avatarUploadSessionVerification,
   storageUnavailable,
 } from './avatar-upload-session.policy';
 import { AVATAR_COMPLETION_DEADLINE_MS } from './avatar-upload.policy';
@@ -48,14 +49,22 @@ export interface CompletedAvatar extends PublishedAvatar {
 
 /** Maps Avatar's vocabulary onto the shared core; read/remove stay local. */
 export class AvatarUploadService {
-  private readonly core: UploadSessionServicePort;
+  private readonly core: UploadSessionServicePort<
+    AvatarContentType,
+    'production'
+  >;
   private readonly now: () => Date;
 
   constructor(
     private readonly avatars: AvatarRepositoryPort,
     private readonly storage: AvatarStoragePort,
-    coreOrIdMinter: UploadSessionServicePort | IdMinter,
-    nowOrCore: (() => Date) | UploadSessionServicePort = () => new Date(),
+    coreOrIdMinter:
+      | UploadSessionServicePort<AvatarContentType, 'production'>
+      | IdMinter,
+    nowOrCore:
+      | (() => Date)
+      | UploadSessionServicePort<AvatarContentType, 'production'> = () =>
+      new Date(),
   ) {
     if (typeof coreOrIdMinter !== 'function') {
       this.core = coreOrIdMinter;
@@ -65,12 +74,13 @@ export class AvatarUploadService {
     const now = nowOrCore as () => Date;
     const policy = avatarUploadSessionPolicy();
     const storageAdapter = new AvatarCoreStorageAdapter(storage, now);
-    this.core = new UploadSessionService(
+    this.core = new UploadSessionService<AvatarContentType, 'production'>(
       new AvatarCoreRepositoryAdapter(avatars, now, storageAdapter),
       storageAdapter,
       policy,
       coreOrIdMinter,
       now,
+      avatarUploadSessionVerification(),
     );
     this.now = now;
   }
@@ -112,7 +122,7 @@ export class AvatarUploadService {
     return {
       assetId: grant.assetId,
       uploadUrl: grant.uploadUrl,
-      contentType: grant.contentType as AvatarContentType,
+      contentType: grant.contentType,
       byteSize: grant.byteSize,
       expiresAt: grant.uploadUrlExpiresAt,
     };
@@ -165,7 +175,7 @@ export class AvatarUploadService {
       assetId: published.assetId,
       userId: input.userId,
       objectKey: avatarObjectKey(input.userId, published.assetId),
-      contentType: published.contentType as AvatarContentType,
+      contentType: published.contentType,
       byteSize: published.byteSize,
       acceptedAt: published.publishedAt,
     };

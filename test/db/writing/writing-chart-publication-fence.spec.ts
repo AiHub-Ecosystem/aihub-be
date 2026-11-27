@@ -4,9 +4,17 @@ import { ulid } from 'ulid';
 import { runWritingChartRevokeCommand } from '@/cli/writing-chart-revoke';
 import { createRequestContext } from '@/common/request-context/request-context.factory';
 import { UploadSessionService } from '@/modules/uploads/public';
-import { writingChartUploadSessionPolicy } from '@/modules/writing/chart-uploads/application/writing-chart-upload-session.policy';
+import {
+  writingChartUploadSessionPolicy,
+  writingChartUploadVerification,
+} from '@/modules/writing/chart-uploads/application/writing-chart-upload-session.policy';
 import type { WritingChartUploadRepositoryPort } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
 import { WritingChartUploadService } from '@/modules/writing/chart-uploads/application/writing-chart-upload.service';
+import type {
+  WritingChartAsset,
+  WritingChartContentType,
+  WritingChartEnvironment,
+} from '@/modules/writing/chart-uploads/domain/writing-chart-upload';
 import { PostgresWritingChartRevocationAuditRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-revocation-audit.repository';
 import { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-uploads/infrastructure/postgres-writing-chart-upload.repository';
 import { createTestPool, testDatabaseUrl } from '../shared/database';
@@ -87,11 +95,17 @@ function context(organizationId = ORGANIZATION_ID) {
 /** An open upload and a service bound to the shared bucket. */
 async function openUpload(bucket: Bucket) {
   const service = new WritingChartUploadService(
-    new UploadSessionService(
+    new UploadSessionService<
+      WritingChartContentType,
+      WritingChartEnvironment,
+      WritingChartAsset
+    >(
       new PostgresWritingChartUploadRepository(client),
       bucket.storage(),
       writingChartUploadSessionPolicy(),
       (now) => `chart_${ulid(now.getTime())}`,
+      undefined,
+      writingChartUploadVerification(),
     ),
   );
   const { assetId } = await service.create({
@@ -350,11 +364,17 @@ describe('Writing chart publication after an operator revocation', () => {
       }
     }
     const service = new WritingChartUploadService(
-      new UploadSessionService(
+      new UploadSessionService<
+        WritingChartContentType,
+        WritingChartEnvironment,
+        WritingChartAsset
+      >(
         new FailedMarkRepository(client),
         bucket.storage(),
         writingChartUploadSessionPolicy(),
         (now) => `chart_${ulid(now.getTime())}`,
+        undefined,
+        writingChartUploadVerification(),
       ),
     );
     const completion = service.complete({ context: context(), assetId });
@@ -373,11 +393,17 @@ describe('Writing chart publication after an operator revocation', () => {
     expect(bucket.published.has(publishedKey)).toBe(false);
     expect(await uploadStatus(assetId)).toBe('rejected');
     const restarted = new WritingChartUploadService(
-      new UploadSessionService(
+      new UploadSessionService<
+        WritingChartContentType,
+        WritingChartEnvironment,
+        WritingChartAsset
+      >(
         new PostgresWritingChartUploadRepository(client),
         bucket.storage(),
         writingChartUploadSessionPolicy(),
         (now) => `chart_${ulid(now.getTime())}`,
+        undefined,
+        writingChartUploadVerification(),
       ),
     );
     await expect(
