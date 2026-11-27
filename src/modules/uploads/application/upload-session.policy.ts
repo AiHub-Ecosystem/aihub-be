@@ -27,6 +27,7 @@ export interface UploadSessionPolicy<
   stagingKey(owner: UploadSessionOwner<E>): string;
   publishedKey(owner: UploadSessionOwner<E>): string;
   completionSignal?(signal: AbortSignal): AbortSignal;
+  readonly waitForPublication?: true;
   invalidRequest(): AppError;
   payloadTooLarge(): AppError;
   rateLimited(): AppError;

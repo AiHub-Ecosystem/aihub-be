@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import type { AppError } from '@/common/errors/app-error';
 import { invalidRequest } from '@/common/errors/invalid-request';
 import { storageUnavailable } from '@/common/errors/upload-errors';
 import { recordRejected } from '@/common/observability/metrics/rejected-metric';
+import { SPEAKING_AUDIO_COMPLETION_DEADLINE_MS } from '@/modules/speaking/application/audio/speaking-audio-completion-timeouts';
 import {
   SPEAKING_AUDIO_RETENTION_MS,
   type SpeakingAudioAsset,
@@ -18,8 +21,6 @@ import {
   type UploadSessionOwner as OwnerBase,
   type PublishedUploadSession as PubBase,
   type UploadSessionRepositoryPort,
-  type UploadSessionStoragePort,
-  UploadSessionVerificationRefusal,
 } from '@/modules/uploads/public';
 
 type CorePublished = PubBase<
@@ -37,12 +38,8 @@ type CoreLookup = LookupBase<
 >;
 type CoreOwner = OwnerBase<SpeakingAudioEnvironment>;
 import { decideSpeakingAudioCeiling } from './speaking-audio-org-ceiling.policy';
-import {
-  speakingFinalRefusal,
-  speakingStagingRefusal,
-} from './speaking-audio-upload-session.refusal';
 import type {
-  SpeakingAudioAssetStoragePort,
+  SpeakingAudioCleanupCandidate,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
 } from './speaking-audio-upload.port';
@@ -127,6 +124,7 @@ export class SpeakingAudioCoreRepositoryAdapter
       SpeakingAudioEnvironment
     >
 {
+  // ponytail: the bridge completes its legacy transaction on the starting instance until activation and drain (#1732).
   private readonly pending = new Map<
     string,
     {
@@ -141,8 +139,6 @@ export class SpeakingAudioCoreRepositoryAdapter
       >;
     }
   >();
-  private readonly orphanBefore = new Map<string, Date>();
-  private readonly cleanupRows = new Map<string, SpeakingAudioUploadIntent>();
 
   constructor(
     private readonly repository: SpeakingAudioUploadRepositoryPort,
@@ -178,7 +174,7 @@ export class SpeakingAudioCoreRepositoryAdapter
   ): Promise<void> {
     const speaking = speakingOwner(owner);
     const found = await this.repository.findUpload(speaking);
-    if (found.kind === 'intent') {
+    if (found.kind === 'intent' && found.intent.status === 'open') {
       await this.repository.completeIntent({
         owner: speaking,
         now: this.now,
@@ -188,16 +184,61 @@ export class SpeakingAudioCoreRepositoryAdapter
     if (cleaned) await this.repository.removeRejectedIntent(speaking);
   }
 
+  async claimRefusal(
+    owner: CoreOwner,
+    reservationId?: string,
+  ): Promise<boolean | undefined> {
+    return this.repository.claimRefusal?.(speakingOwner(owner), reservationId);
+  }
+
   async beginPublication(input: {
     readonly owner: CoreOwner;
     readonly now: Date;
-  }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'> {
-    const found = await this.repository.findUpload(speakingOwner(input.owner));
+  }): Promise<
+    | 'started'
+    | {
+        readonly kind: 'started';
+        readonly reservationId: string;
+        readonly publishedKey: string;
+      }
+    | 'published'
+    | 'in_progress'
+    | 'missing'
+  > {
+    const owner = speakingOwner(input.owner);
+    while (true) {
+      const result =
+        (await this.repository.beginPublication?.({
+          owner,
+          now: input.now,
+          reservationTtlMs: SPEAKING_AUDIO_COMPLETION_DEADLINE_MS,
+        })) ?? 'disabled';
+      if (result === 'disabled') {
+        const legacy = await this.beginLegacyPublication(owner, input.now);
+        if (legacy === 'retry') continue;
+        return legacy;
+      }
+      if (typeof result === 'object') {
+        return {
+          kind: 'started',
+          reservationId: result.reservationId,
+          publishedKey: result.objectKey,
+        };
+      }
+      return result;
+    }
+  }
+
+  private async beginLegacyPublication(
+    owner: SpeakingAudioUploadOwner,
+    now: Date,
+  ): Promise<'started' | 'published' | 'missing' | 'retry'> {
+    const found = await this.repository.findUpload(owner);
     if (found.kind === 'asset') return 'published';
     if (
       found.kind !== 'intent' ||
       found.intent.status !== 'open' ||
-      found.intent.expiresAt.getTime() <= input.now.getTime()
+      found.intent.expiresAt.getTime() <= now.getTime()
     ) {
       return 'missing';
     }
@@ -212,17 +253,41 @@ export class SpeakingAudioCoreRepositoryAdapter
     >((resolve) => {
       decide = resolve;
     });
+    let announceStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      announceStarted = resolve;
+    });
     const result = this.repository.completeIntent({
-      owner: speakingOwner(input.owner),
-      now: () => input.now,
-      prepare: async () => await gate,
+      owner,
+      now: () => now,
+      legacyPublication: true,
+      prepare: async () => {
+        announceStarted();
+        return await gate;
+      },
     });
-    this.pending.set(found.intent.assetId, {
-      intent: found.intent,
-      decide,
-      result,
-    });
-    return 'started';
+    void result.catch(() => undefined);
+    const outcome = await Promise.race([
+      started.then(() => ({ kind: 'started' as const })),
+      result.then((value) => ({ kind: 'settled' as const, value })),
+    ]);
+    if (outcome.kind === 'started') {
+      this.pending.set(found.intent.assetId, {
+        intent: found.intent,
+        decide,
+        result,
+      });
+      return 'started';
+    }
+    if (outcome.value.kind === 'protocol_enabled') return 'retry';
+    if (
+      outcome.value.kind === 'already_completed' ||
+      outcome.value.kind === 'created'
+    ) {
+      return 'published';
+    }
+    if (outcome.value.kind === 'refused') throw outcome.value.refusal;
+    return 'missing';
   }
 
   async markPublished(input: {
@@ -230,7 +295,22 @@ export class SpeakingAudioCoreRepositoryAdapter
     readonly now: Date;
     readonly publicationStartedAt: Date;
     readonly imageUrl: string;
+    readonly reservationId?: string;
   }): Promise<CorePublished | 'revoked' | undefined> {
+    if (input.reservationId !== undefined) {
+      if (this.repository.finalizePublication === undefined) return undefined;
+      const result = await this.repository.finalizePublication({
+        owner: speakingOwner(input.owner),
+        reservationId: input.reservationId,
+        acceptedAt: input.now,
+        retentionExpiresAt: new Date(
+          input.now.getTime() + SPEAKING_AUDIO_RETENTION_MS,
+        ),
+      });
+      return result === undefined
+        ? undefined
+        : coreAsset(result.asset, result.created);
+    }
     const pending = this.pending.get(input.owner.assetId);
     if (pending === undefined) return undefined;
     const { intent } = pending;
@@ -259,7 +339,20 @@ export class SpeakingAudioCoreRepositoryAdapter
     return undefined;
   }
 
-  async releasePublication(owner: CoreOwner): Promise<void> {
+  async releasePublication(
+    owner: CoreOwner,
+    _publicationStartedAt: Date,
+    reservationId?: string,
+  ): Promise<void> {
+    if (reservationId !== undefined) {
+      if (this.repository.releasePublication !== undefined) {
+        await this.repository.releasePublication({
+          owner: speakingOwner(owner),
+          reservationId,
+        });
+      }
+      return;
+    }
     const pending = this.pending.get(owner.assetId);
     if (pending !== undefined) {
       pending.decide({ kind: 'refused', refusal: invalidRequest() });
@@ -274,207 +367,156 @@ export class SpeakingAudioCoreRepositoryAdapter
     readonly limit: number;
     readonly after?: { readonly createdAt: Date; readonly assetId: string };
   }): Promise<readonly CoreCandidate[]> {
-    const rows = await this.repository.listCleanupCandidates({
-      expiredBefore: input.orphanBefore,
-      limit: input.limit,
-      ...(input.after === undefined ? {} : { after: input.after }),
+    const rows = await (this.repository.listDurableCleanupCandidates ===
+    undefined
+      ? this.repository.listCleanupCandidates({
+          expiredBefore: input.orphanBefore,
+          limit: input.limit,
+          ...(input.after === undefined ? {} : { after: input.after }),
+        })
+      : this.repository.listDurableCleanupCandidates({
+          expiredBefore: input.orphanBefore,
+          limit: input.limit,
+          ...(input.after === undefined ? {} : { after: input.after }),
+        }));
+    return rows.map((row) => ({
+      kind: 'kind' in row ? row.kind : 'intent',
+      assetId: row.assetId,
+      candidateId: 'candidateId' in row ? row.candidateId : row.assetId,
+      organizationId: row.organizationId,
+      endUserId: row.endUserId,
+      environment: row.environment,
+      ...(('kind' in row ? row.kind : 'intent') === 'intent'
+        ? {
+            stagingKey: speakingAudioStagingObjectKey(
+              row.organizationId,
+              row.assetId,
+            ),
+          }
+        : {}),
+      publishedKey: row.objectKey,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      status: row.status,
+      ...(row.contentType === undefined
+        ? {}
+        : { contentType: row.contentType }),
+      ...(row.byteSize === undefined ? {} : { byteSize: row.byteSize }),
+      orphanBefore: input.orphanBefore,
+      ...(!('reservationId' in row) || row.reservationId === undefined
+        ? {}
+        : { reservationId: row.reservationId }),
+      ...(!('lastCleanedAt' in row) || row.lastCleanedAt === undefined
+        ? {}
+        : { lastCleanedAt: row.lastCleanedAt }),
+    }));
+  }
+
+  async claimCleanupCandidate(
+    candidate: CoreCandidate,
+    _now: Date,
+  ): Promise<CoreCandidate | undefined> {
+    const row = speakingCleanupCandidate(candidate);
+    if (row === undefined || candidate.orphanBefore === undefined)
+      return undefined;
+    if (this.repository.listDurableCleanupCandidates === undefined) {
+      return candidate;
+    }
+    if (this.repository.claimDurableCleanupCandidate === undefined)
+      return undefined;
+    const claimId = randomUUID();
+    const claimed = await this.repository.claimDurableCleanupCandidate({
+      candidate: row,
+      orphanBefore: candidate.orphanBefore,
+      claimId,
+      leaseMs: 60_000,
     });
-    return rows.map((row) => {
-      this.orphanBefore.set(row.assetId, input.orphanBefore);
-      this.cleanupRows.set(row.assetId, row);
-      return {
-        kind: 'intent',
-        assetId: row.assetId,
-        environment: row.environment,
-        stagingKey: speakingAudioStagingObjectKey(
-          row.organizationId,
-          row.assetId,
-        ),
-        publishedKey: row.objectKey,
-        createdAt: row.createdAt,
-      };
-    });
+    return claimed ? { ...candidate, claimId } : undefined;
   }
 
   async removeCleanupCandidate(candidate: CoreCandidate): Promise<boolean> {
-    const row = this.cleanupRows.get(candidate.assetId);
-    if (row === undefined) return false;
-    this.cleanupRows.delete(candidate.assetId);
-    return this.repository.removeCleanupCandidate({
-      intent: row,
-      expiredBefore: this.orphanBefore.get(candidate.assetId) ?? new Date(0),
-    });
-  }
-}
-
-export class SpeakingAudioCoreStorageAdapter
-  implements
-    UploadSessionStoragePort<SpeakingAudioContentType, SpeakingAudioEnvironment>
-{
-  constructor(private readonly storage: SpeakingAudioAssetStoragePort) {}
-
-  async createUploadUrl(input: {
-    readonly environment: SpeakingAudioEnvironment;
-    readonly stagingKey: string;
-    readonly contentType: SpeakingAudioContentType;
-    readonly byteSize: number;
-  }): Promise<{
-    readonly url: string;
-    readonly fields: Readonly<Record<string, string>>;
-    readonly expiresAt: Date;
-  }> {
-    const signed = await this.storage.createUploadUrl({
-      environment: input.environment,
-      objectKey: input.stagingKey,
-      contentType: input.contentType,
-      byteSize: input.byteSize,
-    });
-    return { ...signed, fields: {} };
-  }
-
-  async inspectObject(
-    input: {
-      readonly environment: SpeakingAudioEnvironment;
-      readonly stagingKey: string;
-      readonly contentType?: SpeakingAudioContentType;
-      readonly byteSize: number;
-    },
-    signal?: AbortSignal,
-  ): Promise<
-    | {
-        readonly contentType: SpeakingAudioContentType | undefined;
-        readonly byteSize: number | undefined;
-        readonly bytes: Uint8Array;
-      }
-    | undefined
-  > {
-    const described = await this.storage.describeObject(
-      {
-        environment: input.environment,
-        objectKey: input.stagingKey,
-      },
-      signal,
-    );
-    if (described === undefined) return undefined;
-    const refusal = speakingStagingRefusal(described, {
-      contentType: input.contentType ?? '',
-      byteSize: input.byteSize,
-    });
-    if (refusal !== undefined)
-      throw new UploadSessionVerificationRefusal(refusal);
-    return {
-      contentType: isSpeakingAudioContentType(described.contentType)
-        ? described.contentType
-        : undefined,
-      byteSize: described.byteSize,
-      bytes: new Uint8Array(),
-    };
-  }
-
-  async publishObject(
-    input: {
-      readonly environment: SpeakingAudioEnvironment;
-      readonly stagingKey: string;
-      readonly publishedKey: string;
-      readonly contentType: SpeakingAudioContentType;
-      readonly bytes: Uint8Array;
-      readonly byteSize?: number;
-    },
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const environment = input.environment;
-    await this.storage.copyObject(
-      {
-        environment,
-        sourceObjectKey: input.stagingKey,
-        destinationObjectKey: input.publishedKey,
-      },
-      signal,
-    );
-    const final = await this.storage.describeObject(
-      { environment, objectKey: input.publishedKey },
-      signal,
-    );
-    const refusal = speakingFinalRefusal(
-      {
-        contentType: final?.contentType,
-        byteSize: final?.byteSize,
-      },
-      {
-        contentType: input.contentType,
-        byteSize: input.byteSize ?? 0,
-      },
-    );
-    if (refusal !== undefined)
-      throw new UploadSessionVerificationRefusal(refusal);
-  }
-
-  async deleteRefusedObject(
-    intent: CoreIntent,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    if (signal.aborted) return true;
-    try {
-      const environment = speakingOwner(intent).environment;
-      await this.storage.deleteObject(
-        { environment, objectKey: intent.publishedKey },
-        signal,
-      );
-      await this.storage.deleteObject(
-        { environment, objectKey: intent.stagingKey },
-        signal,
-      );
-      return true;
-    } catch {
+    const row = speakingCleanupCandidate(candidate);
+    if (row === undefined || candidate.orphanBefore === undefined) {
       return false;
     }
-  }
-
-  publicUrl(): string {
-    return '';
-  }
-
-  async deleteStagingObject(
-    input: {
-      readonly environment: SpeakingAudioEnvironment;
-      readonly stagingKey: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (signal === undefined)
-      await this.storage.deleteObject({
-        environment: input.environment,
-        objectKey: input.stagingKey,
+    if (this.repository.removeDurableCleanupCandidate !== undefined) {
+      if (candidate.claimId === undefined) return false;
+      return this.repository.removeDurableCleanupCandidate({
+        candidate: row,
+        expiredBefore: candidate.orphanBefore,
+        claimId: candidate.claimId,
       });
-    else
-      await this.storage.deleteObject(
-        {
-          environment: input.environment,
-          objectKey: input.stagingKey,
-        },
-        signal,
-      );
-  }
-
-  async deletePublishedObject(
-    input: {
-      readonly environment: SpeakingAudioEnvironment;
-      readonly publishedKey: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (signal === undefined)
-      await this.storage.deleteObject({
-        environment: input.environment,
-        objectKey: input.publishedKey,
-      });
-    else
-      await this.storage.deleteObject(
-        {
-          environment: input.environment,
-          objectKey: input.publishedKey,
-        },
-        signal,
-      );
+    }
+    const intent = speakingCleanupIntent(candidate);
+    return intent === undefined
+      ? false
+      : this.repository.removeCleanupCandidate({
+          intent,
+          expiredBefore: candidate.orphanBefore,
+        });
   }
 }
+
+function speakingCleanupIntent(
+  candidate: CoreCandidate,
+): SpeakingAudioUploadIntent | undefined {
+  if (
+    candidate.kind !== 'intent' ||
+    candidate.organizationId === undefined ||
+    candidate.endUserId === undefined ||
+    candidate.contentType === undefined ||
+    !isSpeakingAudioContentType(candidate.contentType) ||
+    candidate.byteSize === undefined ||
+    candidate.expiresAt === undefined ||
+    (candidate.status !== 'open' && candidate.status !== 'rejected')
+  ) {
+    return undefined;
+  }
+  return {
+    assetId: candidate.assetId,
+    organizationId: candidate.organizationId,
+    endUserId: candidate.endUserId,
+    environment: candidate.environment,
+    objectKey: candidate.publishedKey,
+    contentType: candidate.contentType,
+    byteSize: candidate.byteSize,
+    createdAt: candidate.createdAt,
+    expiresAt: candidate.expiresAt,
+    status: candidate.status,
+  };
+}
+
+function speakingCleanupCandidate(
+  candidate: CoreCandidate,
+): SpeakingAudioCleanupCandidate | undefined {
+  if (
+    (candidate.kind !== 'intent' && candidate.kind !== 'reservation') ||
+    candidate.organizationId === undefined ||
+    candidate.endUserId === undefined ||
+    candidate.status === undefined ||
+    candidate.expiresAt === undefined ||
+    (candidate.kind === 'reservation' && candidate.reservationId === undefined)
+  ) {
+    return undefined;
+  }
+  return {
+    kind: candidate.kind,
+    candidateId: candidate.candidateId ?? candidate.assetId,
+    assetId: candidate.assetId,
+    organizationId: candidate.organizationId,
+    endUserId: candidate.endUserId,
+    environment: candidate.environment,
+    objectKey: candidate.publishedKey,
+    createdAt: candidate.createdAt,
+    expiresAt: candidate.expiresAt,
+    status: candidate.status,
+    ...(candidate.reservationId === undefined
+      ? {}
+      : { reservationId: candidate.reservationId }),
+    ...(candidate.lastCleanedAt === undefined
+      ? {}
+      : { lastCleanedAt: candidate.lastCleanedAt }),
+  };
+}
+
+export { SpeakingAudioCoreStorageAdapter } from './speaking-audio-upload-storage-adapter';

@@ -1,0 +1,5 @@
+ALTER TABLE speaking_audio_upload_intents
+  VALIDATE CONSTRAINT speaking_audio_upload_intents_cleanup_claim_check;
+
+ALTER TABLE speaking_audio_assets
+  VALIDATE CONSTRAINT speaking_audio_assets_object_key_check;

@@ -1,6 +1,6 @@
 # ADR-0070: Speaking uploads use a verified, expiring intent
 
-- Status: Accepted
+- Status: Accepted. The published key and completion transaction are amended by [ADR-0198](0198-speaking-audio-publication-and-cleanup-coordinate-through-postgres.md).
 - Date: 2026-10-03
 - Related issues: [#207](https://github.com/AiHub-Ecosystem/aihub-be/issues/207), [#209](https://github.com/AiHub-Ecosystem/aihub-be/issues/209)
 - Related: [ADR-0065](0065-aihub-owns-audio-asset-catalog-and-playback-urls.md), [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0196](0196-one-upload-session-core-serves-avatar-speaking-and-writing.md)

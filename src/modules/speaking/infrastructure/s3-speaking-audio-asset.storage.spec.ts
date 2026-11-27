@@ -104,33 +104,42 @@ describe('S3SpeakingAudioAssetStorage', () => {
     });
   });
 
-  it('reads bounded audio from the environment bucket into the v2 adapter shape', async () => {
-    const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({
-      ContentLength: 11,
-      Body: Readable.from([Buffer.from('audio bytes')]),
-    });
-    const adapter = storage(send);
+  it.each([
+    KEY,
+    KEY.replace(
+      '/original',
+      '/publication/pub_06f1cceb-039d-4619-b577-a7f143b39eb6',
+    ),
+  ])(
+    'reads bounded audio from the environment bucket for %s',
+    async (objectKey) => {
+      const send = jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue({
+        ContentLength: 11,
+        Body: Readable.from([Buffer.from('audio bytes')]),
+      });
+      const adapter = storage(send);
 
-    const result = await adapter.readObject({
-      environment: 'sandbox',
-      objectKey: KEY,
-      contentType: 'audio/wav',
-    });
+      const result = await adapter.readObject({
+        environment: 'sandbox',
+        objectKey,
+        contentType: 'audio/wav',
+      });
 
-    await expect(result.blob.arrayBuffer()).resolves.toEqual(
-      Uint8Array.from(Buffer.from('audio bytes')).buffer,
-    );
-    expect(result).toMatchObject({
-      filename: 'audio.wav',
-      contentType: 'audio/wav',
-    });
-    expect(send.mock.calls[0]?.[0]).toMatchObject({
-      input: {
-        Bucket: 'aihub-sandbox-speaking-recordings',
-        Key: KEY,
-      },
-    });
-  });
+      await expect(result.blob.arrayBuffer()).resolves.toEqual(
+        Uint8Array.from(Buffer.from('audio bytes')).buffer,
+      );
+      expect(result).toMatchObject({
+        filename: 'audio.wav',
+        contentType: 'audio/wav',
+      });
+      expect(send.mock.calls[0]?.[0]).toMatchObject({
+        input: {
+          Bucket: 'aihub-sandbox-speaking-recordings',
+          Key: objectKey,
+        },
+      });
+    },
+  );
 
   it('maps a missing audio object to NOT_FOUND without exposing its key', async () => {
     const missing = Object.assign(new Error('missing'), {

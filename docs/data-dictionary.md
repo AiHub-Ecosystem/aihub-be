@@ -4,51 +4,53 @@ Generated from `prisma/schema.prisma`. Do not edit by hand; run `bun run generat
 
 ## Tables
 
-| Table (model)                      | Owner       | Columns |
-| ---------------------------------- | ----------- | ------- |
-| ApiKey                             | identity    | 19      |
-| OperatorRedisFailure               | identity    | 2       |
-| NotificationEvent                  | identity    | 8       |
-| AuthIdentity                       | auth        | 8       |
-| EmailDeliveryRequest               | auth        | 17      |
-| AuthEmailRecipientRateLimit        | auth        | 5       |
-| AuthRegistrationAttemptCounter     | auth        | 5       |
-| EmailDailySendBudget               | auth        | 5       |
-| EmailVerificationToken             | auth        | 12      |
-| IdempotencyRecord                  | idempotency | 12      |
-| OrganizationAuditEvent             | identity    | 14      |
-| OrganizationIdentityConfig         | identity    | 13      |
-| OrganizationInvitation             | identity    | 11      |
-| OrganizationMembership             | identity    | 8       |
-| Organization                       | identity    | 21      |
-| PasswordResetToken                 | auth        | 7       |
-| RefreshToken                       | auth        | 9       |
-| UserAccessTokenRevocation          | auth        | 3       |
-| UserAccountStatusAudit             | auth        | 9       |
-| SandboxDispatchReservation         | gateway     | 6       |
-| SandboxAllowanceDefault            | gateway     | 2       |
-| SandboxAllowanceOverride           | gateway     | 3       |
-| PublicApiMajorUsage                | metering    | 7       |
-| PublicApiMajorUsageCoverage        | metering    | 7       |
-| PublicApiMajorUsageDroppedInterval | metering    | 6       |
-| PublicApiMajorUnattributedUsage    | metering    | 6       |
-| DispatchAttempt                    | metering    | 7       |
-| SpeakingAudioAsset                 | speaking    | 9       |
-| SpeakingGradingJob                 | speaking    | 27      |
-| SpeakingV2ResultOwnership          | speaking    | 7       |
-| SpeakingAudioUploadIntent          | speaking    | 10      |
-| WritingChartUpload                 | writing     | 15      |
-| WritingChartRevocationAudit        | writing     | 10      |
-| UsageRecord                        | metering    | 21      |
-| UserAccount                        | auth        | 24      |
-| UserAvatar                         | avatar      | 7       |
-| UserAvatarUploadGrant              | avatar      | 7       |
-| UserAvatarAudit                    | avatar      | 8       |
-| UserMfaFactor                      | auth        | 8       |
-| UserMfaRecoveryCode                | auth        | 5       |
-| WebSession                         | auth        | 9       |
-| BillingAdjustment                  | metering    | 11      |
-| BillingMonthClosure                | metering    | 10      |
+| Table (model)                       | Owner       | Columns |
+| ----------------------------------- | ----------- | ------- |
+| ApiKey                              | identity    | 19      |
+| OperatorRedisFailure                | identity    | 2       |
+| NotificationEvent                   | identity    | 8       |
+| AuthIdentity                        | auth        | 8       |
+| EmailDeliveryRequest                | auth        | 17      |
+| AuthEmailRecipientRateLimit         | auth        | 5       |
+| AuthRegistrationAttemptCounter      | auth        | 5       |
+| EmailDailySendBudget                | auth        | 5       |
+| EmailVerificationToken              | auth        | 12      |
+| IdempotencyRecord                   | idempotency | 12      |
+| OrganizationAuditEvent              | identity    | 14      |
+| OrganizationIdentityConfig          | identity    | 13      |
+| OrganizationInvitation              | identity    | 11      |
+| OrganizationMembership              | identity    | 8       |
+| Organization                        | identity    | 21      |
+| PasswordResetToken                  | auth        | 7       |
+| RefreshToken                        | auth        | 9       |
+| UserAccessTokenRevocation           | auth        | 3       |
+| UserAccountStatusAudit              | auth        | 9       |
+| SandboxDispatchReservation          | gateway     | 6       |
+| SandboxAllowanceDefault             | gateway     | 2       |
+| SandboxAllowanceOverride            | gateway     | 3       |
+| PublicApiMajorUsage                 | metering    | 7       |
+| PublicApiMajorUsageCoverage         | metering    | 7       |
+| PublicApiMajorUsageDroppedInterval  | metering    | 6       |
+| PublicApiMajorUnattributedUsage     | metering    | 6       |
+| DispatchAttempt                     | metering    | 7       |
+| SpeakingAudioAsset                  | speaking    | 9       |
+| SpeakingAudioPublicationProtocol    | speaking    | 2       |
+| SpeakingAudioPublicationReservation | speaking    | 12      |
+| SpeakingGradingJob                  | speaking    | 27      |
+| SpeakingV2ResultOwnership           | speaking    | 7       |
+| SpeakingAudioUploadIntent           | speaking    | 12      |
+| WritingChartUpload                  | writing     | 15      |
+| WritingChartRevocationAudit         | writing     | 10      |
+| UsageRecord                         | metering    | 21      |
+| UserAccount                         | auth        | 24      |
+| UserAvatar                          | avatar      | 7       |
+| UserAvatarUploadGrant               | avatar      | 7       |
+| UserAvatarAudit                     | avatar      | 8       |
+| UserMfaFactor                       | auth        | 8       |
+| UserMfaRecoveryCode                 | auth        | 5       |
+| WebSession                          | auth        | 9       |
+| BillingAdjustment                   | metering    | 11      |
+| BillingMonthClosure                 | metering    | 10      |
 
 ## ApiKey
 
@@ -487,6 +489,34 @@ Owner: `speaking`
 | acceptedAt         | DateTime | @map("accepted_at") @db.Timestamptz(6)                                  |
 | retentionExpiresAt | DateTime | @map("retention_expires_at") @db.Timestamptz(6)                         |
 
+## SpeakingAudioPublicationProtocol
+
+Owner: `speaking`
+
+| Column      | Type      | Attributes                              |
+| ----------- | --------- | --------------------------------------- |
+| id          | Boolean   | @id @default(true)                      |
+| activatedAt | DateTime? | @map("activated_at") @db.Timestamptz(6) |
+
+## SpeakingAudioPublicationReservation
+
+Owner: `speaking`
+
+| Column                | Type      | Attributes                                                                                |
+| --------------------- | --------- | ----------------------------------------------------------------------------------------- |
+| id                    | String    | @id                                                                                       |
+| assetId               | String    | @map("asset_id")                                                                          |
+| organizationId        | String    | @map("organization_id")                                                                   |
+| endUserId             | String    | @map("end_user_id")                                                                       |
+| environment           | String    |                                                                                           |
+| objectKey             | String    | @unique(map: "speaking_audio_publication_reservations_object_key_key") @map("object_key") |
+| status                | String    | @default("active")                                                                        |
+| createdAt             | DateTime  | @map("created_at") @db.Timestamptz(6)                                                     |
+| expiresAt             | DateTime  | @map("expires_at") @db.Timestamptz(6)                                                     |
+| cleanupClaimId        | String?   | @map("cleanup_claim_id")                                                                  |
+| cleanupClaimExpiresAt | DateTime? | @map("cleanup_claim_expires_at") @db.Timestamptz(6)                                       |
+| lastCleanedAt         | DateTime? | @map("last_cleaned_at") @db.Timestamptz(6)                                                |
+
 ## SpeakingGradingJob
 
 Owner: `speaking`
@@ -539,18 +569,20 @@ Owner: `speaking`
 
 Owner: `speaking`
 
-| Column         | Type     | Attributes                                                                      |
-| -------------- | -------- | ------------------------------------------------------------------------------- |
-| id             | String   | @id                                                                             |
-| organizationId | String   | @map("organization_id")                                                         |
-| endUserId      | String   | @map("end_user_id")                                                             |
-| environment    | String   |                                                                                 |
-| objectKey      | String   | @unique(map: "speaking_audio_upload_intents_object_key_key") @map("object_key") |
-| contentType    | String   | @map("content_type")                                                            |
-| byteSize       | Int      | @map("byte_size")                                                               |
-| status         | String   | @default("open")                                                                |
-| createdAt      | DateTime | @map("created_at") @db.Timestamptz(6)                                           |
-| expiresAt      | DateTime | @map("expires_at") @db.Timestamptz(6)                                           |
+| Column                | Type      | Attributes                                                                      |
+| --------------------- | --------- | ------------------------------------------------------------------------------- |
+| id                    | String    | @id                                                                             |
+| organizationId        | String    | @map("organization_id")                                                         |
+| endUserId             | String    | @map("end_user_id")                                                             |
+| environment           | String    |                                                                                 |
+| objectKey             | String    | @unique(map: "speaking_audio_upload_intents_object_key_key") @map("object_key") |
+| contentType           | String    | @map("content_type")                                                            |
+| byteSize              | Int       | @map("byte_size")                                                               |
+| status                | String    | @default("open")                                                                |
+| createdAt             | DateTime  | @map("created_at") @db.Timestamptz(6)                                           |
+| expiresAt             | DateTime  | @map("expires_at") @db.Timestamptz(6)                                           |
+| cleanupClaimId        | String?   | @map("cleanup_claim_id")                                                        |
+| cleanupClaimExpiresAt | DateTime? | @map("cleanup_claim_expires_at") @db.Timestamptz(6)                             |
 
 ## WritingChartUpload
 

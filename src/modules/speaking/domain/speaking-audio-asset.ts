@@ -64,7 +64,7 @@ export interface SpeakingAudioAsset {
 
 const ASSET_ID_PATTERN = /^aud_[0-9A-HJKMNP-TV-Z]{26}$/;
 const OBJECT_KEY_PATTERN =
-  /^orgs\/[A-Za-z0-9_-]+\/speaking\/aud_[0-9A-HJKMNP-TV-Z]{26}\/original$/;
+  /^orgs\/[A-Za-z0-9_-]+\/speaking\/aud_[0-9A-HJKMNP-TV-Z]{26}\/(?:original|publication\/pub_[0-9a-f-]{36})$/;
 
 export function isSpeakingAudioContentType(
   value: string | undefined,

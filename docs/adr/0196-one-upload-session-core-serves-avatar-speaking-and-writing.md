@@ -1,6 +1,6 @@
 # ADR-0196: One upload session core serves Avatar, Speaking, and Writing
 
-- Status: Accepted; Avatar migration clause amended by [ADR-0197](0197-avatar-upload-sessions-join-the-shared-core.md)
+- Status: Accepted. The Avatar migration is amended by [ADR-0197](0197-avatar-upload-sessions-join-the-shared-core.md). Speaking's transaction boundary is amended by [ADR-0198](0198-speaking-audio-publication-and-cleanup-coordinate-through-postgres.md).
 - Date: 2026-11-26
 - Related issue: [#676](https://github.com/AiHub-Ecosystem/aihub-be/issues/676), [#677](https://github.com/AiHub-Ecosystem/aihub-be/issues/677), [#2010](https://github.com/AiHub-Ecosystem/aihub-be/issues/2010)
 - Related: [ADR-0068](0068-avatar-is-a-user-account-owned-asset.md), [ADR-0069](0069-avatar-is-published-not-signed.md), [ADR-0070](0070-speaking-audio-upload-intent-and-retention.md), [ADR-0073](0073-single-adapter-seams-keep-their-di-ceremony.md), [ADR-0100](0100-writing-task1-chart-image-uploads.md), [ADR-0106](0106-cross-module-imports-are-forbidden-outside-published-seams.md), [ADR-0139](0139-bun-is-the-package-manager-node-stays-the-runtime.md), [ADR-0156](0156-restricted-cross-module-edges.md), [ADR-0194](0194-avatar-uploads-are-re-encoded-and-audited.md), [ADR-0195](0195-avatar-replacement-and-removal-commit-before-cleanup.md)

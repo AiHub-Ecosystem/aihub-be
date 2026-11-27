@@ -22,7 +22,7 @@ export class UploadSessionSweep {
   constructor(
     repository: Pick<
       UploadSessionRepositoryPort,
-      'cleanupCandidates' | 'removeCleanupCandidate'
+      'cleanupCandidates' | 'removeCleanupCandidate' | 'claimCleanupCandidate'
     >,
     private readonly storage: Pick<
       UploadSessionStoragePort,
@@ -33,7 +33,7 @@ export class UploadSessionSweep {
     private readonly keysPerCandidate = 1,
     private readonly candidateSource: Pick<
       UploadSessionRepositoryPort,
-      'cleanupCandidates' | 'removeCleanupCandidate'
+      'cleanupCandidates' | 'removeCleanupCandidate' | 'claimCleanupCandidate'
     > = repository,
   ) {}
 
@@ -58,14 +58,22 @@ export class UploadSessionSweep {
       if (candidates.length === 0 || candidates.length < BATCH_SIZE) break;
       const last = candidates.at(-1);
       if (last !== undefined)
-        after = { createdAt: last.createdAt, assetId: last.assetId };
+        after = {
+          createdAt: last.createdAt,
+          assetId: last.candidateId ?? last.assetId,
+        };
     }
 
     const scanned = all.length;
     const eligible = all.length;
     if (
       this.deletionCeiling !== undefined &&
-      eligible * this.keysPerCandidate > this.deletionCeiling
+      all.reduce(
+        (total, candidate) =>
+          total +
+          (candidate.kind === 'reservation' ? 1 : this.keysPerCandidate),
+        0,
+      ) > this.deletionCeiling
     ) {
       this.ceilingExceeded = true;
       return {
@@ -81,8 +89,9 @@ export class UploadSessionSweep {
     let failed = 0;
     if (!input.dryRun) {
       for (const candidate of all) {
-        if (await this.deleteCandidate(candidate)) deleted += 1;
-        else failed += 1;
+        const result = await this.deleteCandidate(candidate, input.now);
+        if (result === 'deleted') deleted += 1;
+        else if (result === 'failed') failed += 1;
       }
     }
     return { scanned, eligible, deleted, failed, dryRun: input.dryRun };
@@ -90,31 +99,44 @@ export class UploadSessionSweep {
 
   private async deleteCandidate(
     candidate: UploadSessionCleanupCandidate,
-  ): Promise<boolean> {
-    // shortcut: candidates are not claimed, so two sweep workers may attempt
-    // the same row; upgrade to a leased page when #1873 lands.
-    let failed = false;
+    now: Date,
+  ): Promise<'deleted' | 'failed' | 'skipped'> {
+    let claimed: UploadSessionCleanupCandidate | undefined;
     try {
-      await this.storage.deleteStagingObject({
-        environment: candidate.environment,
-        stagingKey: candidate.stagingKey,
-      });
+      claimed =
+        this.candidateSource.claimCleanupCandidate === undefined
+          ? candidate
+          : await this.candidateSource.claimCleanupCandidate(candidate, now);
     } catch {
-      failed = true;
+      return 'failed';
+    }
+    if (claimed === undefined) return 'skipped';
+    let failed = false;
+    if (claimed.stagingKey !== undefined) {
+      try {
+        await this.storage.deleteStagingObject({
+          environment: claimed.environment,
+          stagingKey: claimed.stagingKey,
+        });
+      } catch {
+        failed = true;
+      }
     }
     try {
       await this.storage.deletePublishedObject({
-        environment: candidate.environment,
-        publishedKey: candidate.publishedKey,
+        environment: claimed.environment,
+        publishedKey: claimed.publishedKey,
       });
     } catch {
       failed = true;
     }
-    if (failed) return false;
+    if (failed) return 'failed';
     try {
-      return await this.candidateSource.removeCleanupCandidate(candidate);
+      return (await this.candidateSource.removeCleanupCandidate(claimed))
+        ? 'deleted'
+        : 'skipped';
     } catch {
-      return false;
+      return 'failed';
     }
   }
 }

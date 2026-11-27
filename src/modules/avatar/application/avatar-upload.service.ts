@@ -7,6 +7,7 @@ import {
   avatarObjectKey,
 } from '@/modules/avatar/domain/avatar';
 import {
+  LegacyUploadCompletionQueue,
   UploadSessionService,
   type UploadSessionServicePort,
 } from '@/modules/uploads/public';
@@ -49,6 +50,7 @@ export interface CompletedAvatar extends PublishedAvatar {
 
 /** Maps Avatar's vocabulary onto the shared core; read/remove stay local. */
 export class AvatarUploadService {
+  private readonly completions = new LegacyUploadCompletionQueue();
   private readonly core: UploadSessionServicePort<
     AvatarContentType,
     'production'
@@ -154,10 +156,14 @@ export class AvatarUploadService {
     const previous = await this.avatars.findByUser(input.userId);
     let published;
     try {
-      published = await this.core.complete({
-        context: this.context(input.userId, input.requestId, signal),
-        assetId: input.assetId,
-      });
+      published = await this.completions.run(
+        JSON.stringify([input.userId, input.assetId]),
+        () =>
+          this.core.complete({
+            context: this.context(input.userId, input.requestId, signal),
+            assetId: input.assetId,
+          }),
+      );
     } catch (error) {
       if (error instanceof AppError && error.code === 'AVATAR_CHANGED') {
         const key = avatarObjectKey(input.userId, input.assetId);

@@ -43,10 +43,21 @@ export type UploadSessionLookup<
 export interface UploadSessionCleanupCandidate<
   E extends string = UploadSessionEnvironment,
 > {
-  readonly kind: 'intent' | 'asset';
+  readonly kind: 'intent' | 'asset' | 'reservation';
   readonly assetId: string;
+  readonly candidateId?: string;
   readonly environment: E;
-  readonly stagingKey: string;
+  readonly stagingKey?: string;
   readonly publishedKey: string;
   readonly createdAt: Date;
+  readonly expiresAt?: Date;
+  readonly status?: 'open' | 'rejected' | 'active' | 'abandoned';
+  readonly contentType?: string;
+  readonly byteSize?: number;
+  readonly organizationId?: string;
+  readonly endUserId?: string;
+  readonly lastCleanedAt?: Date;
+  readonly orphanBefore?: Date;
+  readonly reservationId?: string;
+  readonly claimId?: string;
 }

@@ -28,7 +28,10 @@ import { DownstreamHttpClient } from '@/modules/gateway/infrastructure/dispatch/
 import { LOCAL_DEVELOPMENT_ORGANIZATION_ID } from '@/modules/identity/shared/presentation/request-environment';
 import { DISPATCH_ATTEMPT_RECORD } from '@/modules/metering/public/dispatch-attempts';
 import { noOpDispatchAttemptRecord } from '@/modules/metering/testing/no-op-dispatch-attempt-record';
-import { SPEAKING_AUDIO_UPLOAD_REPOSITORY } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
+import {
+  SPEAKING_AUDIO_ASSET_STORAGE,
+  SPEAKING_AUDIO_UPLOAD_REPOSITORY,
+} from '@/modules/speaking/application/audio/speaking-audio-upload.port';
 import {
   SPEAKING_MULTIPART_PARSER,
   type SpeakingMultipartParserPort,
@@ -148,6 +151,10 @@ describe('Speaking grading HTTP flow', () => {
   let outboundBody: UndiciFormData | undefined;
   let outboundJson: Record<string, unknown> | undefined;
   let abortJsonRequest = false;
+  const createReadUrl = jest.fn(
+    async ({ objectKey }: { readonly objectKey: string }) =>
+      `https://signed-audio.test/${objectKey}`,
+  );
   const audioRepository = new FakeAudioRepository();
   let admissionConsume: jest.SpyInstance;
 
@@ -210,6 +217,8 @@ describe('Speaking grading HTTP flow', () => {
     })
       .overrideProvider(SPEAKING_AUDIO_UPLOAD_REPOSITORY)
       .useValue(audioRepository)
+      .overrideProvider(SPEAKING_AUDIO_ASSET_STORAGE)
+      .useValue({ createReadUrl })
       .overrideProvider(DownstreamHttpClient)
       .useValue(
         new DownstreamHttpClient(
@@ -439,6 +448,7 @@ describe('Speaking grading HTTP flow', () => {
     afterEach(() => {
       audioRepository.assets.clear();
       audioRepository.intents.clear();
+      createReadUrl.mockClear();
     });
 
     it('grades a live asset owned by the same Organization, End User and environment', async () => {
@@ -448,6 +458,29 @@ describe('Speaking grading HTTP flow', () => {
 
       expect(response.statusCode).toBe(200);
       expect(outboundJson).toMatchObject({ audio_url: RECORDING_URL });
+    });
+
+    it('signs the recorded private key for a coordinated publication', async () => {
+      const objectKey =
+        `orgs/${SELF.organizationId}/speaking/${RECORDING_ID}` +
+        '/publication/pub_123e4567-e89b-12d3-a456-426614174000';
+      audioRepository.assets.clear();
+      audioRepository.seed({
+        ...speakingAsset(SELF),
+        assetId: RECORDING_ID,
+        objectKey,
+      });
+
+      const response = await gradeRecording();
+
+      expect(response.statusCode).toBe(200);
+      expect(createReadUrl).toHaveBeenCalledWith({
+        environment: 'production',
+        objectKey,
+      });
+      expect(outboundJson).toMatchObject({
+        audio_url: `https://signed-audio.test/${objectKey}`,
+      });
     });
 
     it.each([

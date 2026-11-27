@@ -51,6 +51,7 @@ const AUDIO_FILENAMES: Record<SpeakingAudioContentType, string> = {
   'audio/webm': 'audio.webm',
   'audio/ogg': 'audio.ogg',
 };
+const SPEAKING_AUDIO_READ_URL_TTL_SECONDS = 900;
 
 function audioTooLarge(): AppError {
   return new AppError({
@@ -157,6 +158,32 @@ export class S3SpeakingAudioAssetStorage
         },
       );
       return { url, expiresAt };
+    } catch (error) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+        error,
+      );
+    }
+  }
+
+  async createReadUrl(input: {
+    readonly environment: SpeakingAudioEnvironment;
+    readonly objectKey: string;
+  }): Promise<string> {
+    const { signer, bucket } = this.require(input.environment, input.objectKey);
+    if (!isSpeakingAudioObjectKey(input.objectKey)) {
+      throw objectStorageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
+    }
+    try {
+      return await getSignedUrl(
+        signer,
+        new GetObjectCommand({ Bucket: bucket, Key: input.objectKey }),
+        { expiresIn: SPEAKING_AUDIO_READ_URL_TTL_SECONDS },
+      );
     } catch (error) {
       throw objectStorageUnavailable(
         'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',

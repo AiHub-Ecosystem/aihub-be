@@ -15,7 +15,10 @@ import {
   speakingAudioObjectKey,
 } from '@/modules/speaking/domain/speaking-audio-asset';
 import { PostgresSpeakingAudioUploadRepository } from '@/modules/speaking/infrastructure/postgres-speaking-audio-upload.repository';
-import { UploadSessionService } from '@/modules/uploads/public';
+import {
+  UploadSessionService,
+  UploadSessionSweep,
+} from '@/modules/uploads/public';
 
 import { createSpeakingAudioQueryClient } from '../shared/postgres-speaking-audio-upload.fixture-client';
 
@@ -74,6 +77,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetIdentityTables(pool);
+  await pool.query(
+    'UPDATE speaking_audio_publication_protocol SET activated_at = NULL WHERE id = true',
+  );
   organizationId = `org_${ulid()}`;
   await pool.query(
     `INSERT INTO organizations (id, name, status)
@@ -120,6 +126,15 @@ function intent(
   };
 }
 
+function publicationIntent(): SpeakingAudioUploadIntent {
+  const createdAt = new Date(Date.now() - 1_000);
+  return {
+    ...intent(),
+    createdAt,
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+}
+
 function asset(upload: SpeakingAudioUploadIntent): SpeakingAudioAsset {
   const acceptedAt = new Date('2026-10-03T04:05:00.000Z');
   return {
@@ -138,6 +153,357 @@ function asset(upload: SpeakingAudioUploadIntent): SpeakingAudioAsset {
 }
 
 describe('Speaking Audio upload completion against PostgreSQL', () => {
+  it('lets another core instance finalize the committed publication reservation', async () => {
+    const upload = publicationIntent();
+    const owner = {
+      assetId: upload.assetId,
+      organizationId: upload.organizationId,
+      endUserId: upload.endUserId,
+      environment: upload.environment,
+    };
+    const startedAt = new Date();
+    await repository.createIntent(upload);
+    await pool.query(
+      'UPDATE speaking_audio_publication_protocol SET activated_at = clock_timestamp() WHERE id = true',
+    );
+
+    const databaseUrl =
+      (pool.options as { connectionString?: string }).connectionString ?? '';
+    const secondClient = createSpeakingAudioQueryClient(databaseUrl);
+    const firstCore = new SpeakingAudioCoreRepositoryAdapter(repository);
+    const secondCore = new SpeakingAudioCoreRepositoryAdapter(
+      new PostgresSpeakingAudioUploadRepository(secondClient),
+    );
+    try {
+      const reservation = await firstCore.beginPublication({
+        owner,
+        now: startedAt,
+      });
+      if (typeof reservation !== 'object') {
+        throw new Error('expected a durable publication reservation');
+      }
+      expect(reservation.kind).toBe('started');
+      expect(reservation.publishedKey).toContain('/publication/pub_');
+      await expect(
+        secondCore.beginPublication({ owner, now: startedAt }),
+      ).resolves.toBe('in_progress');
+
+      await expect(
+        secondCore.markPublished({
+          owner,
+          now: startedAt,
+          publicationStartedAt: startedAt,
+          imageUrl: '',
+          reservationId: reservation.reservationId,
+        }),
+      ).resolves.toMatchObject({
+        assetId: upload.assetId,
+        publishedKey: reservation.publishedKey,
+      });
+    } finally {
+      await secondClient.close();
+    }
+
+    const stored = await repository.findUpload(owner);
+    expect(stored.kind).toBe('asset');
+  });
+
+  it('uses one copy during overlap and keeps the recorded keys readable on bridge rollback', async () => {
+    const legacy = publicationIntent();
+    const coordinated = publicationIntent();
+    await repository.createIntent(legacy);
+    await repository.createIntent(coordinated);
+    const url =
+      (pool.options as { connectionString?: string }).connectionString ?? '';
+    const nextClient = createSpeakingAudioQueryClient(url);
+    const nextRepository = new PostgresSpeakingAudioUploadRepository(
+      nextClient,
+    );
+    const copying = Promise.withResolvers<void>();
+    const contenderWaiting = Promise.withResolvers<void>();
+    const allowCopy = Promise.withResolvers<void>();
+    const copyObject = jest.fn(
+      async ({
+        destinationObjectKey,
+      }: Parameters<SpeakingAudioAssetStoragePort['copyObject']>[0]) => {
+        if (destinationObjectKey === legacy.objectKey) return;
+        copying.resolve();
+        await allowCopy.promise;
+      },
+    );
+    const makeCore = (repo: PostgresSpeakingAudioUploadRepository) =>
+      new UploadSessionService(
+        new SpeakingAudioCoreRepositoryAdapter(repo),
+        new SpeakingAudioCoreStorageAdapter({
+          ...storage,
+          copyObject,
+          describeObject: async () => ({
+            contentType: 'audio/wav',
+            byteSize: 1_024,
+          }),
+        }),
+        speakingAudioUploadSessionPolicy(),
+        () => 'unused',
+      );
+    const bridge = makeCore(repository);
+    const next = makeCore(nextRepository);
+    const begin = repository.beginPublication.bind(repository);
+    const trackedBegin = jest
+      .spyOn(repository, 'beginPublication')
+      .mockImplementation(async (input) => {
+        const result = await begin(input);
+        if (result === 'in_progress') contenderWaiting.resolve();
+        return result;
+      });
+    const complete = {
+      context: context(organizationId),
+      assetId: coordinated.assetId,
+    };
+    try {
+      await expect(
+        bridge.complete({ ...complete, assetId: legacy.assetId }),
+      ).resolves.toMatchObject({ publishedKey: legacy.objectKey });
+      await pool.query(
+        'UPDATE speaking_audio_publication_protocol SET activated_at = clock_timestamp() WHERE id = true',
+      );
+      const publication = next.complete(complete);
+      await Promise.race([copying.promise, publication]);
+      const contender = bridge.complete(complete);
+      await Promise.race([contenderWaiting.promise, contender]);
+      allowCopy.resolve();
+      const [winner, duplicate] = await Promise.all([publication, contender]);
+      expect(winner.publishedKey).toContain('/publication/pub_');
+      expect(duplicate.publishedKey).toBe(winner.publishedKey);
+      await expect(bridge.complete(complete)).resolves.toMatchObject({
+        publishedKey: winner.publishedKey,
+      });
+      expect(copyObject).toHaveBeenCalledTimes(2);
+    } finally {
+      allowCopy.resolve();
+      trackedBegin.mockRestore();
+      await nextClient.close();
+    }
+  });
+
+  it('keeps a later publication intact when an expired copy finishes late', async () => {
+    const upload = publicationIntent();
+    const owner = {
+      assetId: upload.assetId,
+      organizationId: upload.organizationId,
+      endUserId: upload.endUserId,
+      environment: upload.environment,
+    };
+    await repository.createIntent(upload);
+    await pool.query(
+      'UPDATE speaking_audio_publication_protocol SET activated_at = clock_timestamp() WHERE id = true',
+    );
+
+    const first = await repository.beginPublication({
+      owner,
+      now: new Date(),
+      reservationTtlMs: 60_000,
+    });
+    if (typeof first === 'string')
+      throw new Error('expected the first publication reservation');
+    await pool.query(
+      `UPDATE speaking_audio_publication_reservations
+       SET created_at = clock_timestamp() - interval '2 seconds',
+           expires_at = clock_timestamp() - interval '1 second'
+       WHERE id = $1`,
+      [first.reservationId],
+    );
+
+    const second = await repository.beginPublication({
+      owner,
+      now: new Date(),
+      reservationTtlMs: 60_000,
+    });
+    if (typeof second === 'string')
+      throw new Error('expected the replacement publication reservation');
+    await expect(
+      repository.claimRefusal(owner, first.reservationId),
+    ).resolves.toBe(false);
+    await expect(repository.claimRefusal(owner)).resolves.toBe(false);
+
+    const storedBytes = new Map<string, string>();
+    storedBytes.set(second.objectKey, 'bytes from B');
+    const acceptedAt = new Date();
+    const published = await repository.finalizePublication({
+      owner,
+      reservationId: second.reservationId,
+      acceptedAt,
+      retentionExpiresAt: new Date(acceptedAt.getTime() + 30 * 86_400_000),
+    });
+    expect(published).toMatchObject({
+      created: true,
+      asset: { objectKey: second.objectKey },
+    });
+
+    storedBytes.set(first.objectKey, 'late bytes from A');
+    const lateFinalization = await repository.finalizePublication({
+      owner,
+      reservationId: first.reservationId,
+      acceptedAt: new Date(),
+      retentionExpiresAt: new Date(Date.now() + 30 * 86_400_000),
+    });
+    expect(lateFinalization).toMatchObject({
+      created: false,
+      asset: { objectKey: second.objectKey },
+    });
+    expect(storedBytes.get(second.objectKey)).toBe('bytes from B');
+
+    const cutoff = new Date(Date.now() + 1_000);
+    const firstPass = await repository.listDurableCleanupCandidates({
+      expiredBefore: cutoff,
+      limit: 10,
+    });
+    const staleCandidate = firstPass.find(
+      (candidate) => candidate.reservationId === first.reservationId,
+    );
+    expect(staleCandidate).toBeDefined();
+    if (staleCandidate === undefined)
+      throw new Error('expected the expired publication to be cleanable');
+
+    const firstClaim = `cleanup_${ulid()}`;
+    await expect(
+      repository.claimDurableCleanupCandidate({
+        candidate: staleCandidate,
+        orphanBefore: cutoff,
+        claimId: firstClaim,
+        leaseMs: 60_000,
+      }),
+    ).resolves.toBe(true);
+    storedBytes.delete(staleCandidate.objectKey);
+    await expect(
+      repository.removeDurableCleanupCandidate({
+        candidate: staleCandidate,
+        expiredBefore: cutoff,
+        claimId: firstClaim,
+      }),
+    ).resolves.toBe(true);
+
+    storedBytes.set(first.objectKey, 'copy completed after first cleanup');
+    await pool.query(
+      `UPDATE speaking_audio_publication_reservations
+       SET last_cleaned_at = clock_timestamp() - interval '25 hours'
+       WHERE id = $1`,
+      [first.reservationId],
+    );
+    const secondPass = await repository.listDurableCleanupCandidates({
+      expiredBefore: new Date(),
+      limit: 10,
+    });
+    const lateCandidate = secondPass.find(
+      (candidate) => candidate.reservationId === first.reservationId,
+    );
+    expect(lateCandidate).toBeDefined();
+    if (lateCandidate === undefined)
+      throw new Error('expected the retained reservation tombstone');
+
+    const secondClaim = `cleanup_${ulid()}`;
+    await expect(
+      repository.claimDurableCleanupCandidate({
+        candidate: lateCandidate,
+        orphanBefore: new Date(),
+        claimId: secondClaim,
+        leaseMs: 60_000,
+      }),
+    ).resolves.toBe(true);
+    storedBytes.delete(lateCandidate.objectKey);
+    await expect(
+      repository.removeDurableCleanupCandidate({
+        candidate: lateCandidate,
+        expiredBefore: new Date(),
+        claimId: secondClaim,
+      }),
+    ).resolves.toBe(true);
+
+    const winner = await repository.findUpload(owner);
+    expect(winner).toMatchObject({
+      kind: 'asset',
+      asset: { objectKey: second.objectKey },
+    });
+    expect(storedBytes.get(second.objectKey)).toBe('bytes from B');
+  });
+
+  it('lets another core instance remove a cleanup candidate selected earlier', async () => {
+    const upload = intent();
+    await repository.createIntent(upload);
+    await pool.query(
+      `UPDATE speaking_audio_upload_intents
+       SET created_at = $2, expires_at = $3
+       WHERE id = $1`,
+      [
+        upload.assetId,
+        new Date('2026-09-30T00:00:00.000Z'),
+        new Date('2026-10-01T00:00:00.000Z'),
+      ],
+    );
+
+    const databaseUrl =
+      (pool.options as { connectionString?: string }).connectionString ?? '';
+    const secondClient = createSpeakingAudioQueryClient(databaseUrl);
+    const firstCore = new SpeakingAudioCoreRepositoryAdapter(repository);
+    const secondCore = new SpeakingAudioCoreRepositoryAdapter(
+      new PostgresSpeakingAudioUploadRepository(secondClient),
+    );
+    try {
+      const [candidate] = await firstCore.cleanupCandidates({
+        now: new Date('2026-10-03T04:00:00.000Z'),
+        orphanBefore: new Date('2026-10-02T00:00:00.000Z'),
+        limit: 1,
+      });
+      expect(candidate).toMatchObject({
+        assetId: upload.assetId,
+        orphanBefore: new Date('2026-10-02T00:00:00.000Z'),
+      });
+      if (candidate === undefined)
+        throw new Error('expected a cleanup candidate');
+
+      const claim = await secondCore.claimCleanupCandidate(
+        candidate,
+        new Date(),
+      );
+      expect(claim).toBeDefined();
+      if (claim === undefined)
+        throw new Error('expected the second instance to claim cleanup');
+      await expect(
+        firstCore.claimCleanupCandidate(candidate, new Date()),
+      ).resolves.toBeUndefined();
+      await pool.query(
+        `UPDATE speaking_audio_upload_intents
+         SET cleanup_claim_expires_at = clock_timestamp() - interval '1 second'
+         WHERE id = $1`,
+        [upload.assetId],
+      );
+      await expect(secondCore.removeCleanupCandidate(claim)).resolves.toBe(
+        false,
+      );
+      const sweep = new UploadSessionSweep(
+        firstCore,
+        new SpeakingAudioCoreStorageAdapter(storage),
+        { orphanGraceMs: 0 },
+      );
+      await expect(
+        sweep.run({
+          now: candidate.orphanBefore ?? new Date(),
+          dryRun: false,
+        }),
+      ).resolves.toMatchObject({ deleted: 1, failed: 0 });
+    } finally {
+      await secondClient.close();
+    }
+
+    await expect(
+      repository.findUpload({
+        assetId: upload.assetId,
+        organizationId: upload.organizationId,
+        endUserId: upload.endUserId,
+        environment: upload.environment,
+      }),
+    ).resolves.toEqual({ kind: 'missing' });
+  });
+
   it('holds the intent row lock across preparation and atomically accepts one completion', async () => {
     const upload = intent();
     await repository.createIntent(upload);

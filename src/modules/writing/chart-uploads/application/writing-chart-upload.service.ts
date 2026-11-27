@@ -1,5 +1,8 @@
 import type { RequestContext } from '@/common/request-context/request-context';
-import type { UploadSessionServicePort } from '@/modules/uploads/public';
+import {
+  LegacyUploadCompletionQueue,
+  type UploadSessionServicePort,
+} from '@/modules/uploads/public';
 import type {
   WritingChartAsset,
   WritingChartContentType,
@@ -11,6 +14,8 @@ import type { WritingChartUploadServicePort } from './writing-chart-upload.port'
 export class WritingChartUploadService
   implements WritingChartUploadServicePort
 {
+  private readonly completions = new LegacyUploadCompletionQueue();
+
   constructor(
     private readonly core: UploadSessionServicePort<
       WritingChartContentType,
@@ -38,6 +43,10 @@ export class WritingChartUploadService
     readonly context: RequestContext;
     readonly assetId: string;
   }): Promise<WritingChartAsset> {
-    return this.core.complete(input);
+    const { organizationId, userId, environment } = input.context;
+    return this.completions.run(
+      JSON.stringify([organizationId, userId, environment, input.assetId]),
+      () => this.core.complete(input),
+    );
   }
 }

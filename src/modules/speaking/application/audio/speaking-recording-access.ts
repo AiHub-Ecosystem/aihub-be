@@ -1,8 +1,14 @@
 import { AppError } from '@/common/errors/app-error';
+import { storageUnavailable } from '@/common/errors/upload-errors';
 import type {
+  SpeakingAudioAssetStoragePort,
   SpeakingAudioUploadOwner,
   SpeakingAudioUploadRepositoryPort,
 } from '@/modules/speaking/application/audio/speaking-audio-upload.port';
+import {
+  type SpeakingAudioAsset,
+  speakingAudioObjectKey,
+} from '@/modules/speaking/domain/speaking-audio-asset';
 
 type SpeakingAudioUploadLookupPort = Pick<
   SpeakingAudioUploadRepositoryPort,
@@ -42,11 +48,45 @@ export class SpeakingRecordingAccess {
   constructor(
     private readonly uploads: SpeakingAudioUploadLookupPort,
     private readonly now: () => Date,
+    private readonly storage?: SpeakingAudioAssetStoragePort,
   ) {}
 
   async assertLive(owner: SpeakingAudioUploadOwner): Promise<void> {
-    if (!(await hasLiveSpeakingAudioAsset(this.uploads, owner, this.now))) {
+    await this.requireLiveAsset(owner);
+  }
+
+  private async requireLiveAsset(
+    owner: SpeakingAudioUploadOwner,
+  ): Promise<SpeakingAudioAsset> {
+    const found = await this.uploads.findUpload(owner);
+    if (
+      found.kind !== 'asset' ||
+      found.asset.retentionExpiresAt.getTime() <= this.now().getTime()
+    ) {
       throw speakingAudioAssetNotFound();
     }
+    return found.asset;
+  }
+
+  async gradingUrl(
+    owner: SpeakingAudioUploadOwner,
+    legacyUrl: string,
+  ): Promise<string> {
+    const asset = await this.requireLiveAsset(owner);
+    const legacyObjectKey = speakingAudioObjectKey(
+      owner.organizationId,
+      owner.assetId,
+    );
+    if (asset.objectKey === legacyObjectKey) return legacyUrl;
+    if (this.storage?.createReadUrl === undefined) {
+      throw storageUnavailable(
+        'SPEAKING_AUDIO_STORAGE_UNAVAILABLE',
+        'Speaking audio storage is unavailable',
+      );
+    }
+    return this.storage.createReadUrl({
+      environment: asset.environment,
+      objectKey: asset.objectKey,
+    });
   }
 }

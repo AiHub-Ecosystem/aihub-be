@@ -81,6 +81,7 @@ export function speakingAudioUploadSessionPolicy(): UploadSessionPolicy<
         environment,
       };
     },
+    waitForPublication: true,
     completionSignal: (signal) =>
       AbortSignal.any([
         signal,

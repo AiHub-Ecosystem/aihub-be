@@ -265,7 +265,7 @@ upload is one specialization.
 _Avoid_: upload intent, upload request
 
 **Staged object**:
-The private, not-yet-public bytes of one upload session.
+The private bytes uploaded for one upload session before publication.
 _Avoid_: staging blob
 
 **Byte verification**:
@@ -273,7 +273,9 @@ The check and re-encoding a feature applies to staged bytes before they become a
 _Avoid_: sanitization, verification stub
 
 **Published artifact**:
-The immutable public object an upload session becomes after verification.
+The immutable object an upload session becomes after verification. Access
+follows the feature's policy. A Speaking Audio asset remains private after
+publication.
 _Avoid_: final object
 
 **Publication record**:

@@ -622,6 +622,39 @@ model SpeakingAudioAsset {
   @@map("speaking_audio_assets")
 }
 
+/// Shared rollout switch and per-attempt leases for Speaking audio publication.
+/// The bridge migration creates the switch disabled; operators enable it only
+/// after pre-bridge writers and sweep workers have drained.
+/// @owner speaking
+model SpeakingAudioPublicationProtocol {
+  id          Boolean   @id @default(true)
+  activatedAt DateTime? @map("activated_at") @db.Timestamptz(6)
+
+  @@map("speaking_audio_publication_protocol")
+}
+
+/// A unique destination and durable lease for one Speaking publication attempt.
+/// Expired abandoned rows remain as cleanup tombstones for late object copies.
+/// @owner speaking
+model SpeakingAudioPublicationReservation {
+  id                    String    @id
+  assetId               String    @map("asset_id")
+  organizationId        String    @map("organization_id")
+  endUserId             String    @map("end_user_id")
+  environment           String
+  objectKey             String    @unique(map: "speaking_audio_publication_reservations_object_key_key") @map("object_key")
+  status                String    @default("active")
+  createdAt             DateTime  @map("created_at") @db.Timestamptz(6)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(6)
+  cleanupClaimId        String?   @map("cleanup_claim_id")
+  cleanupClaimExpiresAt DateTime? @map("cleanup_claim_expires_at") @db.Timestamptz(6)
+  lastCleanedAt         DateTime? @map("last_cleaned_at") @db.Timestamptz(6)
+
+  @@index([expiresAt, createdAt], map: "speaking_audio_publication_reservations_expiry_idx", where: raw("(status = ANY (ARRAY['active'::text, 'abandoned'::text]))"))
+  @@index([assetId], map: "speaking_audio_publication_reservations_active_asset_idx", where: raw("(status = 'active'::text)"))
+  @@map("speaking_audio_publication_reservations")
+}
+
 /// A durable Speaking grading job; PostgreSQL remains its source of truth.
 /// Status, id and identity-mode checks plus sweep indexes are owned by migration 0063.
 /// @owner speaking
@@ -689,16 +722,18 @@ model SpeakingV2ResultOwnership {
 /// are owned by migration 0062.
 /// @owner speaking
 model SpeakingAudioUploadIntent {
-  id             String   @id
-  organizationId String   @map("organization_id")
-  endUserId      String   @map("end_user_id")
-  environment    String
-  objectKey      String   @unique(map: "speaking_audio_upload_intents_object_key_key") @map("object_key")
-  contentType    String   @map("content_type")
-  byteSize       Int      @map("byte_size")
-  status         String   @default("open")
-  createdAt      DateTime @map("created_at") @db.Timestamptz(6)
-  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+  id                    String    @id
+  organizationId        String    @map("organization_id")
+  endUserId             String    @map("end_user_id")
+  environment           String
+  objectKey             String    @unique(map: "speaking_audio_upload_intents_object_key_key") @map("object_key")
+  contentType           String    @map("content_type")
+  byteSize              Int       @map("byte_size")
+  status                String    @default("open")
+  createdAt             DateTime  @map("created_at") @db.Timestamptz(6)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(6)
+  cleanupClaimId        String?   @map("cleanup_claim_id")
+  cleanupClaimExpiresAt DateTime? @map("cleanup_claim_expires_at") @db.Timestamptz(6)
 
   @@index([organizationId, createdAt], map: "speaking_audio_upload_intents_org_idx")
   @@index([organizationId, expiresAt], map: "speaking_audio_upload_intents_org_open_idx", where: raw("(status = 'open'::text)"))

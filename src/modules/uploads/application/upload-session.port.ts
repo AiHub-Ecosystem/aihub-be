@@ -18,6 +18,12 @@ export interface UploadSessionGrant<C extends string = string> {
   readonly intentExpiresAt: Date;
 }
 
+export interface UploadSessionPublicationReservation {
+  readonly kind: 'started';
+  readonly reservationId: string;
+  readonly publishedKey: string;
+}
+
 export interface UploadSessionRepositoryPort<
   C extends string = string,
   E extends string = UploadSessionEnvironment,
@@ -35,11 +41,22 @@ export interface UploadSessionRepositoryPort<
     now: Date,
     cleaned?: boolean,
   ): Promise<void>;
+  claimRefusal?(
+    owner: UploadSessionOwner<E>,
+    reservationId?: string,
+  ): Promise<boolean | undefined>;
   beginPublication(input: {
     readonly owner: UploadSessionOwner<E>;
     readonly now: Date;
     readonly rateWindowMs?: number;
-  }): Promise<'started' | 'published' | 'limited' | 'in_progress' | 'missing'>;
+  }): Promise<
+    | 'started'
+    | UploadSessionPublicationReservation
+    | 'published'
+    | 'limited'
+    | 'in_progress'
+    | 'missing'
+  >;
   markPublished(input: {
     readonly owner: UploadSessionOwner<E>;
     readonly now: Date;
@@ -48,10 +65,12 @@ export interface UploadSessionRepositoryPort<
     readonly requestId?: string;
     readonly contentType?: C;
     readonly byteSize?: number;
+    readonly reservationId?: string;
   }): Promise<P | 'revoked' | undefined>;
   releasePublication(
     owner: UploadSessionOwner<E>,
     publicationStartedAt: Date,
+    reservationId?: string,
   ): Promise<void>;
   cleanupCandidates(input: {
     readonly now: Date;
@@ -62,6 +81,10 @@ export interface UploadSessionRepositoryPort<
   removeCleanupCandidate(
     candidate: UploadSessionCleanupCandidate<E>,
   ): Promise<boolean>;
+  claimCleanupCandidate?(
+    candidate: UploadSessionCleanupCandidate<E>,
+    now: Date,
+  ): Promise<UploadSessionCleanupCandidate<E> | undefined>;
 }
 
 export interface UploadSessionStoragePort<

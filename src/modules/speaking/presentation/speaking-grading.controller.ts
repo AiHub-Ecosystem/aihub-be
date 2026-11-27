@@ -167,13 +167,17 @@ export class SpeakingGradingController {
         // (ADR-0070). Admission has already run, so a refused lookup is
         // charged to the rate limit like any request; it bills nothing, so it
         // takes no monthly quota (ADR-0018).
+        let gradingInput = input;
         if (assetId !== undefined) {
-          await this.recordings.assertLive({
-            ...speakingRequestOwner(request),
-            assetId,
-          });
+          gradingInput = {
+            ...input,
+            audioUrl: await this.recordings.gradingUrl(
+              { ...speakingRequestOwner(request), assetId },
+              input.audioUrl,
+            ),
+          };
         }
-        return { input };
+        return { input: gradingInput };
       }),
     );
   }

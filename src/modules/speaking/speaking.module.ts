@@ -437,11 +437,16 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
     },
     {
       provide: SpeakingRecordingAccess,
-      inject: [SPEAKING_AUDIO_UPLOAD_REPOSITORY, SPEAKING_AUDIO_UPLOAD_CLOCK],
+      inject: [
+        SPEAKING_AUDIO_UPLOAD_REPOSITORY,
+        SPEAKING_AUDIO_UPLOAD_CLOCK,
+        SPEAKING_AUDIO_ASSET_STORAGE,
+      ],
       useFactory: (
         repository: SpeakingAudioUploadRepositoryPort,
         clock: () => Date,
-      ) => new SpeakingRecordingAccess(repository, clock),
+        storage: SpeakingAudioAssetStoragePort,
+      ) => new SpeakingRecordingAccess(repository, clock, storage),
     },
     {
       provide: UPLOAD_SESSION_SWEEP,

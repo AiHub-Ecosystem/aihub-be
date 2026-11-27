@@ -27,6 +27,7 @@ export interface SpeakingAudioUploadOwner {
 export interface CompleteSpeakingAudioUploadIntentInput {
   readonly owner: SpeakingAudioUploadOwner;
   readonly now: () => Date;
+  readonly legacyPublication?: boolean;
   readonly prepare: (
     intent: SpeakingAudioUploadIntent,
   ) => Promise<
@@ -39,7 +40,35 @@ export type CompleteSpeakingAudioUploadIntentResult =
   | { readonly kind: 'created'; readonly asset: SpeakingAudioAsset }
   | { readonly kind: 'already_completed'; readonly asset: SpeakingAudioAsset }
   | { readonly kind: 'missing' }
+  | { readonly kind: 'protocol_enabled' }
   | { readonly kind: 'refused'; readonly refusal: AppError };
+
+export interface SpeakingAudioPublicationReservation {
+  readonly reservationId: string;
+  readonly objectKey: string;
+}
+
+export interface SpeakingAudioPublicationResult {
+  readonly asset: SpeakingAudioAsset;
+  readonly created: boolean;
+}
+
+export interface SpeakingAudioCleanupCandidate {
+  readonly kind: 'intent' | 'reservation';
+  readonly candidateId: string;
+  readonly assetId: string;
+  readonly organizationId: string;
+  readonly endUserId: string;
+  readonly environment: SpeakingAudioEnvironment;
+  readonly objectKey: string;
+  readonly contentType?: SpeakingAudioContentType;
+  readonly byteSize?: number;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+  readonly status: 'open' | 'rejected' | 'active' | 'abandoned';
+  readonly reservationId?: string;
+  readonly lastCleanedAt?: Date;
+}
 
 export interface SpeakingAudioUploadRepositoryPort {
   createIntent(intent: SpeakingAudioUploadIntent): Promise<void>;
@@ -67,6 +96,31 @@ export interface SpeakingAudioUploadRepositoryPort {
   completeIntent(
     input: CompleteSpeakingAudioUploadIntentInput,
   ): Promise<CompleteSpeakingAudioUploadIntentResult>;
+  beginPublication?(input: {
+    readonly owner: SpeakingAudioUploadOwner;
+    readonly now: Date;
+    readonly reservationTtlMs: number;
+  }): Promise<
+    | SpeakingAudioPublicationReservation
+    | 'disabled'
+    | 'published'
+    | 'in_progress'
+    | 'missing'
+  >;
+  finalizePublication?(input: {
+    readonly owner: SpeakingAudioUploadOwner;
+    readonly reservationId: string;
+    readonly acceptedAt: Date;
+    readonly retentionExpiresAt: Date;
+  }): Promise<SpeakingAudioPublicationResult | undefined>;
+  releasePublication?(input: {
+    readonly owner: SpeakingAudioUploadOwner;
+    readonly reservationId: string;
+  }): Promise<void>;
+  claimRefusal?(
+    owner: SpeakingAudioUploadOwner,
+    reservationId?: string,
+  ): Promise<boolean>;
   listCleanupCandidates(input: {
     readonly expiredBefore: Date;
     readonly limit: number;
@@ -75,6 +129,22 @@ export interface SpeakingAudioUploadRepositoryPort {
   removeCleanupCandidate(input: {
     readonly intent: SpeakingAudioUploadIntent;
     readonly expiredBefore: Date;
+  }): Promise<boolean>;
+  listDurableCleanupCandidates?(input: {
+    readonly expiredBefore: Date;
+    readonly limit: number;
+    readonly after?: { readonly createdAt: Date; readonly assetId: string };
+  }): Promise<readonly SpeakingAudioCleanupCandidate[]>;
+  claimDurableCleanupCandidate?(input: {
+    readonly candidate: SpeakingAudioCleanupCandidate;
+    readonly orphanBefore: Date;
+    readonly claimId: string;
+    readonly leaseMs: number;
+  }): Promise<boolean>;
+  removeDurableCleanupCandidate?(input: {
+    readonly candidate: SpeakingAudioCleanupCandidate;
+    readonly expiredBefore: Date;
+    readonly claimId: string;
   }): Promise<boolean>;
 }
 
@@ -87,6 +157,10 @@ export interface SpeakingAudioAssetStoragePort {
     },
     signal?: AbortSignal,
   ): Promise<SpeakingAudio>;
+  createReadUrl?(input: {
+    readonly environment: SpeakingAudioEnvironment;
+    readonly objectKey: string;
+  }): Promise<string>;
   createUploadUrl(input: {
     readonly environment: SpeakingAudioEnvironment;
     readonly objectKey: string;
