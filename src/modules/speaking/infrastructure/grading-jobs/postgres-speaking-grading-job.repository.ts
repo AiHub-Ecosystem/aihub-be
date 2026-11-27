@@ -1,5 +1,6 @@
 import { AppError } from '@/common/errors/app-error';
 import { databaseUnavailableError } from '@/common/postgres/postgres-unavailable-error';
+import type { ReleaseSandboxDispatchReservationsPort } from '@/modules/gateway/public/sandbox-dispatch-budget';
 import { IDEMPOTENCY_RETENTION_MS } from '@/modules/idempotency/public/idempotency-key';
 import { organizationTransaction } from '@/modules/persistence/persistence.module';
 import type {
@@ -88,7 +89,10 @@ function throwStoreUnavailable(error: unknown): never {
 export class PostgresSpeakingGradingJobRepository
   implements SpeakingGradingJobRepositoryPort
 {
-  constructor(private readonly client: PrismaClient) {}
+  constructor(
+    private readonly client: PrismaClient,
+    private readonly releaseSandboxDispatchReservations: ReleaseSandboxDispatchReservationsPort,
+  ) {}
 
   /** Request-serving access declares its Organization before any statement. */
   private scoped<T>(
@@ -252,6 +256,37 @@ export class PostgresSpeakingGradingJobRepository
         owner.environment,
       );
       return mapJob(rows[0]);
+    });
+  }
+
+  async eraseByEndUser(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+  }): Promise<number> {
+    return this.scoped(input.organizationId, async (transaction) => {
+      // DELETE and the dispatch mark lock the same row, so this sees which won.
+      const erased = await transaction.$queryRawUnsafe<
+        readonly { readonly refundableJobId: string | null }[]
+      >(
+        `DELETE FROM speaking_grading_jobs
+         WHERE organization_id = $1 AND end_user_id = $2
+         RETURNING CASE WHEN environment = 'sandbox' AND dispatch_started_at IS NULL
+           THEN job_id END AS "refundableJobId"`,
+        input.organizationId,
+        input.endUserId,
+      );
+      const refundableIds = erased
+        .map((job) => job.refundableJobId)
+        .filter((id) => id !== null);
+      if (refundableIds.length > 0) {
+        await this.releaseSandboxDispatchReservations(
+          transaction,
+          input.organizationId,
+          refundableIds,
+          new Date(),
+        );
+      }
+      return erased.length;
     });
   }
 

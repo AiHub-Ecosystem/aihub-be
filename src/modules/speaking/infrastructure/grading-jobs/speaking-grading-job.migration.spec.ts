@@ -33,4 +33,24 @@ describe('Speaking grading jobs migration', () => {
     expect(sql).toContain('idempotency_key        text');
     expect(sql).not.toContain('redis');
   });
+
+  it('indexes jobs by Organization and End-User ID for erasure', () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../../../../../prisma/migrations/0071_speaking_grading_jobs_end_user_idx/migration.sql',
+      ),
+      'utf8',
+    );
+
+    expect(sql).toContain(
+      'CREATE INDEX IF NOT EXISTS speaking_grading_jobs_org_end_user_idx',
+    );
+    expect(sql).toContain('squawk-ignore require-concurrent-index-creation');
+    expect(sql).toContain('approved: #1967');
+    expect(sql).not.toContain('CREATE INDEX CONCURRENTLY');
+    expect(sql).toContain(
+      'ON speaking_grading_jobs (organization_id, end_user_id)',
+    );
+  });
 });

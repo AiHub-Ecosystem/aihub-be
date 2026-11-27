@@ -75,6 +75,12 @@ export interface SpeakingGradingJobRepositoryPort {
     jobId: string,
   ): Promise<SpeakingGradingJob | undefined>;
 
+  /** Deletes every job for one Organization and End-User in this database. */
+  eraseByEndUser(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+  }): Promise<number>;
+
   /**
    * `queued` -> `running` with a lease; `undefined` when another worker owns it,
    * it is terminal, or it was created before `expireBefore`: a job past its

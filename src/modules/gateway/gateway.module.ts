@@ -111,7 +111,10 @@ import {
   HttpOperationTransport,
 } from './infrastructure/dispatch/http-operation-dispatcher';
 import { metricsDispatchObserver } from './infrastructure/dispatch/metrics-dispatch-observer';
-import { PostgresSandboxDispatchBudget } from './infrastructure/postgres-sandbox-dispatch-budget';
+import {
+  PostgresSandboxDispatchBudget,
+  releaseSandboxDispatchReservations,
+} from './infrastructure/postgres-sandbox-dispatch-budget';
 import { RedisConcurrencyLimiter } from './infrastructure/redis-concurrency-limiter';
 import { RedisDownstreamRetryBudget } from './infrastructure/redis-downstream-retry-budget';
 import {
@@ -126,6 +129,7 @@ import { SheddingGovernorScheduler } from './infrastructure/shedding-governor.sc
 import { SheddingLevelStore } from './infrastructure/shedding-level.store';
 import { RateLimitGuard } from './presentation/rate-limit.guard';
 import { SuccessEnvelopeInterceptor } from './presentation/success-envelope.interceptor';
+import { RELEASE_SANDBOX_DISPATCH_RESERVATIONS } from './public/sandbox-dispatch-budget';
 
 /** The one production adapter registry, consumed by `OPERATION_DISPATCHER`. */
 export const PRODUCTION_ADAPTERS = [
@@ -269,6 +273,10 @@ export const PRODUCTION_ADAPTERS = [
       useFactory: (runtime: PrismaClientHolder): SandboxDispatchBudgetPort =>
         new PostgresSandboxDispatchBudget(runtime.prisma),
     },
+    {
+      provide: RELEASE_SANDBOX_DISPATCH_RESERVATIONS,
+      useValue: releaseSandboxDispatchReservations,
+    },
     DownstreamCircuitBreakers,
     {
       provide: OPERATION_DISPATCHER,
@@ -360,6 +368,7 @@ export const PRODUCTION_ADAPTERS = [
   exports: [
     GATEWAY_REDIS_READINESS,
     SANDBOX_DISPATCH_BUDGET,
+    RELEASE_SANDBOX_DISPATCH_RESERVATIONS,
     DOWNSTREAM_RETRY_BUDGET,
     OPERATION_DISPATCHER,
     GRADING_ORCHESTRATOR,

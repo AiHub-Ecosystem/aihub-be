@@ -1,7 +1,10 @@
 import type { PrismaClient } from '@prisma-client/client';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
-import { PostgresSandboxDispatchBudget } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
+import {
+  PostgresSandboxDispatchBudget,
+  releaseSandboxDispatchReservations,
+} from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import { PostgresIdempotencyRepository } from '@/modules/idempotency/infrastructure/postgres-idempotency.repository';
 import { PostgresApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-api-key.repository';
 import { PostgresOrganizationApiKeyRepository } from '@/modules/identity/api-keys/infrastructure/postgres-organization-api-key.repository';
@@ -30,6 +33,15 @@ import { PostgresWritingChartUploadRepository } from '@/modules/writing/chart-up
  */
 const ORG = 'org_seam_probe';
 const NOW = new Date('2026-11-16T12:00:00.000Z');
+
+function speakingGradingJobs(
+  client: PrismaClient,
+): PostgresSpeakingGradingJobRepository {
+  return new PostgresSpeakingGradingJobRepository(
+    client,
+    releaseSandboxDispatchReservations,
+  );
+}
 
 const context = createRequestContext({
   requestId: 'req_01J00000000000000000000000',
@@ -275,27 +287,28 @@ const groups: readonly Group[] = [
     name: 'PostgresSpeakingGradingJobRepository',
     prototype: PostgresSpeakingGradingJobRepository.prototype,
     scoped: {
-      create: (client) =>
-        new PostgresSpeakingGradingJobRepository(client).create(gradingJob),
+      create: (client) => speakingGradingJobs(client).create(gradingJob),
       createWithAdmission: (client) =>
-        new PostgresSpeakingGradingJobRepository(client).createWithAdmission({
+        speakingGradingJobs(client).createWithAdmission({
           job: gradingJob,
           monthlyQuota: 5,
           admit: async () => ({ admitted: true }),
         }),
       findOwned: (client) =>
-        new PostgresSpeakingGradingJobRepository(client).findOwned(
-          gradingOwner,
-          gradingJob.jobId,
-        ),
+        speakingGradingJobs(client).findOwned(gradingOwner, gradingJob.jobId),
+      eraseByEndUser: (client) =>
+        speakingGradingJobs(client).eraseByEndUser({
+          organizationId: ORG,
+          endUserId: gradingJob.endUserId,
+        }),
       findByIdempotencyKey: (client) =>
-        new PostgresSpeakingGradingJobRepository(client).findByIdempotencyKey({
+        speakingGradingJobs(client).findByIdempotencyKey({
           organizationId: ORG,
           endUserId: gradingJob.endUserId,
           idempotencyKey: 'idem-1',
         }),
       countInFlight: (client) =>
-        new PostgresSpeakingGradingJobRepository(client).countInFlight({
+        speakingGradingJobs(client).countInFlight({
           organizationId: ORG,
           environment: 'production',
         }),

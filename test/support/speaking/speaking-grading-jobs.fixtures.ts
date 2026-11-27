@@ -350,6 +350,23 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     }
     return deleted;
   }
+
+  async eraseByEndUser(input: {
+    readonly organizationId: string;
+    readonly endUserId: string;
+  }): Promise<number> {
+    let deleted = 0;
+    for (const [jobId, job] of this.jobs) {
+      if (
+        job.organizationId === input.organizationId &&
+        job.endUserId === input.endUserId
+      ) {
+        this.jobs.delete(jobId);
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
 }
 
 export class FakeAudioRepository implements SpeakingAudioUploadRepositoryPort {

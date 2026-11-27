@@ -1,13 +1,22 @@
 import { ulid } from 'ulid';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
+import { releaseSandboxDispatchReservations } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import type { NewSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import { PostgresSpeakingGradingJobRepository } from '@/modules/speaking/infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { testDatabaseUrl } from '../shared/database';
 import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 const client = createFixturePrismaClient(testDatabaseUrl());
-const repository = new PostgresSpeakingGradingJobRepository(client);
+const repository = new PostgresSpeakingGradingJobRepository(
+  client,
+  releaseSandboxDispatchReservations,
+);
+const workerClient = createFixturePrismaClient(testDatabaseUrl());
+const workerRepository = new PostgresSpeakingGradingJobRepository(
+  workerClient,
+  releaseSandboxDispatchReservations,
+);
 const NOW = new Date('2026-11-08T12:00:00.000Z');
 
 function makeJob(
@@ -47,6 +56,17 @@ function owner(job: NewSpeakingGradingJob) {
     endUserId: job.endUserId,
     environment: job.environment,
   };
+}
+
+async function claimJobForWorker(job: NewSpeakingGradingJob): Promise<void> {
+  await expect(
+    workerRepository.claim({
+      jobId: job.jobId,
+      now: NOW,
+      leaseExpiresAt: new Date(NOW.getTime() + 60_000),
+      expireBefore: new Date(NOW.getTime() - 15 * 60_000),
+    }),
+  ).resolves.toMatchObject({ status: 'running' });
 }
 
 const RESULT: SpeakingV2QuestionResult = {
@@ -113,7 +133,7 @@ const RESULT: SpeakingV2QuestionResult = {
 };
 
 describe('Speaking grading job repository in PostgreSQL', () => {
-  afterAll(async () => client.close());
+  afterAll(async () => Promise.all([client.close(), workerClient.close()]));
 
   async function createClaimedSucceededJob(
     organizationId: string,
@@ -764,6 +784,152 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBeGreaterThanOrEqual(1);
     await expect(
       repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('erases only one Organization and End-User across environment values', async () => {
+    const organizationId = 'org_' + ulid();
+    const endUserId = 'learner-shared';
+    const production = makeJob({ organizationId, endUserId });
+    const sandbox = makeJob({
+      organizationId,
+      endUserId,
+      environment: 'sandbox',
+    });
+    const sameUserOtherOrganization = makeJob({
+      organizationId: 'org_' + ulid(),
+      endUserId,
+      environment: 'sandbox',
+    });
+    const otherUserSameOrganization = makeJob({
+      organizationId,
+      endUserId: 'learner-other',
+    });
+    await Promise.all(
+      [
+        production,
+        sandbox,
+        sameUserOtherOrganization,
+        otherUserSameOrganization,
+      ].map((job) => repository.create(job)),
+    );
+
+    const subject = { organizationId, endUserId };
+    await expect(repository.eraseByEndUser(subject)).resolves.toBe(2);
+    await expect(repository.eraseByEndUser(subject)).resolves.toBe(0);
+    await expect(
+      repository.findOwned(owner(production), production.jobId),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.findOwned(owner(sandbox), sandbox.jobId),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.findOwned(
+        owner(sameUserOtherOrganization),
+        sameUserOtherOrganization.jobId,
+      ),
+    ).resolves.toMatchObject({ jobId: sameUserOtherOrganization.jobId });
+    await expect(
+      repository.findOwned(
+        owner(otherUserSameOrganization),
+        otherUserSameOrganization.jobId,
+      ),
+    ).resolves.toMatchObject({ jobId: otherUserSameOrganization.jobId });
+  });
+
+  it('stops a claimed worker from dispatching or restoring a job erased first', async () => {
+    const job = makeJob();
+    await repository.create(job);
+    await claimJobForWorker(job);
+
+    await expect(
+      repository.eraseByEndUser({
+        organizationId: job.organizationId,
+        endUserId: job.endUserId,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      workerRepository.markDispatchStarted(job.jobId, NOW),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.succeed({
+        jobId: job.jobId,
+        result: RESULT,
+        completedAt: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('releases only the erased Sandbox jobs that never marked dispatch', async () => {
+    const organizationId = 'org_' + ulid();
+    const queued = makeJob({ organizationId, environment: 'sandbox' });
+    const claimed = makeJob({ organizationId, environment: 'sandbox' });
+    const dispatched = makeJob({ organizationId, environment: 'sandbox' });
+    const otherUser = makeJob({
+      organizationId,
+      environment: 'sandbox',
+      endUserId: 'learner-other',
+    });
+    const jobs = [queued, claimed, dispatched, otherUser];
+    await Promise.all(jobs.map((job) => repository.create(job)));
+    await client.sandboxDispatchReservation.createMany({
+      data: jobs.map(({ jobId }) => ({
+        requestId: jobId,
+        organizationId,
+        monthStart: new Date('2026-11-01T00:00:00.000Z'),
+      })),
+    });
+    await claimJobForWorker(claimed);
+    await claimJobForWorker(dispatched);
+    await expect(
+      workerRepository.markDispatchStarted(dispatched.jobId, NOW),
+    ).resolves.toBe(true);
+
+    await expect(repository.eraseByEndUser(owner(queued))).resolves.toBe(3);
+    await expect(repository.eraseByEndUser(owner(queued))).resolves.toBe(0);
+    const reservations = await client.sandboxDispatchReservation.findMany({
+      where: { organizationId },
+    });
+    const state = Object.fromEntries(
+      reservations.map(({ requestId, status, releasedAt }) => [
+        requestId,
+        { status, released: releasedAt !== null },
+      ]),
+    );
+    expect(state).toEqual({
+      [queued.jobId]: { status: 'released', released: true },
+      [claimed.jobId]: { status: 'released', released: true },
+      [dispatched.jobId]: { status: 'reserved', released: false },
+      [otherUser.jobId]: { status: 'reserved', released: false },
+    });
+  });
+
+  it('does not recreate an erased job when an already-dispatched worker succeeds', async () => {
+    const job = makeJob();
+    await repository.create(job);
+    await claimJobForWorker(job);
+    await expect(
+      workerRepository.markDispatchStarted(job.jobId, NOW),
+    ).resolves.toBe(true);
+
+    await expect(
+      repository.eraseByEndUser({
+        organizationId: job.organizationId,
+        endUserId: job.endUserId,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      workerRepository.succeed({
+        jobId: job.jobId,
+        result: RESULT,
+        completedAt: NOW,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      workerRepository.findOwned(owner(job), job.jobId),
     ).resolves.toBeUndefined();
   });
 });

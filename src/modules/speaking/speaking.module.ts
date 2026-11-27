@@ -99,6 +99,10 @@ import {
   type OutstandingQuotaReservationRegistry,
 } from '@/modules/gateway/public/outstanding-quota-reservations';
 import {
+  RELEASE_SANDBOX_DISPATCH_RESERVATIONS,
+  type ReleaseSandboxDispatchReservationsPort,
+} from '@/modules/gateway/public/sandbox-dispatch-budget';
+import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
@@ -126,6 +130,7 @@ import { BullmqSpeakingGradingJobQueue } from './infrastructure/grading-jobs/bul
 import { PostgresSpeakingGradingJobRepository } from './infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { SpeakingGradingJobSweepScheduler } from './infrastructure/grading-jobs/speaking-grading-job-sweep-scheduler';
 import { SpeakingQuotaReservationRegistration } from './infrastructure/grading-jobs/speaking-quota-reservation-registration';
+import { EraseSpeakingGradingJobs } from './public/speaking-grading-job-erasure';
 
 /**
  * Jobs a worker grades at once in this process, per Environment queue. The
@@ -155,11 +160,21 @@ function backgroundEnabled(
 const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
   {
     provide: SPEAKING_GRADING_JOB_REPOSITORY,
-    inject: [RUNTIME_PRISMA_CLIENT],
+    inject: [RUNTIME_PRISMA_CLIENT, RELEASE_SANDBOX_DISPATCH_RESERVATIONS],
     useFactory: (
       runtime: PrismaClientHolder,
+      releaseSandboxDispatchReservations: ReleaseSandboxDispatchReservationsPort,
     ): SpeakingGradingJobRepositoryPort =>
-      new PostgresSpeakingGradingJobRepository(runtime.prisma),
+      new PostgresSpeakingGradingJobRepository(
+        runtime.prisma,
+        releaseSandboxDispatchReservations,
+      ),
+  },
+  {
+    provide: EraseSpeakingGradingJobs,
+    inject: [SPEAKING_GRADING_JOB_REPOSITORY],
+    useFactory: (repository: SpeakingGradingJobRepositoryPort) =>
+      new EraseSpeakingGradingJobs(repository),
   },
   {
     provide: SpeakingQuotaReservationRegistration,
@@ -475,6 +490,6 @@ const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
       useValue: new InFlightCeiling(SPEAKING_UPLOADS_IN_FLIGHT_MAX),
     },
   ],
-  exports: [SpeakingAudioUploadSweep],
+  exports: [SpeakingAudioUploadSweep, EraseSpeakingGradingJobs],
 })
 export class SpeakingModule {}
