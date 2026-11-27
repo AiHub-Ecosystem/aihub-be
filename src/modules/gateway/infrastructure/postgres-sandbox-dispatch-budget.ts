@@ -10,13 +10,31 @@ import type {
 } from '@/modules/gateway/application/sandbox-dispatch-budget.port';
 import { quotaPeriod } from '@/modules/metering/public/quota-counter';
 import { organizationTransaction } from '@/modules/persistence/persistence.module';
-import type { PrismaClient } from '@prisma-client/client';
+import type { Prisma, PrismaClient } from '@prisma-client/client';
 
 type PersistenceClient = PrismaClient & { close?: () => Promise<void> };
 type AllowanceReader = Pick<
   PrismaClient,
   'sandboxAllowanceOverride' | 'sandboxAllowanceDefault'
 >;
+
+/** Lets callers release reservations inside an existing Organization transaction. */
+export async function releaseSandboxDispatchReservations(
+  transaction: Prisma.TransactionClient,
+  organizationId: string,
+  requestIds: string | string[],
+  releasedAt: Date,
+): Promise<void> {
+  await transaction.sandboxDispatchReservation.updateMany({
+    where: {
+      organizationId,
+      requestId:
+        typeof requestIds === 'string' ? requestIds : { in: requestIds },
+      status: 'reserved',
+    },
+    data: { status: 'released', releasedAt },
+  });
+}
 
 /**
  * A month-specific override replaces the persisted default for that month; a
@@ -129,15 +147,13 @@ export class PostgresSandboxDispatchBudget
   }
 
   async release(organizationId: string, requestId: string): Promise<void> {
-    await organizationTransaction(
-      this.client,
-      organizationId,
-      async (transaction) => {
-        await transaction.sandboxDispatchReservation.updateMany({
-          where: { organizationId, requestId, status: 'reserved' },
-          data: { status: 'released', releasedAt: this.now() },
-        });
-      },
+    await organizationTransaction(this.client, organizationId, (transaction) =>
+      releaseSandboxDispatchReservations(
+        transaction,
+        organizationId,
+        requestId,
+        this.now(),
+      ),
     );
   }
 

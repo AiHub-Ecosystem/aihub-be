@@ -19,6 +19,8 @@ import { runGuardedTransaction } from './prisma-raw';
 const ORGANIZATION_SETTING = 'aihub.organization_id';
 const SET_ORGANIZATION_SQL = 'SELECT set_config($1, $2, true)';
 
+export type OrganizationTransactionClient = Prisma.TransactionClient;
+
 class OrganizationTransactionExpiredError extends Error {
   constructor() {
     super('Organization transaction is no longer active');
@@ -29,7 +31,7 @@ class OrganizationTransactionExpiredError extends Error {
 export function organizationTransaction<T>(
   client: PrismaClient,
   organizationId: string,
-  callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+  callback: (transaction: OrganizationTransactionClient) => Promise<T>,
   options: {
     readonly maxWait: number;
     readonly timeout: number;

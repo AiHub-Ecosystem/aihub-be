@@ -81,9 +81,11 @@ result as JSONB, including transcript text. The in-process age-based sweep remov
 jobs after 30 days from creation; bounded retention batches remain tracked by
 #1874. The repository's subject-scoped erasure operation deletes all matching
 rows in one target database by `(organization_id, end_user_id)`, regardless of
-the row's environment value. Production and Sandbox are separate databases, so
-the parent deletion workflow must invoke it against each target and track
-per-store completion under #288 / #407. That workflow is not implemented yet.
+the row's environment value. The same transaction releases Sandbox dispatch
+reservations for erased jobs that never marked dispatch. Production and Sandbox
+are separate databases, so the parent deletion workflow must invoke it against
+each target and track per-store completion under #288 / #407. That workflow is
+not implemented yet.
 An already-dispatched worker may still complete provider and metering work after
 the job row is erased; the parent flow must order the related ownership-store
 erasure after those workers settle or add an equivalent guard.

@@ -1,15 +1,22 @@
 import { ulid } from 'ulid';
 
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
+import { releaseSandboxDispatchReservations } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import type { NewSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
 import { PostgresSpeakingGradingJobRepository } from '@/modules/speaking/infrastructure/grading-jobs/postgres-speaking-grading-job.repository';
 import { testDatabaseUrl } from '../shared/database';
 import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
 const client = createFixturePrismaClient(testDatabaseUrl());
-const repository = new PostgresSpeakingGradingJobRepository(client);
+const repository = new PostgresSpeakingGradingJobRepository(
+  client,
+  releaseSandboxDispatchReservations,
+);
 const workerClient = createFixturePrismaClient(testDatabaseUrl());
-const workerRepository = new PostgresSpeakingGradingJobRepository(workerClient);
+const workerRepository = new PostgresSpeakingGradingJobRepository(
+  workerClient,
+  releaseSandboxDispatchReservations,
+);
 const NOW = new Date('2026-11-08T12:00:00.000Z');
 
 function makeJob(
@@ -854,6 +861,50 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     await expect(
       workerRepository.findOwned(owner(job), job.jobId),
     ).resolves.toBeUndefined();
+  });
+
+  it('releases only the erased Sandbox jobs that never marked dispatch', async () => {
+    const organizationId = 'org_' + ulid();
+    const queued = makeJob({ organizationId, environment: 'sandbox' });
+    const claimed = makeJob({ organizationId, environment: 'sandbox' });
+    const dispatched = makeJob({ organizationId, environment: 'sandbox' });
+    const otherUser = makeJob({
+      organizationId,
+      environment: 'sandbox',
+      endUserId: 'learner-other',
+    });
+    const jobs = [queued, claimed, dispatched, otherUser];
+    await Promise.all(jobs.map((job) => repository.create(job)));
+    await client.sandboxDispatchReservation.createMany({
+      data: jobs.map(({ jobId }) => ({
+        requestId: jobId,
+        organizationId,
+        monthStart: new Date('2026-11-01T00:00:00.000Z'),
+      })),
+    });
+    await claimJobForWorker(claimed);
+    await claimJobForWorker(dispatched);
+    await expect(
+      workerRepository.markDispatchStarted(dispatched.jobId, NOW),
+    ).resolves.toBe(true);
+
+    await expect(repository.eraseByEndUser(owner(queued))).resolves.toBe(3);
+    await expect(repository.eraseByEndUser(owner(queued))).resolves.toBe(0);
+    const reservations = await client.sandboxDispatchReservation.findMany({
+      where: { organizationId },
+    });
+    const state = Object.fromEntries(
+      reservations.map(({ requestId, status, releasedAt }) => [
+        requestId,
+        { status, released: releasedAt !== null },
+      ]),
+    );
+    expect(state).toEqual({
+      [queued.jobId]: { status: 'released', released: true },
+      [claimed.jobId]: { status: 'released', released: true },
+      [dispatched.jobId]: { status: 'reserved', released: false },
+      [otherUser.jobId]: { status: 'reserved', released: false },
+    });
   });
 
   it('does not recreate an erased job when an already-dispatched worker succeeds', async () => {

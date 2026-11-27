@@ -95,6 +95,10 @@ import {
   type OutstandingQuotaReservationRegistry,
 } from '@/modules/gateway/public/outstanding-quota-reservations';
 import {
+  RELEASE_SANDBOX_DISPATCH_RESERVATIONS,
+  type ReleaseSandboxDispatchReservationsPort,
+} from '@/modules/gateway/public/sandbox-dispatch-budget';
+import {
   IDEMPOTENCY_SERVICE,
   type IdempotencyServicePort,
 } from '@/modules/idempotency/application/idempotency-service.port';
@@ -152,11 +156,15 @@ function backgroundEnabled(
 const SPEAKING_GRADING_JOB_PROVIDERS: Provider[] = [
   {
     provide: SPEAKING_GRADING_JOB_REPOSITORY,
-    inject: [RUNTIME_PRISMA_CLIENT],
+    inject: [RUNTIME_PRISMA_CLIENT, RELEASE_SANDBOX_DISPATCH_RESERVATIONS],
     useFactory: (
       runtime: PrismaClientHolder,
+      releaseSandboxDispatchReservations: ReleaseSandboxDispatchReservationsPort,
     ): SpeakingGradingJobRepositoryPort =>
-      new PostgresSpeakingGradingJobRepository(runtime.prisma),
+      new PostgresSpeakingGradingJobRepository(
+        runtime.prisma,
+        releaseSandboxDispatchReservations,
+      ),
   },
   {
     provide: EraseSpeakingGradingJobs,
