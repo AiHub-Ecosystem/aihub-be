@@ -213,6 +213,7 @@ truncated_client() {
 }
 truncated_client || fail "could not send and close the truncated request"
 truncated_status=''
+# real-timer-ok: wait for nginx to finalize the access log after client disconnect.
 for _ in {1..50}; do
   truncated_status="$(awk '$1 == "PUT" && $2 == "truncated" { status = $3 } END { print status }' "$tmp/ingress.log" 2>/dev/null)"
   [[ -n "$truncated_status" ]] && break
