@@ -50,6 +50,9 @@ function ownerKey(owner: SpeakingGradingJobOwner): string {
 export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
   readonly jobs = new Map<string, SpeakingGradingJob>();
   readonly quotaReservations = new Set<string>();
+  readonly roomChecks: number[] = [];
+  /** Simulates losing the authoritative in-flight re-check under the lock. */
+  refuseInFlight = false;
 
   seed(job: SpeakingGradingJob): void {
     this.jobs.set(job.jobId, job);
@@ -68,13 +71,11 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     if (job.quotaTracked) this.quotaReservations.add(job.jobId);
   }
 
-  async createWithAdmission(input: {
-    readonly job: NewSpeakingGradingJob;
-    readonly monthlyQuota: number | null;
-    readonly admit: Parameters<
+  async createWithAdmission(
+    input: Parameters<
       SpeakingGradingJobRepositoryPort['createWithAdmission']
-    >[0]['admit'];
-  }): Promise<SpeakingGradingJobCreationOutcome> {
+    >[0],
+  ): Promise<SpeakingGradingJobCreationOutcome> {
     const unexpiredSince = new Date(
       input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
     );
@@ -98,6 +99,10 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
             organizationId: input.job.organizationId,
             environment: input.job.environment,
           });
+    if (input.monthlyQuota !== null) {
+      this.roomChecks.push(inFlight);
+      input.hasInFlightRoom(inFlight);
+    }
     const monthlyQuota =
       input.monthlyQuota === null
         ? null
@@ -105,6 +110,14 @@ export class FakeJobRepository implements SpeakingGradingJobRepositoryPort {
     const admission = await input.admit(monthlyQuota);
     if (!admission.admitted) {
       return { created: false, existingJobId: input.job.jobId };
+    }
+    if (this.refuseInFlight && input.monthlyQuota !== null) {
+      await admission.release?.().catch(() => undefined);
+      return {
+        created: false,
+        existingJobId: input.job.jobId,
+        inFlightRefused: true,
+      };
     }
     try {
       await this.create(input.job);

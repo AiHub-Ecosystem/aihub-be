@@ -1,3 +1,11 @@
+/** Whether another job may use the Organization's monthly request quota. */
+export function hasSpeakingJobInFlightRoom(
+  inFlight: number,
+  monthlyQuota: number,
+): boolean {
+  return inFlight < monthlyQuota;
+}
+
 /** Timing policy for Speaking grading jobs (ADR-0159 decision 6). */
 export const SPEAKING_GRADING_JOB_POLICY = {
   /** How often the sweep runs. */

@@ -11,11 +11,16 @@ import type { PrismaClient } from '@prisma-client/client';
 export function createFixturePrismaClient(
   databaseUrl: string,
   unavailableMessage = 'DATABASE_URL is missing',
+  applicationName?: string,
 ): PrismaClient & { close(): Promise<void> } {
   if (databaseUrl.trim().length === 0) {
     throw internalError(unavailableMessage);
   }
 
-  const holder = createPrismaClient('integration-test', databaseUrl);
+  const holder = createPrismaClient(
+    'integration-test',
+    databaseUrl,
+    applicationName === undefined ? {} : { applicationName },
+  );
   return Object.assign(holder.prisma, { close: () => holder.close() });
 }

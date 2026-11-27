@@ -204,6 +204,8 @@ describe('Speaking grading jobs HTTP flow', () => {
 
   beforeEach(() => {
     repository.jobs.clear();
+    repository.roomChecks.length = 0;
+    repository.refuseInFlight = false;
     audioRepository.assets.clear();
     audioRepository.seed(speakingAsset());
     queue.attempts.length = 0;
@@ -259,6 +261,7 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(repository.jobs.size).toBe(1);
     expect(queue.enqueued).toEqual([expect.any(String)]);
     expect(admissionCalls).toHaveLength(1);
+    expect(repository.roomChecks).toEqual([0]);
     expect(pollRateLimitCalls).toBe(0);
     const job = [...repository.jobs.values()][0];
     expect(job).toMatchObject({
@@ -298,6 +301,17 @@ describe('Speaking grading jobs HTTP flow', () => {
     expect(json(response)).toMatchObject({ error: { code: 'QUOTA_EXCEEDED' } });
     expect(admissionCalls[0]?.monthlyRequestQuota).toBe(0);
     expect(repository.jobs.size).toBe(2);
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('maps a late in-flight refusal to QUOTA_EXCEEDED without creating a job', async () => {
+    repository.refuseInFlight = true;
+
+    const response = await submit();
+
+    expect(response.statusCode).toBe(429);
+    expect(json(response)).toMatchObject({ error: { code: 'QUOTA_EXCEEDED' } });
+    expect(repository.jobs.size).toBe(0);
     expect(queue.enqueued).toHaveLength(0);
   });
 

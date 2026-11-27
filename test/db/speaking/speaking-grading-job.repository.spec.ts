@@ -1,5 +1,7 @@
+import { Pool } from 'pg';
 import { ulid } from 'ulid';
 
+import { AppError } from '@/common/errors/app-error';
 import type { SpeakingV2QuestionResult } from '@/contracts/speaking/v2/question-result';
 import { releaseSandboxDispatchReservations } from '@/modules/gateway/infrastructure/postgres-sandbox-dispatch-budget';
 import type { NewSpeakingGradingJob } from '@/modules/speaking/application/grading-jobs/speaking-grading-job';
@@ -7,16 +9,29 @@ import { PostgresSpeakingGradingJobRepository } from '@/modules/speaking/infrast
 import { testDatabaseUrl } from '../shared/database';
 import { createFixturePrismaClient } from '../shared/fixture-prisma-client';
 
-const client = createFixturePrismaClient(testDatabaseUrl());
+const client = createFixturePrismaClient(
+  testDatabaseUrl(),
+  undefined,
+  'speaking-submit',
+);
 const repository = new PostgresSpeakingGradingJobRepository(
   client,
   releaseSandboxDispatchReservations,
 );
-const workerClient = createFixturePrismaClient(testDatabaseUrl());
+const workerClient = createFixturePrismaClient(
+  testDatabaseUrl(),
+  undefined,
+  'speaking-worker',
+);
 const workerRepository = new PostgresSpeakingGradingJobRepository(
   workerClient,
   releaseSandboxDispatchReservations,
 );
+const observerPool = new Pool({
+  connectionString: testDatabaseUrl(),
+  application_name: 'speaking-admission-observer',
+  max: 2,
+});
 const NOW = new Date('2026-11-08T12:00:00.000Z');
 
 function makeJob(
@@ -132,8 +147,53 @@ const RESULT: SpeakingV2QuestionResult = {
   },
 };
 
+function deferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve: () => resolve() };
+}
+
+function roomFor(monthlyQuota: number | null): (inFlight: number) => boolean {
+  return (inFlight) => monthlyQuota !== null && inFlight < monthlyQuota;
+}
+
+async function expectNoAdmissionLockDuringAdmission(
+  organizationId: string,
+): Promise<void> {
+  const result = await observerPool.query<{
+    locked: boolean;
+    openTransaction: boolean;
+  }>(
+    `SELECT
+       EXISTS (
+         SELECT 1 FROM pg_locks
+         WHERE locktype = 'advisory'
+           AND classid = ((hashtextextended($1, 0) >> 32) & 4294967295)::oid
+           AND objid = ((hashtextextended($1, 0) & 4294967295))::oid
+           AND objsubid = 1
+       ) AS locked,
+       EXISTS (
+         SELECT 1 FROM pg_stat_activity
+         WHERE application_name = 'speaking-submit'
+           AND state = 'idle in transaction'
+       ) AS "openTransaction"`,
+    [`speaking-grading-quota:${organizationId}`],
+  );
+  expect(result.rows[0]).toMatchObject({
+    locked: false,
+    openTransaction: false,
+  });
+}
+
 describe('Speaking grading job repository in PostgreSQL', () => {
-  afterAll(async () => Promise.all([client.close(), workerClient.close()]));
+  afterAll(async () =>
+    Promise.all([client.close(), workerClient.close(), observerPool.end()]),
+  );
 
   async function createClaimedSucceededJob(
     organizationId: string,
@@ -383,6 +443,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: duringMetering,
         monthlyQuota: 1,
+        hasInFlightRoom: roomFor(1),
         admit: async (monthlyQuota) => ({
           admitted: monthlyQuota !== null && monthlyQuota > 0,
         }),
@@ -401,6 +462,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: afterMetering,
         monthlyQuota: 1,
+        hasInFlightRoom: roomFor(1),
         admit: async (monthlyQuota) => ({
           admitted: monthlyQuota !== null && monthlyQuota > 0,
         }),
@@ -420,6 +482,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: beforeMeter,
         monthlyQuota: 1,
+        hasInFlightRoom: roomFor(1),
         admit,
       }),
     ).resolves.toEqual({ created: false, existingJobId: beforeMeter.jobId });
@@ -454,6 +517,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job: afterMeter,
         monthlyQuota: 1,
+        hasInFlightRoom: roomFor(1),
         admit,
       }),
     ).resolves.toEqual({ created: true });
@@ -506,6 +570,45 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBe(true);
   });
 
+  it('holds no PostgreSQL transaction or advisory lock while graded admission is waiting', async () => {
+    const organizationId = 'org_' + ulid();
+    const job = makeJob({ organizationId });
+    const release = jest.fn(async () => undefined);
+    await repository.create(makeJob({ organizationId }));
+    const gate = deferred();
+    let announceAdmission = (): void => undefined;
+    const admissionStarted = new Promise<void>((done) => {
+      announceAdmission = done;
+    });
+
+    const submission = repository.createWithAdmission({
+      job,
+      monthlyQuota: 1,
+      hasInFlightRoom: roomFor(1),
+      admit: async () => {
+        announceAdmission();
+        await gate.promise;
+        return { admitted: true, release };
+      },
+    });
+    await admissionStarted;
+
+    await expectNoAdmissionLockDuringAdmission(organizationId);
+
+    gate.resolve();
+    await expect(submission).resolves.toMatchObject({
+      created: false,
+      inFlightRefused: true,
+    });
+    expect(release).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.findOwned(owner(job), job.jobId),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.countInFlight({ organizationId, environment: 'production' }),
+    ).resolves.toBe(1);
+  });
+
   it('serializes concurrent admission against monthly in-flight quota', async () => {
     const organizationId = 'org_' + ulid();
     const jobs = [makeJob({ organizationId }), makeJob({ organizationId })];
@@ -515,6 +618,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
         repository.createWithAdmission({
           job,
           monthlyQuota: 1,
+          hasInFlightRoom: roomFor(1),
           admit: async (monthlyQuota) => ({
             admitted: monthlyQuota !== null && monthlyQuota > 0,
           }),
@@ -531,6 +635,52 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBe(1);
   });
 
+  it('gives the late in-flight refusal back when both admissions read the same remaining quota', async () => {
+    const organizationId = 'org_' + ulid();
+    const jobs = [makeJob({ organizationId }), makeJob({ organizationId })];
+    const releases = jobs.map(() => jest.fn(async () => undefined));
+    const gate = deferred();
+    let admissionsStarted = 0;
+    let announceBoth = (): void => undefined;
+    const bothAdmitted = new Promise<void>((done) => {
+      announceBoth = done;
+    });
+
+    const submissions = jobs.map((job, index) => {
+      const release = releases[index];
+      return repository.createWithAdmission({
+        job,
+        monthlyQuota: 1,
+        hasInFlightRoom: roomFor(1),
+        admit: async () => {
+          admissionsStarted += 1;
+          if (admissionsStarted === jobs.length) announceBoth();
+          await gate.promise;
+          return release === undefined
+            ? { admitted: true }
+            : { admitted: true, release };
+        },
+      });
+    });
+    await bothAdmitted;
+    gate.resolve();
+
+    const outcomes = await Promise.all(submissions);
+    expect(outcomes.filter((outcome) => outcome.created)).toHaveLength(1);
+    const loserIndex = outcomes.findIndex(
+      (outcome) => !outcome.created && outcome.inFlightRefused === true,
+    );
+    expect(loserIndex).toBeGreaterThanOrEqual(0);
+    expect(releases[loserIndex] ?? jest.fn()).toHaveBeenCalledTimes(1);
+    expect(releases[1 - loserIndex] ?? jest.fn()).not.toHaveBeenCalled();
+    await expect(
+      repository.countInFlight({
+        organizationId,
+        environment: 'production',
+      }),
+    ).resolves.toBe(1);
+  });
+
   it('recovers an existing job on duplicate idempotency key admission', async () => {
     const organizationId = 'org_' + ulid();
     const idempotencyKey = 'key_' + ulid();
@@ -539,6 +689,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const first = await repository.createWithAdmission({
       job: firstJob,
       monthlyQuota: 10,
+      hasInFlightRoom: roomFor(10),
       admit: async () => ({ admitted: true }),
     });
     expect(first).toEqual({ created: true });
@@ -547,6 +698,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const second = await repository.createWithAdmission({
       job: duplicateJob,
       monthlyQuota: 10,
+      hasInFlightRoom: roomFor(10),
       admit: async () => ({ admitted: true }),
     });
     expect(second).toEqual({ created: false, existingJobId: firstJob.jobId });
@@ -573,6 +725,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job,
         monthlyQuota: 5,
+        hasInFlightRoom: roomFor(5),
         admit: async () => ({ admitted: true, release }),
       }),
     ).rejects.toMatchObject({ code: 'DATABASE_UNAVAILABLE' });
@@ -602,6 +755,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       repository.createWithAdmission({
         job,
         monthlyQuota: null,
+        hasInFlightRoom: roomFor(null),
         admit: async () => ({ admitted: true, release }),
       }),
     ).rejects.toMatchObject({ code: 'DATABASE_UNAVAILABLE' });
@@ -612,33 +766,30 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('compensates a spend that lands after the transaction deadline fired', async () => {
+  it('stops waiting on a timed-out Redis admission without a job or reservation', async () => {
     const organizationId = 'org_' + ulid();
-    let signalReleased = () => {};
-    const released = new Promise<void>((resolve) => {
-      signalReleased = resolve;
-    });
-    const release = jest.fn(async () => {
-      signalReleased();
-    });
     const job = makeJob({ organizationId });
+    // real-timer-ok: models the gateway's 400 ms Redis command timeout, which
+    // bounds admission now that no transaction spans the call.
+    const redisTimeout = () =>
+      new Promise<void>((resolve) => setTimeout(resolve, 20));
 
-    const submission = repository.createWithAdmission({
-      job,
-      monthlyQuota: 5,
-      admit: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 6_000)); // real-timer-ok: only elapsed time fires the 5s transaction deadline
-        return { admitted: true, release };
-      },
-    });
+    await expect(
+      repository.createWithAdmission({
+        job,
+        monthlyQuota: 5,
+        hasInFlightRoom: roomFor(5),
+        admit: async () => {
+          await redisTimeout();
+          throw new AppError({
+            code: 'REDIS_UNAVAILABLE',
+            message: 'graded admission timed out',
+            retryable: true,
+          });
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'REDIS_UNAVAILABLE' });
 
-    await expect(submission).rejects.toMatchObject({
-      code: 'DATABASE_UNAVAILABLE',
-    });
-
-    // The callback outlives the transaction, so the spend lands afterwards.
-    await released;
-    expect(release).toHaveBeenCalledTimes(1);
     await expect(
       repository.countInFlight({
         organizationId,
@@ -648,7 +799,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     await expect(
       repository.findOwned(owner(job), job.jobId),
     ).resolves.toBeUndefined();
-  }, 20_000);
+  });
 
   it.each([
     { name: 'graded', environment: 'production' as const, monthlyQuota: 10 },
@@ -670,6 +821,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
       const outcome = await repository.createWithAdmission({
         job: duplicateJob,
         monthlyQuota,
+        hasInFlightRoom: roomFor(monthlyQuota),
         admit: async () => {
           await repository.create(winnerJob);
           return {
@@ -712,6 +864,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const first = await repository.createWithAdmission({
       job: firstJob,
       monthlyQuota: 10,
+      hasInFlightRoom: roomFor(10),
       admit: async () => ({ admitted: true }),
     });
     expect(first).toEqual({ created: true });
@@ -725,6 +878,7 @@ describe('Speaking grading job repository in PostgreSQL', () => {
     const second = await repository.createWithAdmission({
       job: secondJob,
       monthlyQuota: 10,
+      hasInFlightRoom: roomFor(10),
       admit: async () => ({ admitted: true }),
     });
     expect(second).toEqual({ created: true });

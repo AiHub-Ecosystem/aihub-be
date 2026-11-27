@@ -339,6 +339,7 @@ const groups: readonly Group[] = [
         speakingGradingJobs(client).createWithAdmission({
           job: gradingJob,
           monthlyQuota: 5,
+          hasInFlightRoom: (inFlight) => inFlight < 5,
           admit: async () => ({ admitted: true }),
         }),
       findOwned: (client) =>

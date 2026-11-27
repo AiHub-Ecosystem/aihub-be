@@ -116,6 +116,7 @@ export class PostgresSpeakingGradingJobRepository
     readonly admit: (
       monthlyQuota: number | null,
     ) => Promise<SpeakingGradingJobAdmission>;
+    readonly hasInFlightRoom: (inFlight: number) => boolean;
   }): Promise<SpeakingGradingJobCreationOutcome> {
     const unexpiredSince = new Date(
       input.job.createdAt.getTime() - IDEMPOTENCY_RETENTION_MS,
@@ -142,6 +143,10 @@ export class PostgresSpeakingGradingJobRepository
     }
 
     if (input.monthlyQuota === null) {
+      // The Sandbox dispatch reservation and the job insert use two separate
+      // transactions by design: `reserve` commits and releases its month lock
+      // before `create` opens this one, so there is no nesting or lock-ordering
+      // overlap. Both still wait on Redis with no transaction open.
       const admission = await input.admit(null);
       if (!admission.admitted) {
         return { created: false, existingJobId: input.job.jobId };
@@ -158,12 +163,32 @@ export class PostgresSpeakingGradingJobRepository
     }
 
     const monthlyQuota = input.monthlyQuota;
-    let admissionFailed = false;
-    let admissionError: unknown;
-    // Held outside the callback: the transaction deadline can reject the
-    // transaction while the callback is still running, so compensation has to
-    // work from either side and run at most once.
-    let admissionRelease: SpeakingGradingJobAdmissionRelease | undefined;
+    // Graded admission runs with no transaction or advisory lock open. The
+    // pre-read only supplies the remaining quota to the Lua decision; the
+    // authoritative re-check happens under the lock below.
+    const inFlightBeforeAdmission = await this.scoped(
+      input.job.organizationId,
+      (transaction) =>
+        countInFlight(transaction, {
+          organizationId: input.job.organizationId,
+          environment: input.job.environment,
+        }),
+    );
+    let admission: SpeakingGradingJobAdmission;
+    try {
+      admission = await input.admit(
+        Math.max(0, monthlyQuota - inFlightBeforeAdmission),
+      );
+    } catch (error) {
+      throwStoreUnavailable(error);
+    }
+    if (!admission.admitted) {
+      return { created: false, existingJobId: input.job.jobId };
+    }
+
+    // Held outside the transaction: a commit failure can be reported after the
+    // callback settled, so compensation works from either side and runs once.
+    let admissionRelease = admission.release;
     const compensate = async (): Promise<void> => {
       const release = admissionRelease;
       admissionRelease = undefined;
@@ -174,8 +199,10 @@ export class PostgresSpeakingGradingJobRepository
         this.client,
         input.job.organizationId,
         async (transaction): Promise<SpeakingGradingJobCreationOutcome> => {
-          // One lock per Organization, not per month: reservations carry over a
-          // month boundary, so admissions on either side must serialize.
+          // Serialization point: one lock per Organization, not per month,
+          // serializes the authoritative in-flight count with the job insert.
+          // Reservations carry over a month boundary, so admissions on either
+          // side of it must serialize here.
           await transaction.$executeRawUnsafe(
             SPEAKING_GRADING_QUOTA_LOCK_SQL,
             `speaking-grading-quota:${input.job.organizationId}`,
@@ -184,26 +211,18 @@ export class PostgresSpeakingGradingJobRepository
             organizationId: input.job.organizationId,
             environment: input.job.environment,
           });
-          let admission: SpeakingGradingJobAdmission;
-          try {
-            admission = await input.admit(Math.max(0, monthlyQuota - inFlight));
-          } catch (error) {
-            admissionFailed = true;
-            admissionError = error;
-            throw error;
-          }
-          if (!admission.admitted) {
-            return { created: false, existingJobId: input.job.jobId };
-          }
-          admissionRelease = admission.release;
-          try {
-            await insertJob(transaction, input.job);
-          } catch (error) {
-            // A closed transaction surfaces here, after this callback has
-            // already spent; the outer catch may have run before the spend.
+          if (!input.hasInFlightRoom(inFlight)) {
             await compensate();
-            throw error;
+            return {
+              created: false,
+              existingJobId: input.job.jobId,
+              inFlightRefused: true,
+            };
           }
+          // Any insert failure, including a unique violation, reaches the
+          // outer catch. Compensation belongs there, after the transaction has
+          // released its advisory lock.
+          await insertJob(transaction, input.job);
           return { created: true };
         },
       );
@@ -211,7 +230,6 @@ export class PostgresSpeakingGradingJobRepository
       // Any throw from here means the row did not commit, including a commit
       // that failed after the callback returned (transaction timeout).
       await compensate();
-      if (admissionFailed) throw admissionError;
       if (!isKeyUniquenessViolation(error)) throwStoreUnavailable(error);
       return this.recoverKeyedJob(error, input.job, unexpiredSince);
     }

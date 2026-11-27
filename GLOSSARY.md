@@ -74,6 +74,38 @@ End-User ID, applies rate limits, checks quota, and takes a concurrency slot
 caller receives `RATE_LIMITED` or `QUOTA_EXCEEDED`.
 _Avoid_: middleware stack, guard chain, request pipeline
 
+**Graded admission**:
+The single decision on a graded request that applies the API key's rate limit,
+then the Organization retry budget, then the monthly quota, in the order
+[ADR-0057](docs/adr/0057-graded-request-order-is-a-declared-contract.md)
+declares. It is distinct from Request admission and Organization admission; the
+Concurrency permit is a separate step after it.
+_Avoid_: gateway check, quota check
+
+**Job quota reservation**:
+One accepted Speaking grading job that occupies a unit of its Organization's
+monthly request quota until metering has accounted for it. It is independent
+of the Concurrency permit held during dispatch.
+_Avoid_: dispatch reservation, in-flight request
+
+**Sandbox dispatch reservation**:
+The durable claim of one unit of an Organization's Sandbox dispatch allowance
+for one accepted submit. It is spent when the request reaches the dispatch
+boundary, even when the downstream call later fails.
+_Avoid_: job quota reservation, quota counter
+
+**In-flight jobs**:
+Speaking grading jobs whose job quota reservation is still active: queued,
+running, or succeeded before the metering handoff.
+_Avoid_: Concurrency permit, HTTP stream
+
+**Concurrency permit**:
+The right for one graded request to occupy one of its Organization's in-flight
+dispatch slots, acquired after Graded admission and released when the request
+settles. It is admission control, not usage evidence, and is separate from a
+Job quota reservation.
+_Avoid_: job quota reservation, in-flight jobs
+
 **Organization retry budget**:
 The Organization-wide allowance for same-key repeats of operations that
 support idempotency, shared by its API keys and distinct from monthly quota.

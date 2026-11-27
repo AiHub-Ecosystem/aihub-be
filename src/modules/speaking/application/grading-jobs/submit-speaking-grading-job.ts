@@ -40,6 +40,7 @@ import {
   type SpeakingGradingJobOwner,
   type SpeakingGradingJobRequest,
 } from './speaking-grading-job';
+import { hasSpeakingJobInFlightRoom } from './speaking-grading-job.policy';
 import type {
   SpeakingGradingJobQueuePort,
   SpeakingGradingJobRepositoryPort,
@@ -200,8 +201,8 @@ export class SubmitSpeakingGradingJob {
     const quota = authenticated.monthlyRequestQuota;
     const quotaTracked = gradedAdmissionPolicy(admissionInput).quotaTracked;
     const jobId = `sgj_${ulid()}`;
-    // Admission runs inside the repository transaction after this object is
-    // captured, so the flag reaches the insert through a getter.
+    // Admission runs before the repository's short insert transaction, after
+    // this object is captured, so the flag reaches the insert through a getter.
     let quotaUnverified = false;
     const job: NewSpeakingGradingJob = {
       jobId,
@@ -224,6 +225,8 @@ export class SubmitSpeakingGradingJob {
     const admission = await this.repository.createWithAdmission({
       job,
       monthlyQuota: environment === 'sandbox' ? null : quota,
+      hasInFlightRoom: (inFlight) =>
+        hasSpeakingJobInFlightRoom(inFlight, quota ?? 0),
       admit: async (monthlyRequestQuota) => {
         const admissionDecision = await admitGradedRequest(this.admission, {
           ...admissionInput,
@@ -269,6 +272,13 @@ export class SubmitSpeakingGradingJob {
     if (admission.created === false) {
       if (admission.existingJobId !== jobId) {
         return { job_id: admission.existingJobId, status: 'queued' };
+      }
+      if (admission.inFlightRefused === true) {
+        throw gradedAdmissionRefusal(
+          { stage: 'quota', quota: 0 },
+          owner.organizationId,
+          this.now,
+        );
       }
       if (decision === undefined || decision.stage === 'admitted') {
         throw internalError('Speaking grading job admission is unavailable');

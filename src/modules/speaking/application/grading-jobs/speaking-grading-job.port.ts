@@ -16,7 +16,12 @@ import type {
  */
 export type SpeakingGradingJobCreationOutcome =
   | { created: true }
-  | { created: false; existingJobId: string };
+  | {
+      created: false;
+      existingJobId: string;
+      /** The authoritative in-flight re-check under the lock found no room. */
+      inFlightRefused?: true;
+    };
 
 /**
  * What admission spent outside Postgres, and gives back if the job row never
@@ -38,10 +43,11 @@ export interface SpeakingGradingJobRepositoryPort {
   create(job: NewSpeakingGradingJob): Promise<void>;
 
   /**
-   * Serializes quota check, graded admission, key recovery and job creation for
-   * one Organization. Admission returns its own compensation, which this method
-   * runs whenever the job row does not commit: a refusal, a unique-violation
-   * recovery, or a rollback the driver reports.
+   * Runs graded admission outside PostgreSQL, then serializes the authoritative
+   * in-flight re-check and job insert for one Organization. Admission returns
+   * its own compensation, which this method runs whenever the job row does not
+   * commit: a late in-flight refusal, a unique-violation recovery, or a
+   * rollback the driver reports.
    *
    * Ordering: spend, then commit, then compensate on abort (#1992). The chosen
    * alternative — commit first and spend afterwards — cannot hold the monthly
@@ -53,6 +59,12 @@ export interface SpeakingGradingJobRepositoryPort {
    * month; a rollback, which is the case this contract makes recoverable, loses
    * none. The monthly quota counter is not among those spends: submit only reads
    * it, and the counter is incremented at metering, after the job completes.
+   *
+   * A false-positive admission is possible when two callers read the same
+   * remaining quota before either inserts. Under the lock, the application-owned
+   * policy decides the winner and the loser is compensated; no second admission
+   * decision is made. Bounds come from the Redis command timeout and each
+   * PostgreSQL transaction timeout, not from one spanning deadline.
    */
   createWithAdmission(input: {
     readonly job: NewSpeakingGradingJob;
@@ -60,6 +72,8 @@ export interface SpeakingGradingJobRepositoryPort {
     readonly admit: (
       monthlyQuota: number | null,
     ) => Promise<SpeakingGradingJobAdmission>;
+    /** Pure application policy for the authoritative in-flight re-check. */
+    readonly hasInFlightRoom: (inFlight: number) => boolean;
   }): Promise<SpeakingGradingJobCreationOutcome>;
 
   /** The non-terminal job whichever holds this idempotency key, if any. */
