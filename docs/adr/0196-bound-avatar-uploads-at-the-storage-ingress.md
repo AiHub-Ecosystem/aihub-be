@@ -57,11 +57,11 @@ A read-only `OPTIONS` through that vhost returned `200` with a matching
 buckets and each of `https://aihubproduction.com`,
 `https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`.
 Those are the origins the ingress-generated `413` reuses; it introduces no
-broader grant and does not change proxied responses.
-
-Both configured default staging buckets reach that one vhost on the supported
-path-style presigned `PUT`, which is the coverage this decision relies on. A
-separate filer location is outside that supported flow and was not assessed.
+broader grant and does not change proxied responses. The last of the three is
+the Sandbox API vhost, not a browser app, so this is an HTTP origin check and
+the browser evidence still comes from the deployment's configured Customer Web
+origin. A separate filer location is outside the supported path-style presigned
+`PUT` flow and was not assessed.
 
 `ops/nginx/s3-wispace-avatar-upload-limit.conf` is the reviewed, operator-
 installed fragment for that server, with install, verification, and rollback in

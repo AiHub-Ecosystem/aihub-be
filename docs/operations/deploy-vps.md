@@ -545,83 +545,90 @@ If a deployment sets `SEAWEEDFS_USER_ASSET_STAGING_BUCKET`, its bucket name
 replaces one of the two defaults and the fragment must list that exact name.
 The variable reaches the container as a plain environment value, and Compose
 maps `SEAWEEDFS_SANDBOX_USER_ASSET_STAGING_BUCKET` into the Sandbox container
-under that name, so read it from the container that is actually serving the
-tier. Container names are Compose slot dependent and must not be assumed:
-resolve the live container the same way `ops/status.sh` does, from the
-upstream nginx currently proxies to.
+under that name. Container names are Compose slot dependent and must not be
+assumed, so resolve the active running container from the validated vhost
+upstream with the same rules `ops/status.sh` already applies: one nginx
+upstream per vhost (loopback TCP or a Unix socket), the one AIHUB container
+that publishes it or carries the Compose service named by that socket, and a
+refusal when zero or more than one candidate matches. `ops/status.sh` applies
+that rule and fails the tier when it cannot, so run it first and stop unless
+both tiers report a state. Its status line names neither the upstream nor the
+container id. The existing blue-green status command resolves the active slot
+from the same single upstream and names the Compose service, and the one
+running container carrying that service label is the container:
 
 ```sh
-# One upstream per AIHUB virtual host, as ops/status.sh reads it.
-upstream_of() {
-  sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+)(/[^;[:space:]]*)?;.*#\1#p' "$1" | sort -u
+active_service() {
+  local lines
+  lines="$(APP_DIR="$PWD" ./scripts/ops/blue-green/blue-green-host.sh status \
+    | sed -n "s/^$1 active_slot=[ab] sha=[^ ]* service=//p")" || return 1
+  [ "$(printf '%s\n' "$lines" | sed '/^$/d' | wc -l)" -eq 1 ] || return 1
+  printf '%s\n' "$lines"
 }
-prod_upstream="$(upstream_of /etc/nginx/conf.d/aihub-api.conf)"
-sandbox_upstream="$(upstream_of /etc/nginx/conf.d/sandbox.conf)"
+container_for_service() {
+  local ids
+  [ -n "$1" ] || return 1
+  ids="$(sudo -n docker ps --quiet \
+    --filter "label=com.docker.compose.service=$1" \
+    --filter 'label=org.opencontainers.image.source=https://github.com/AiHub-Ecosystem/aihub-be')" || return 1
+  [ "$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l)" -eq 1 ] || return 1
+  printf '%s\n' "$ids"
+}
+prod_container="$(container_for_service "$(active_service production)")" || prod_container=
+sandbox_container="$(container_for_service "$(active_service sandbox)")" || sandbox_container=
 ```
 
-Each value must be a single upstream; anything else means the live config is
-not the expected shape, so stop instead of guessing a container. Then resolve
-the one AIHUB container publishing that port. `ops/status.sh` also rejects a
-port that matches more than one AIHUB container, and so does this: a stale
-container from the other Compose slot must not be mistaken for the active one.
+An empty value is a failed lookup, not an absent override: a tier with no
+active service line, a service with no running container, or a service with
+more than one candidate stops the install. Then read the one variable from
+that container with a single `docker inspect` over `Config.Env`. It exits
+non-zero when the container cannot be read, prints nothing when the variable
+is absent or empty, and never prints another environment value:
 
 ```sh
-container_for_upstream() {
-  local tier="$1" upstream="$2" service id selected= matches=0
-  local -a ids=()
-  mapfile -t ids < <(sudo -n docker ps --all --quiet \
-    --filter "publish=${upstream##*:}" \
-    --filter 'label=org.opencontainers.image.source=https://github.com/AiHub-Ecosystem/aihub-be')
-  for id in "${ids[@]}"; do
-    service="$(sudo -n docker inspect --format \
-      '{{index .Config.Labels "com.docker.compose.service"}}' "$id" 2>/dev/null)" || continue
-    case "$tier:$service" in
-      production:app | production:app-slot-b | sandbox:app-sandbox | sandbox:app-sandbox-slot-b) ;;
-      *) continue ;;
-    esac
-    selected="$id"
-    matches=$((matches + 1))
-  done
-  [ "$matches" -eq 1 ] || return 1
-  printf '%s\n' "$selected"
-}
-prod_container="$(container_for_upstream production "$prod_upstream")" || prod_container=
-sandbox_container="$(container_for_upstream sandbox "$sandbox_upstream")" || sandbox_container=
-```
-
-A lookup that returns nothing is a failure to identify the container, not an
-absent override. Read the variable only from a resolved container, and treat
-the three outcomes separately:
-
-```sh
-# Prints the override, or an explicit state. A failed lookup is not "unset".
 bucket_override() {
-  if [ -z "$1" ]; then
-    echo "lookup-failed"
-  elif ! sudo -n docker inspect "$1" >/dev/null 2>&1; then
-    echo "lookup-failed"
-  elif ! sudo -n docker exec "$1" printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET >/dev/null 2>&1; then
-    echo "unset"
-  else
-    value="$(sudo -n docker exec "$1" printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET)"
-    if [ -z "$value" ]; then echo "unset"; else echo "$value"; fi
-  fi
+  sudo -n docker inspect "$1" --format \
+    '{{range .Config.Env}}{{if eq (index (split . "=") 0) "SEAWEEDFS_USER_ASSET_STAGING_BUCKET"}}{{join (slice (split . "=") 1) "="}}{{end}}{{end}}'
 }
-bucket_override "$prod_container"
+bucket_override "$prod_container"     # non-zero exit is a failed lookup
 bucket_override "$sandbox_container"
 ```
 
-`unset` (including an empty value) means the tier uses its default staging
-bucket. A bucket name means the operator must add exactly that name to the
-fragment's `location ~` alternation before installing, and keep it when a later
-release changes the override. `lookup-failed` means the container could not be
-identified or read; do not treat it as a default, and resolve it before
-installing anything.
+Treat a non-zero exit as `lookup-failed`: the container could not be read, so
+do not assume a default and do not install. An empty value (exit zero) means
+`unset`, so the tier uses its default staging bucket. A bucket name means the
+operator must add exactly that literal name to the fragment's `location ~`
+alternation before installing, and keep it when a later release changes the
+override.
 
 Install one tier at a time, Sandbox first. Production is only enabled after the
-Sandbox evidence below is recorded and a separate rollout is authorized. Both
-steps edit the same operator-owned server block, so keep a timestamped backup
-and make each step independently reversible.
+Sandbox evidence below is recorded and a separate rollout is authorized. The
+Sandbox step edits the vhost (to add the include) and the snippet; the
+Production step edits only the snippet. Each tier therefore has its own
+rollback, and the Sandbox rollback must not be reused for Production.
+
+Name both effective buckets first, using the value read above or the tier
+default when it printed nothing. Stop if they are equal: one alternation cannot
+bound two tiers that share a bucket.
+
+```sh
+prod_bucket=aihub-user-asset-staging          # or the resolved Production value
+sandbox_bucket=aihub-sandbox-user-asset-staging   # or the resolved Sandbox value
+bucket_name='^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+for bucket in "$prod_bucket" "$sandbox_bucket"; do
+  [[ "$bucket" =~ $bucket_name ]] || {
+    echo "unexpected staging bucket name: $bucket" >&2
+    exit 1
+  }
+done
+[ "$prod_bucket" != "$sandbox_bucket" ] || {
+  echo "both tiers use bucket $prod_bucket; the ingress cannot isolate them" >&2
+  exit 1
+}
+```
+
+An S3 bucket name is DNS-style, so escaping `.` in the nginx regex is the only
+quoting it needs. Back up the vhost and install the reviewed fragment:
 
 ```sh
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -633,14 +640,27 @@ sudo install -o root -g root -m 0644 \
   /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
 ```
 
-For the Sandbox step, edit only the installed copy so its alternation lists
-only `aihub-sandbox-user-asset-staging` (plus any Sandbox override resolved
-above). Leave Production's bucket out until its own step:
+Then edit the installed copy by hand and replace its single `location ~` line
+with one that names only the Sandbox bucket. Nothing else in the file changes.
+The default bucket needs no quoting:
+
+```nginx
+location ~ ^/aihub-sandbox-user-asset-staging/ {
+```
+
+A dotted override keeps each dot escaped in the regex, so `example.avatar` is
+written `example\.avatar`; an unescaped dot would also match `exampleXavatar`:
+
+```nginx
+location ~ ^/example\.avatar/ {
+```
+
+Confirm the file still has exactly one `location ~` line and that it names
+only the Sandbox bucket before adding the include:
 
 ```sh
-sudo sed -i \
-  's#^location ~ \^/(?:aihub-user-asset-staging|aihub-sandbox-user-asset-staging)/ {#location ~ ^/aihub-sandbox-user-asset-staging/ {#' \
-  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+sudo grep -c '^location ~ ' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf   # must print 1
+sudo sed -n '/^location ~ /p' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
 ```
 
 Insert one include inside the HTTPS `s3.wispace.app` server block, after its
@@ -650,14 +670,18 @@ Insert one include inside the HTTPS `s3.wispace.app` server block, after its
 include /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf;
 ```
 
-Then validate and reload once:
+Then validate and reload once, and save the validated Sandbox-only snippet so
+the Production step can be undone without touching the Sandbox limit:
 
 ```sh
 sudo nginx -t && sudo systemctl reload nginx
+sudo cp -a /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf \
+  "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp"
 ```
 
-Roll back the Sandbox step on its own by restoring the backup, which removes
-the include with the rest of the server block, and reloading:
+Roll back the Sandbox step on its own by restoring the vhost backup, which
+removes the include with the rest of the server block, and deleting the
+snippet. That leaves the host exactly as it was before this section:
 
 ```sh
 sudo cp -a "/root/s3.wispace.app.$stamp" \
@@ -667,30 +691,63 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Sandbox verification must be a real browser upload through the private staging
-bucket and completion, not a direct `PUT`. Upload an Avatar from
-`https://sandbox.aihubproduction.com`, confirm it completes and is published,
-and confirm the staging object was private throughout: no anonymous read and
-no public bytes before completion. Then confirm the bound from outside the
-host: a body of exactly 2,097,152 bytes still reaches SeaweedFS, one byte more
-returns `413`, and the same one-byte-over request with
-`Transfer-Encoding: chunked` also returns `413`. Immediately after each
-rejection, before any completion or sweep could run, confirm the staging object
-does not exist; that is what proves the ingress rejected the body rather than
-storing it. Repeat both `413` checks with `Origin` set to each of
-`https://aihubproduction.com`, `https://www.aihubproduction.com`, and
-`https://sandbox.aihubproduction.com`, and confirm each response carries a
+bucket and completion, not a direct `PUT`. `https://sandbox.aihubproduction.com`
+is the Sandbox API vhost, not a browser app, so open Customer Web at its
+configured origin for that deployment (`CUSTOMER_WEB_BASE_URL` in the Sandbox
+container, read the same way as the bucket variable) and confirm the session
+you use targets the Sandbox API and the Sandbox staging bucket. Upload an
+Avatar, confirm it completes and is published, and confirm the staging object
+was private throughout: no anonymous read and no public bytes before
+completion. Then confirm the bound from outside the host: a body of exactly
+2,097,152 bytes still reaches SeaweedFS, one byte more returns `413`, and the
+same one-byte-over request with `Transfer-Encoding: chunked` also returns
+`413`. Immediately after each rejection, before any completion or sweep could
+run, confirm the staging object does not exist; that is what proves the ingress
+rejected the body rather than storing it. Repeat both `413` checks with
+`Origin` set to each of `https://aihubproduction.com`,
+`https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`
+(the three origins the ingress echoes) and confirm each response carries a
 matching `Access-Control-Allow-Origin` and `Vary: Origin` so the browser can
 read the status. Confirm an unrelated bucket still accepts a larger body and
 that the ACME, `/seaweed/`, and `/healthz` routes still behave as before.
 
 Only after that evidence is recorded and a separate rollout is authorized,
-repeat the install for Production. Take a fresh backup with a new `stamp` first,
-so each tier has its own rollback point, then add `aihub-user-asset-staging`
-(plus any Production override) back to the installed copy's alternation,
-validate, reload, and repeat the same checks from
-`https://aihubproduction.com`. Roll Production back by restoring that second
-backup and deleting the snippet, exactly as the Sandbox step does; do not reuse
-the Sandbox backup, which predates the Sandbox rollout.
+enable Production. It changes only the snippet, so the vhost and its include
+stay as they are. Re-state both bucket names, take a fresh `stamp`, and back up
+the current Sandbox-only snippet before widening it:
+
+```sh
+prod_bucket=aihub-user-asset-staging          # or the resolved Production value
+sandbox_bucket=aihub-sandbox-user-asset-staging   # or the resolved Sandbox value
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+sudo cp -a /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf \
+  "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp"
+```
+
+Edit that one `location ~` line again so its alternation lists both buckets,
+with the same per-bucket dot escaping, then confirm it and reload:
+
+```nginx
+location ~ ^/(?:aihub-user-asset-staging|aihub-sandbox-user-asset-staging)/ {
+```
+
+```sh
+sudo grep -c '^location ~ ' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf   # must print 1
+sudo sed -n '/^location ~ /p' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Repeat the same checks from the Production Customer Web origin. Roll
+Production back by restoring the snippet backup taken at the start of this
+step, which holds the validated Sandbox-only alternation, and reloading. The
+vhost still includes the snippet, so nginx keeps loading and the Sandbox limit
+stays in force:
+
+```sh
+sudo cp -a "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp" \
+  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 The fragment is checked in CI against a local nginx and a stub S3 upstream:
 `test/ops/avatar-upload-limit.spec.sh` proves the exact ceiling, chunked
