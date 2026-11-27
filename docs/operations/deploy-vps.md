@@ -529,37 +529,117 @@ bucket keeps the server's `500M` policy, and the ACME, `/seaweed/`, and
 `/healthz` locations keep their own blocks because the fragment's `location`
 regex matches none of them.
 
-nginx reads the whole request body before it contacts the upstream (the default
-`proxy_request_buffering`), so a body over the ceiling is rejected while it is
-still being received and never reaches SeaweedFS. A rejected upload therefore
-creates no staging object. nginx spools the body to a temporary file past its
-small `client_body_buffer_size` and removes it on rejection. Do not add
-`proxy_request_buffering off` or `proxy_intercept_errors on` to the fragment:
-the first lets an oversized body stream to SeaweedFS, and the second would
-replace SeaweedFS's own `413` responses.
+The fragment sets `proxy_request_buffering on` and `proxy_intercept_errors off`
+itself rather than inheriting them, so a parent `http` or `server` block cannot
+change what the Avatar location does. With buffering on, nginx reads the whole
+request body before it contacts the upstream, so a body over the ceiling is
+rejected while it is still being received and never reaches SeaweedFS; a
+rejected or truncated upload therefore creates no staging object. nginx spools
+the body to a temporary file past its small `client_body_buffer_size` and
+removes it on rejection. Do not remove those two directives or flip either
+value: `proxy_request_buffering off` lets an incomplete or oversized body stream
+to SeaweedFS, and `proxy_intercept_errors on` would replace SeaweedFS's own
+`413` responses.
 
 If a deployment sets `SEAWEEDFS_USER_ASSET_STAGING_BUCKET`, its bucket name
 replaces one of the two defaults and the fragment must list that exact name.
-Check both tiers before installing:
+The variable reaches the container as a plain environment value, and Compose
+maps `SEAWEEDFS_SANDBOX_USER_ASSET_STAGING_BUCKET` into the Sandbox container
+under that name, so read it from the container that is actually serving the
+tier. Container names are Compose slot dependent and must not be assumed:
+resolve the live container the same way `ops/status.sh` does, from the
+upstream nginx currently proxies to.
 
 ```sh
-sudo docker exec aihub-production printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET
-sudo docker exec aihub-sandbox printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET
+# One upstream per AIHUB virtual host, as ops/status.sh reads it.
+upstream_of() {
+  sed -nE 's#^[[:space:]]*proxy_pass http://(127\.0\.0\.1:[0-9]+)(/[^;[:space:]]*)?;.*#\1#p' "$1" | sort -u
+}
+prod_upstream="$(upstream_of /etc/nginx/conf.d/aihub-api.conf)"
+sandbox_upstream="$(upstream_of /etc/nginx/conf.d/sandbox.conf)"
 ```
 
-An empty or absent value means the default bucket for that tier. Add any
-non-default name to the fragment's `location ~` alternation before installing
-it, and keep it when a later release changes the override.
+Each value must be a single upstream; anything else means the live config is
+not the expected shape, so stop instead of guessing a container. Then resolve
+the one AIHUB container publishing that port. `ops/status.sh` also rejects a
+port that matches more than one AIHUB container, and so does this: a stale
+container from the other Compose slot must not be mistaken for the active one.
 
-Install during a change window, with the same backup and validation the other
-host changes use:
+```sh
+container_for_upstream() {
+  local tier="$1" upstream="$2" service id selected= matches=0
+  local -a ids=()
+  mapfile -t ids < <(sudo -n docker ps --all --quiet \
+    --filter "publish=${upstream##*:}" \
+    --filter 'label=org.opencontainers.image.source=https://github.com/AiHub-Ecosystem/aihub-be')
+  for id in "${ids[@]}"; do
+    service="$(sudo -n docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.service"}}' "$id" 2>/dev/null)" || continue
+    case "$tier:$service" in
+      production:app | production:app-slot-b | sandbox:app-sandbox | sandbox:app-sandbox-slot-b) ;;
+      *) continue ;;
+    esac
+    selected="$id"
+    matches=$((matches + 1))
+  done
+  [ "$matches" -eq 1 ] || return 1
+  printf '%s\n' "$selected"
+}
+prod_container="$(container_for_upstream production "$prod_upstream")" || prod_container=
+sandbox_container="$(container_for_upstream sandbox "$sandbox_upstream")" || sandbox_container=
+```
+
+A lookup that returns nothing is a failure to identify the container, not an
+absent override. Read the variable only from a resolved container, and treat
+the three outcomes separately:
+
+```sh
+# Prints the override, or an explicit state. A failed lookup is not "unset".
+bucket_override() {
+  if [ -z "$1" ]; then
+    echo "lookup-failed"
+  elif ! sudo -n docker inspect "$1" >/dev/null 2>&1; then
+    echo "lookup-failed"
+  elif ! sudo -n docker exec "$1" printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET >/dev/null 2>&1; then
+    echo "unset"
+  else
+    value="$(sudo -n docker exec "$1" printenv SEAWEEDFS_USER_ASSET_STAGING_BUCKET)"
+    if [ -z "$value" ]; then echo "unset"; else echo "$value"; fi
+  fi
+}
+bucket_override "$prod_container"
+bucket_override "$sandbox_container"
+```
+
+`unset` (including an empty value) means the tier uses its default staging
+bucket. A bucket name means the operator must add exactly that name to the
+fragment's `location ~` alternation before installing, and keep it when a later
+release changes the override. `lookup-failed` means the container could not be
+identified or read; do not treat it as a default, and resolve it before
+installing anything.
+
+Install one tier at a time, Sandbox first. Production is only enabled after the
+Sandbox evidence below is recorded and a separate rollout is authorized. Both
+steps edit the same operator-owned server block, so keep a timestamped backup
+and make each step independently reversible.
 
 ```sh
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 sudo cp -a /etc/nginx/sites-enabled/s3.wispace.app \
   "/root/s3.wispace.app.$stamp"
+sudo install -d -o root -g root -m 0755 /etc/nginx/snippets
 sudo install -o root -g root -m 0644 \
   ops/nginx/s3-wispace-avatar-upload-limit.conf \
+  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
+```
+
+For the Sandbox step, edit only the installed copy so its alternation lists
+only `aihub-sandbox-user-asset-staging` (plus any Sandbox override resolved
+above). Leave Production's bucket out until its own step:
+
+```sh
+sudo sed -i \
+  's#^location ~ \^/(?:aihub-user-asset-staging|aihub-sandbox-user-asset-staging)/ {#location ~ ^/aihub-sandbox-user-asset-staging/ {#' \
   /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
 ```
 
@@ -576,17 +656,8 @@ Then validate and reload once:
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Verify from outside the host that the ceiling holds. A body of exactly
-2,097,152 bytes must still reach SeaweedFS, one byte more must return `413`,
-and the same one-byte-over request sent with `Transfer-Encoding: chunked` must
-also return `413` without creating a staging object. Repeat both `413` checks
-with `Origin` set to each of `https://aihubproduction.com`,
-`https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`,
-and confirm each response carries a matching `Access-Control-Allow-Origin` and
-`Vary: Origin` so the browser can read the status. Confirm a normal presigned
-`PUT` still completes and a different bucket still accepts a larger body.
-
-Roll back by restoring the backup and reloading:
+Roll back the Sandbox step on its own by restoring the backup, which removes
+the include with the rest of the server block, and reloading:
 
 ```sh
 sudo cp -a "/root/s3.wispace.app.$stamp" \
@@ -595,13 +666,40 @@ sudo rm -f /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+Sandbox verification must be a real browser upload through the private staging
+bucket and completion, not a direct `PUT`. Upload an Avatar from
+`https://sandbox.aihubproduction.com`, confirm it completes and is published,
+and confirm the staging object was private throughout: no anonymous read and
+no public bytes before completion. Then confirm the bound from outside the
+host: a body of exactly 2,097,152 bytes still reaches SeaweedFS, one byte more
+returns `413`, and the same one-byte-over request with
+`Transfer-Encoding: chunked` also returns `413`. Immediately after each
+rejection, before any completion or sweep could run, confirm the staging object
+does not exist; that is what proves the ingress rejected the body rather than
+storing it. Repeat both `413` checks with `Origin` set to each of
+`https://aihubproduction.com`, `https://www.aihubproduction.com`, and
+`https://sandbox.aihubproduction.com`, and confirm each response carries a
+matching `Access-Control-Allow-Origin` and `Vary: Origin` so the browser can
+read the status. Confirm an unrelated bucket still accepts a larger body and
+that the ACME, `/seaweed/`, and `/healthz` routes still behave as before.
+
+Only after that evidence is recorded and a separate rollout is authorized,
+repeat the install for Production. Take a fresh backup with a new `stamp` first,
+so each tier has its own rollback point, then add `aihub-user-asset-staging`
+(plus any Production override) back to the installed copy's alternation,
+validate, reload, and repeat the same checks from
+`https://aihubproduction.com`. Roll Production back by restoring that second
+backup and deleting the snippet, exactly as the Sandbox step does; do not reuse
+the Sandbox backup, which predates the Sandbox rollout.
+
 The fragment is checked in CI against a local nginx and a stub S3 upstream:
 `test/ops/avatar-upload-limit.spec.sh` proves the exact ceiling, chunked
-rejection, no upstream request for a rejected body, the preserved upstream and
-headers, the readable `413`, and that other routes and buckets are unchanged.
-Those are local checks. The provider-backed Sandbox evidence ADR-0196 requires
-is still outstanding, and the ceiling is not enforced on the live host until
-this change is installed.
+rejection, that no rejected or incomplete body reaches the upstream, the exact
+signed request target and `Host`, the preserved routes, the readable `413`, and
+that an upstream `413` is not rewritten, with a hostile parent that inherits
+buffering off and error interception on. Those are local checks. The
+provider-backed Sandbox evidence ADR-0196 requires is still outstanding, and the
+ceiling is not enforced on the live host until this change is installed.
 
 #### Recovering a backlog that trips the safety ceiling
 

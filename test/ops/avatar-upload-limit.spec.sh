@@ -48,15 +48,6 @@ grep -Fq 'proxy_connect_timeout 300s;' "$artifact" ||
   fail "the artifact must keep the observed connect timeout"
 grep -Fq 'proxy_read_timeout 300s;' "$artifact" ||
   fail "the artifact must keep the observed read timeout"
-# Buffering the request before contacting the upstream is what keeps a
-# rejected body out of SeaweedFS; intercepting upstream errors would rewrite
-# SeaweedFS's own 413 responses.
-if grep -Eq '^[[:space:]]*proxy_request_buffering[[:space:]]+off' "$artifact"; then
-  fail "the artifact must keep request buffering so rejects never reach S3"
-fi
-if grep -Eq '^[[:space:]]*proxy_intercept_errors[[:space:]]+on' "$artifact"; then
-  fail "the artifact must not rewrite a 413 that SeaweedFS itself returns"
-fi
 grep -Fq 'add_header Access-Control-Allow-Origin $http_origin always;' "$artifact" ||
   fail "the ingress-generated 413 must be readable from an allowed origin"
 grep -Fq 'add_header Vary Origin always;' "$artifact" ||
@@ -69,6 +60,13 @@ if grep -Eq 'Access-Control-Allow-Origin[[:space:]]+"?\*' "$artifact"; then
 fi
 grep -Fq 'error_page 413 = @aihub_avatar_upload_too_large;' "$artifact" ||
   fail "the artifact must serve its own 413 for rejected bodies"
+# Both directives must be stated, not inherited: a parent that turns buffering
+# off would stream a partial body to SeaweedFS, and one that intercepts errors
+# would replace SeaweedFS's own 413.
+grep -Fq 'proxy_request_buffering on;' "$artifact" ||
+  fail "the artifact must set proxy_request_buffering on explicitly"
+grep -Fq 'proxy_intercept_errors off;' "$artifact" ||
+  fail "the artifact must set proxy_intercept_errors off explicitly"
 
 if ! command -v nginx >/dev/null 2>&1; then
   printf 'avatar upload limit: static checks passed; runtime checks skipped (nginx not installed)\n'
@@ -84,8 +82,6 @@ fi
 
 # --- runtime half: the real artifact under a stand-in of the host server ---
 
-# nginx workers spool bodies past client_body_buffer_size here; the directory
-# must exist and be writable by the worker user.
 # mktemp creates the root 0700, so let the worker traverse into the body dir.
 chmod 0755 "$tmp"
 mkdir -p "$tmp/body"
@@ -94,6 +90,10 @@ chmod 0777 "$tmp/body"
 head -c "$ceil" /dev/zero >"$tmp/at-ceiling.bin"
 head -c "$((ceil + 1))" /dev/zero >"$tmp/over-ceiling.bin"
 
+# The stand-in server keeps the observed routes, each answering a distinct body
+# so a shared 200 cannot hide a route that lands on the wrong handler. The
+# http block deliberately inherits buffering off and error interception on: the
+# artifact must override both on its own location.
 cat >"$tmp/nginx.conf" <<EOF
 pid $tmp/nginx.pid;
 error_log $tmp/error.log;
@@ -101,32 +101,25 @@ events { worker_connections 64; }
 http {
   access_log off;
   client_body_temp_path $tmp/body;
+  proxy_request_buffering off;
+  proxy_intercept_errors on;
+  log_format stub '\$request_method \$request_uri host=\$host';
+
   server {
     listen 127.0.0.1:$proxy_port;
     server_name s3.wispace.app;
     client_max_body_size 500M;
 
-    location ^~ /.well-known/acme-challenge/ { return 200 "acme"; }
-    location = /healthz { return 200 "ok"; }
-    location /seaweed/ {
-      proxy_pass http://127.0.0.1:$filer_port;
-    }
-    location / {
-      proxy_pass http://127.0.0.1:8333;
-      proxy_set_header Host \$host;
-      proxy_set_header X-Real-IP \$remote_addr;
-      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
-      proxy_connect_timeout 300s;
-      proxy_read_timeout 300s;
-    }
+    location ^~ /.well-known/acme-challenge/ { return 200 "route:acme"; }
+    location = /healthz { return 200 "route:healthz"; }
+    location /seaweed/ { return 200 "route:filer"; }
+    location / { proxy_pass http://127.0.0.1:8333; }
 
     include $artifact;
   }
 
-  # Stub SeaweedFS: logs every request that actually reaches S3, so a
-  # rejected body can be shown never to arrive.
-  log_format stub '\$request_method \$uri';
+  # Stub SeaweedFS. It records the exact request target and Host it received,
+  # and answers its own 413 on one key so pass-through can be checked.
   server {
     listen 127.0.0.1:8333;
     client_max_body_size 0;
@@ -140,11 +133,6 @@ http {
       return 200 "upstream";
     }
   }
-  server {
-    listen 127.0.0.1:$filer_port;
-    client_max_body_size 0;
-    location / { return 200 "filer"; }
-  }
 }
 EOF
 
@@ -154,12 +142,20 @@ nginx -p "$tmp/" -c "$tmp/nginx.conf"
 
 base="http://127.0.0.1:$proxy_port"
 status() { curl -s -o /dev/null -w '%{http_code}' --http1.1 -H 'Host: s3.wispace.app' "$@"; }
+body() { curl -s --http1.1 -H 'Host: s3.wispace.app' "$@"; }
 expect() {
   local want="$1" label="$2"
   shift 2
   local got
   got="$(status "$@")"
   [[ "$got" == "$want" ]] || fail "$label: expected $want, got $got"
+}
+expect_body() {
+  local want="$1" label="$2"
+  shift 2
+  local got
+  got="$(body "$@")"
+  [[ "$got" == "$want" ]] || fail "$label: expected body '$want', got '$got'"
 }
 
 # Each case uses its own object key so the upstream log proves which requests
@@ -183,7 +179,7 @@ for accepted in \
   aihub-user-asset-staging/accepted \
   aihub-user-asset-staging/accepted-chunked \
   aihub-sandbox-user-asset-staging/accepted; do
-  grep -Fq "PUT /$accepted" "$tmp/upstream.log" ||
+  grep -Fq "PUT /$accepted " "$tmp/upstream.log" ||
     fail "an accepted upload did not reach the S3 upstream: $accepted"
 done
 for rejected in \
@@ -191,22 +187,43 @@ for rejected in \
   aihub-user-asset-staging/rejected-chunked \
   aihub-sandbox-user-asset-staging/rejected \
   aihub-sandbox-user-asset-staging/rejected-chunked; do
-  if grep -Fq "PUT /$rejected" "$tmp/upstream.log"; then
+  if grep -Fq "PUT /$rejected " "$tmp/upstream.log"; then
     fail "a rejected upload reached the S3 upstream: $rejected"
   fi
 done
 
+# A declared-but-incomplete body must not be forwarded either. With buffering
+# off, nginx streams the partial body; the inherited-off parent makes this
+# assertion fail unless the artifact sets buffering on itself.
+truncated_client() {
+  exec 3<>"/dev/tcp/127.0.0.1/$proxy_port" || return 1
+  printf 'PUT /aihub-user-asset-staging/truncated HTTP/1.1\r\nHost: s3.wispace.app\r\nContent-Length: 2097152\r\n\r\n' >&3
+  head -c 1048576 /dev/zero >&3
+  # Hang up without sending the declared remainder.
+  exec 3<&- 3>&-
+}
+truncated_client || true
+sleep 1
+if grep -Fq 'PUT /aihub-user-asset-staging/truncated ' "$tmp/upstream.log"; then
+  fail "an incomplete body reached the S3 upstream; proxy_request_buffering is not on"
+fi
+
 # The bound is scoped to the two staging buckets, so the rest of the shared
-# host keeps its own policy.
+# host keeps its own policy and routes to its own handler.
 expect 200 "another bucket keeps the server body limit" \
   -X PUT --data-binary @"$tmp/over-ceiling.bin" "$base/aihub-writing-charts/chart"
-expect 200 "the filer location is unchanged" "$base/seaweed/filer"
-expect 200 "the health location is unchanged" "$base/healthz"
-expect 200 "the ACME location is unchanged" "$base/.well-known/acme-challenge/t"
+expect_body 'route:filer' "the filer location keeps its handler" "$base/seaweed/filer"
+expect_body 'route:healthz' "the health location keeps its handler" "$base/healthz"
+expect_body 'route:acme' "the ACME location keeps its handler" \
+  "$base/.well-known/acme-challenge/token"
 
-# Already-issued presigned grants must survive: path, query, and Host.
-signed="$base/aihub-user-asset-staging/orgs/o/avatar.webp?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc&X-Amz-SignedHeaders=host"
-expect 200 "a signed upload still completes" -X PUT --data-binary @"$tmp/at-ceiling.bin" "$signed"
+# Already-issued presigned grants must survive: the upstream receives the exact
+# signed request target and Host, not a rewritten path.
+signed_target='/aihub-user-asset-staging/orgs/o/avatar.webp?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=test-only&X-Amz-SignedHeaders=host'
+expect 200 "a signed upload still completes" \
+  -X PUT --data-binary @"$tmp/at-ceiling.bin" "$base$signed_target"
+grep -Fq "PUT $signed_target host=s3.wispace.app" "$tmp/upstream.log" ||
+  fail "the upstream did not receive the exact signed request target and Host"
 
 # The browser must be able to read the 413, and only from the deployed origins.
 headers() { curl -s -D - -o /dev/null --http1.1 -H 'Host: s3.wispace.app' "$@" | tr -d '\r'; }
@@ -226,8 +243,9 @@ if grep -Fqi 'access-control-allow-origin' "$tmp/413.headers"; then
   fail "the 413 must not answer an origin outside the deployed Customer Web origins"
 fi
 
-# Proxied responses keep SeaweedFS''s own headers: an accepted upload, and a
-# 413 that SeaweedFS itself returned, must not be rewritten by the ingress.
+# Proxied responses keep SeaweedFS's own headers: an accepted upload, and a 413
+# that SeaweedFS itself returned. The latter fails if the artifact inherits the
+# parent's proxy_intercept_errors on, because nginx would then replace it.
 headers -X PUT --data-binary @"$tmp/at-ceiling.bin" \
   "$base/aihub-user-asset-staging/orgs/o/avatar.webp" >"$tmp/200.headers"
 grep -Fqi 'access-control-allow-origin: https://s3-upstream.example' "$tmp/200.headers" ||

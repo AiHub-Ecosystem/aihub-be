@@ -59,16 +59,27 @@ buckets and each of `https://aihubproduction.com`,
 Those are the origins the ingress-generated `413` reuses; it introduces no
 broader grant and does not change proxied responses.
 
+Both configured default staging buckets reach that one vhost on the supported
+path-style presigned `PUT`, which is the coverage this decision relies on. A
+separate filer location is outside that supported flow and was not assessed.
+
 `ops/nginx/s3-wispace-avatar-upload-limit.conf` is the reviewed, operator-
 installed fragment for that server, with install, verification, and rollback in
-`docs/operations/deploy-vps.md`. `test/ops/avatar-upload-limit.spec.sh` runs it
-against a local nginx and a stub S3 upstream and shows acceptance at exactly
-2,097,152 bytes, rejection of one byte more including a chunked body, no
-upstream request for a rejected body, a readable `413` from the three origins,
-and unchanged other routes and buckets. These are local checks against the
-artifact, not live evidence. The host change is not authorized or applied, so
-provider-backed Sandbox verification and the production rollout remain
-outstanding, and this decision stays Proposed until they are recorded.
+`docs/operations/deploy-vps.md`. `test/ops/avatar-upload-limit.spec.sh` runs the
+fragment itself against a local nginx 1.28.3 and a stub S3 upstream, under a
+parent that inherits request buffering off and upstream error interception on.
+It shows acceptance at exactly 2,097,152 bytes, rejection of one byte more
+including a chunked body, that no rejected or incomplete body reaches the
+upstream, that the exact signed request target and `Host` arrive unchanged,
+distinct handling for the ACME, filer, and health routes, a readable `413` from
+the three origins only, and an upstream `413` left unrewritten. These are local
+checks against the artifact, not live evidence.
+
+The host change is not authorized or applied. The observed coverage, the local
+artifact checks, and the operator instructions are recorded here; the
+provider-backed Sandbox end-to-end verification and the supported-origin checks
+against the deployed ingress are still pending, as is the Production rollout.
+This decision stays Proposed until that live evidence is recorded.
 
 If the ingress cannot cover every supported upload path or the operator cannot
 take on the scoped change, keep #2008 open and revisit the enforcement point.
