@@ -8,6 +8,7 @@ import { Value } from '@sinclair/typebox/value';
 import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
+import type { ErrorEnvelope } from '@/common/errors/error-envelope';
 import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { generateRequestId } from '@/common/request-context/request-id';
 import { WritingV2GradeResponseSchema } from '@/contracts/writing/v2/grading';
@@ -251,6 +252,16 @@ describe('Writing /v2 grading HTTP flow', () => {
     ]);
   });
 
+  it('refuses an empty Task 2 essay as a non-retryable field error', async () => {
+    const response = await post('task2', { ...task2Payload, essay: '' });
+
+    expect(response.statusCode).toBe(400);
+    const { error } = response.json<ErrorEnvelope>();
+    expect(error).toMatchObject({ code: 'INVALID_REQUEST', retryable: false });
+    expect(error.details?.['/essay']).toEqual(expect.any(String));
+    expect(downstreamCalls).toBe(0);
+  });
+
   it.each([
     ['task1', task1Payload],
     ['task2', task2Payload],
@@ -293,7 +304,7 @@ describe('Writing /v2 grading HTTP flow', () => {
 
     expect(response.statusCode).toBe(504);
     expect(response.json()).toMatchObject({
-      error: { code: 'AI_SERVICE_TIMEOUT' },
+      error: { code: 'AI_SERVICE_TIMEOUT', retryable: true },
     });
     expect(response.payload).not.toContain('provider text');
   });
