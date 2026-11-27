@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { AppError } from '@/common/errors/app-error';
 import { outageRetryAfterMs } from '@/common/errors/retry-jitter';
@@ -16,6 +17,8 @@ import type {
   ContentRateLimitDecision,
   ContentRateLimiterPort,
 } from '@/modules/content-proxy/application/content-rate-limiter.port';
+
+const REDIS_COMMAND_TIMEOUT_MS = 400;
 
 export const CONTENT_RATE_LIMIT_WINDOW_SCRIPT = `
 local ttl = redis.call('PTTL', KEYS[1])
@@ -50,11 +53,14 @@ export interface ContentRateLimitRedisClient {
     ...args: string[]
   ): Promise<unknown>;
   disconnect(): void;
+  readonly status?: string;
+  connect?(): Promise<void>;
 }
 
 export class RedisContentRateLimiter implements ContentRateLimiterPort {
   private readonly redis: ContentRateLimitRedisClient | undefined;
   private readonly fallback = new Map<string, CounterState>();
+  private initialConnection: Promise<void> | undefined;
 
   constructor(
     redisUrl: string,
@@ -65,7 +71,8 @@ export class RedisContentRateLimiter implements ContentRateLimiterPort {
       this.redis = redisClient;
     } else if (redisUrl.trim().length > 0) {
       this.redis = createRedisClient(redisUrl, {
-        commandTimeoutMs: 400,
+        commandTimeoutMs: REDIS_COMMAND_TIMEOUT_MS,
+        lazyConnect: true,
         ...REDIS_NO_REPLAY_OPTIONS,
       });
     }
@@ -75,6 +82,16 @@ export class RedisContentRateLimiter implements ContentRateLimiterPort {
     const key = hashContentRateLimitKey(clientIp);
     if (this.redis !== undefined) {
       try {
+        // With offline queuing disabled, wait briefly for the shared initial connection.
+        if (this.redis.status === 'wait' && this.redis.connect !== undefined) {
+          this.initialConnection = Promise.race([
+            this.redis.connect(),
+            delay(REDIS_COMMAND_TIMEOUT_MS, undefined, { ref: false }),
+          ]).finally(() => {
+            this.initialConnection = undefined;
+          });
+        }
+        if (this.initialConnection !== undefined) await this.initialConnection;
         const result: unknown = await this.redis.eval(
           CONTENT_RATE_LIMIT_WINDOW_SCRIPT,
           1,

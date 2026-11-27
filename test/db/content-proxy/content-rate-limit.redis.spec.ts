@@ -1,7 +1,5 @@
 import { randomBytes } from 'node:crypto';
 
-import Redis from 'ioredis';
-
 import { RedisContentRateLimiter } from '@/modules/content-proxy/infrastructure/redis-content-rate-limiter';
 import { sandboxTestRedisUrl } from '../shared/database';
 
@@ -11,11 +9,10 @@ function testAddress(): string {
 }
 
 it('counts the first request in a Redis window shared by two limiter instances', async () => {
-  const redis = new Redis(sandboxTestRedisUrl(), { lazyConnect: true });
+  const redisUrl = sandboxTestRedisUrl();
+  const first = new RedisContentRateLimiter(redisUrl);
+  const second = new RedisContentRateLimiter(redisUrl);
   try {
-    await redis.connect();
-    const first = new RedisContentRateLimiter('', Date.now, redis);
-    const second = new RedisContentRateLimiter('', Date.now, redis);
     const address = testAddress();
 
     for (let request = 0; request < 30; request += 1) {
@@ -32,6 +29,6 @@ it('counts the first request in a Redis window shared by two limiter instances',
       allowed: true,
     });
   } finally {
-    redis.disconnect();
+    await Promise.all([first.onModuleDestroy(), second.onModuleDestroy()]);
   }
 });
