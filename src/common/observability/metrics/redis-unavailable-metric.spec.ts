@@ -6,7 +6,7 @@ describe('aihub_redis_unavailable_total', () => {
     const samples = (await metrics.getMetrics())
       .split('\n')
       .filter((line) => line.startsWith('aihub_redis_unavailable_total{'));
-    expect(samples).toHaveLength(16);
+    expect(samples).toHaveLength(17);
     for (const seam of [
       'graded_admission',
       'concurrency',
@@ -21,6 +21,7 @@ describe('aihub_redis_unavailable_total', () => {
       'auth_rate_limit',
       'jwks_cache',
       'email_send_rate',
+      'content_rate_limit',
       'shedding_level',
       'token_revocation',
       'dpop_replay',
@@ -65,6 +66,6 @@ describe('aihub_redis_unavailable_total', () => {
         `aihub_redis_unavailable_total{seam="${seam}"} 1`,
       );
     }
-    expect(samples).toHaveLength(16);
+    expect(samples).toHaveLength(17);
   });
 });

@@ -264,6 +264,24 @@ export const DEGRADED_MODE_PROOF: Record<string, MatrixProof> = {
       },
     ],
   },
+  'Redis / IELTS practice content per-address rate limiter is down or slow': {
+    tests: [
+      {
+        file: 'src/modules/content-proxy/infrastructure/redis-content-rate-limiter.spec.ts',
+        titles: [
+          'uses a per-address local window when Redis is unavailable',
+          'refuses new addresses at local-map capacity until entries expire',
+          'returns to the shared Redis counter after a local fallback',
+        ],
+      },
+      {
+        file: 'src/modules/content-proxy/presentation/content-rate-limit.guard.spec.ts',
+        titles: [
+          'counts all five routes by the trusted client address before query validation',
+        ],
+      },
+    ],
+  },
   'PostgreSQL / Request-path read/write is unreachable, unanswered, or blocked on a lock/statement':
     {
       tests: [

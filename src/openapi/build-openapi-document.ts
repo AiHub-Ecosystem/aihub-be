@@ -116,7 +116,7 @@ export function buildOpenApiDocument(
   Object.assign(paths, webSessionPathItems());
   addHeadOperations(paths);
 
-  const errorResponses = buildErrorResponses(groupedErrors);
+  const errorResponses = buildErrorResponses(groupedErrors, major.major === 2);
 
   for (const route of Object.values(PUBLIC_ROUTES) as PublicRouteDef[]) {
     if (route.sunset === undefined) continue;
