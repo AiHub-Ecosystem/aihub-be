@@ -152,6 +152,31 @@ function asset(upload: SpeakingAudioUploadIntent): SpeakingAudioAsset {
   };
 }
 
+describe('Speaking Audio upload intent ceilings against PostgreSQL', () => {
+  it('creates a permitted intent while holding the Organization lock', async () => {
+    const upload = intent(`aud_${ulid()}`, organizationId, 'sandbox');
+    try {
+      await expect(
+        sandboxRepository.createIntentWithinCeiling({
+          intent: upload,
+          decide: () => ({ kind: 'within' }),
+        }),
+      ).resolves.toEqual({ kind: 'within' });
+
+      const rows = await sandboxPool.query(
+        'SELECT count(*)::int AS count FROM speaking_audio_upload_intents WHERE id = $1',
+        [upload.assetId],
+      );
+      expect(rows.rows[0]).toEqual({ count: 1 });
+    } finally {
+      await sandboxPool.query(
+        'DELETE FROM speaking_audio_upload_intents WHERE id = $1',
+        [upload.assetId],
+      );
+    }
+  });
+});
+
 describe('Speaking Audio upload completion against PostgreSQL', () => {
   it('lets another core instance finalize the committed publication reservation', async () => {
     const upload = publicationIntent();

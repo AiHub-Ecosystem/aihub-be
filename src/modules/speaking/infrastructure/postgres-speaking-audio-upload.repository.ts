@@ -48,8 +48,12 @@ const SET_COMPLETION_IDLE_TIMEOUT_SQL = `
   SELECT set_config('idle_in_transaction_session_timeout', $1, true)
 `;
 
-const ORG_CEILING_LOCK_SQL =
-  'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+const ORG_CEILING_LOCK_SQL = `
+  WITH locked AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+  )
+  SELECT 1 FROM locked
+`;
 
 /**
  * Intents still open and unexpired, intents created in the issuance window,
