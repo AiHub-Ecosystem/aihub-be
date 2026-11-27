@@ -239,7 +239,20 @@ type IdentityTransactionClient = ReturnType<
     },
     {
       provide: IDENTITY_READ_CLIENT,
-      useExisting: IDENTITY_TRANSACTION_CLIENT,
+      inject: [
+        IDENTITY_TRANSACTION_CLIENT,
+        CONTROL_PLANE_READ_PRISMA_CLIENT,
+        appConfig.KEY,
+      ],
+      useFactory: (
+        writer: IdentityTransactionClient,
+        sandboxControlPlane: PrismaClientHolder,
+        configuration: ConfigType<typeof appConfig>,
+      ): IdentityTransactionClient =>
+        // Sandbox reaches the production primary through its restricted login.
+        configuration.AIHUB_RUNTIME_DATABASE_SCOPE === 'sandbox'
+          ? createIdentityTransactionRunner(sandboxControlPlane.prisma)
+          : writer,
     },
     // Auth dispatches the near-expiry notice but cannot import this module, so
     // the resolver is handed to Auth's slot when it is built (ADR-0120).

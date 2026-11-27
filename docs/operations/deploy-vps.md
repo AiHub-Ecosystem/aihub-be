@@ -221,7 +221,11 @@ tenants.
 
 Point the gateway at the existing production database over the shared Docker
 network. Store the URL-encoded production and sandbox URLs, plus the Sandbox
-read-only control-plane URL, in the operator-only Vault bundles. Create the
+read-only control-plane URL, in the operator-only Vault bundles. The Sandbox
+identity connection uses the production PostgreSQL primary under a restricted
+login, as required by [ADR-0056](../adr/0056-customer-sandbox-test-tier.md) and
+[ADR-0182](../adr/0182-security-reads-use-postgres-writer.md). Point its
+direct and PgBouncer URLs at that primary. Create the
 reader role on the production database with only the columns needed for Sandbox
 admission and authentication:
 

@@ -2,6 +2,7 @@ import type { Provider } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { createRequestContext } from '@/common/request-context/request-context.factory';
+import { appConfig } from '@/config/runtime-configuration';
 import { CONTROL_PLANE_READ_PRISMA_CLIENT } from '@/modules/persistence/persistence.module';
 
 import {
@@ -138,6 +139,10 @@ describe('IdentityModule database read wiring', () => {
     const module = await Test.createTestingModule({
       providers: [
         { provide: transactionToken, useValue: writer.client },
+        {
+          provide: appConfig.KEY,
+          useValue: { AIHUB_RUNTIME_DATABASE_SCOPE: 'production' },
+        },
         {
           provide: CONTROL_PLANE_READ_PRISMA_CLIENT,
           useValue: { prisma: replica.client },

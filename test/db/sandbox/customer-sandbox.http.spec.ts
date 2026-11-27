@@ -348,7 +348,7 @@ beforeAll(async () => {
   appConfiguration = createAppConfiguration();
   appConnectionConfiguration = createConnectionConfiguration(
     sandboxTestDatabaseUrl(),
-    testDatabaseUrl(),
+    sandboxTestDatabaseUrl(),
     controlPlaneReaderUrl.toString(),
     'sandbox',
   );
@@ -1233,7 +1233,7 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
     expect(downstreamCalls).toBe(1);
   });
 
-  it('reads API keys from the writer when the control-plane reader cannot read them', async () => {
+  it('fails closed when the Sandbox control-plane connection cannot read API keys', async () => {
     await controlPlane.query(
       `REVOKE SELECT (key_hash) ON api_keys FROM ${controlPlaneReaderRole}`,
     );
@@ -1247,7 +1247,10 @@ describe('Customer Sandbox over Nest/Fastify, Postgres, and Redis', () => {
       );
     }
 
-    expect(response.statusCode).toBe(200);
-    expect(downstreamCalls).toBe(1);
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({
+      error: { code: 'INTERNAL_ERROR' },
+    });
+    expect(downstreamCalls).toBe(0);
   });
 });
