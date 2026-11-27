@@ -5,7 +5,7 @@
 # The runtime half needs nginx. It builds a synthetic stand-in for the observed
 # HTTPS s3.wispace.app server, includes the artifact unmodified, and points the
 # S3 upstream at a local stub, so it proves the fragment and not a copy of it.
-# Without nginx the runtime half is skipped and only the static half runs.
+# Without nginx the runtime half is skipped unless CI requires it explicitly.
 set -Eeuo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
@@ -13,6 +13,7 @@ artifact="$repository_root/ops/nginx/s3-wispace-avatar-upload-limit.conf"
 ceil=2097152
 proxy_port=18086
 filer_port=18087
+require_runtime="${AVATAR_UPLOAD_LIMIT_REQUIRE_RUNTIME:-0}"
 
 tmp="$(mktemp -d)"
 
@@ -69,6 +70,7 @@ grep -Fq 'proxy_intercept_errors off;' "$artifact" ||
   fail "the artifact must set proxy_intercept_errors off explicitly"
 
 if ! command -v nginx >/dev/null 2>&1; then
+  [[ "$require_runtime" != 1 ]] || fail "nginx is required for the strict runtime check"
   printf 'avatar upload limit: static checks passed; runtime checks skipped (nginx not installed)\n'
   exit 0
 fi
@@ -76,6 +78,7 @@ fi
 # bind that exact port. Refuse to run if something already answers there: a
 # developer's real SeaweedFS must never receive these test writes.
 if curl -s -o /dev/null --max-time 1 http://127.0.0.1:8333/; then
+  [[ "$require_runtime" != 1 ]] || fail "127.0.0.1:8333 is in use; refusing to run the stub"
   printf 'avatar upload limit: static checks passed; runtime checks skipped (127.0.0.1:8333 is in use)\n'
   exit 0
 fi
@@ -99,7 +102,12 @@ pid $tmp/nginx.pid;
 error_log $tmp/error.log;
 events { worker_connections 64; }
 http {
-  access_log off;
+  map \$uri \$ingress_test_path {
+    default other;
+    /aihub-user-asset-staging/truncated truncated;
+  }
+  log_format ingress '\$request_method \$ingress_test_path \$status';
+  access_log $tmp/ingress.log ingress;
   client_body_temp_path $tmp/body;
   proxy_request_buffering off;
   proxy_intercept_errors on;
@@ -197,13 +205,21 @@ done
 # assertion fail unless the artifact sets buffering on itself.
 truncated_client() {
   exec 3<>"/dev/tcp/127.0.0.1/$proxy_port" || return 1
-  printf 'PUT /aihub-user-asset-staging/truncated HTTP/1.1\r\nHost: s3.wispace.app\r\nContent-Length: 2097152\r\n\r\n' >&3
-  head -c 1048576 /dev/zero >&3
-  # Hang up without sending the declared remainder.
-  exec 3<&- 3>&-
+  printf 'PUT /aihub-user-asset-staging/truncated HTTP/1.1\r\nHost: s3.wispace.app\r\nContent-Length: 2097152\r\n\r\n' >&3 || return 1
+  head -c 1048576 /dev/zero >&3 || return 1
+  # Close before the declared body is complete; every setup/write/close failure
+  # must fail the spec rather than turn the proof into a false pass.
+  exec 3<&- 3>&- || return 1
 }
-truncated_client || true
-sleep 1
+truncated_client || fail "could not send and close the truncated request"
+truncated_status=''
+for _ in {1..50}; do
+  truncated_status="$(awk '$1 == "PUT" && $2 == "truncated" { status = $3 } END { print status }' "$tmp/ingress.log" 2>/dev/null)"
+  [[ -n "$truncated_status" ]] && break
+  sleep 0.1
+done
+[[ "$truncated_status" =~ ^(400|499)$ ]] ||
+  fail "the ingress did not record completion of the truncated request (status=${truncated_status:-missing})"
 if grep -Fq 'PUT /aihub-user-asset-staging/truncated ' "$tmp/upstream.log"; then
   fail "an incomplete body reached the S3 upstream; proxy_request_buffering is not on"
 fi

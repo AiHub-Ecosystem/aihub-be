@@ -594,12 +594,42 @@ bucket_override "$prod_container"     # non-zero exit is a failed lookup
 bucket_override "$sandbox_container"
 ```
 
+Read the configured Customer Web origin from the active Sandbox container the
+same way; an inspection error or an empty value is a failed lookup:
+
+```sh
+customer_web_origin="$(sudo -n docker inspect "$sandbox_container" --format \
+  '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CUSTOMER_WEB_BASE_URL"}}{{join (slice (split . "=") 1) "="}}{{end}}{{end}}')" || {
+  echo "Sandbox Customer Web origin lookup failed; stop" >&2
+  exit 1
+}
+[ -n "$customer_web_origin" ] || {
+  echo "Sandbox Customer Web origin is unset; stop" >&2
+  exit 1
+}
+printf 'Configured Sandbox Customer Web origin: %s\n' "$customer_web_origin"
+```
+
 Treat a non-zero exit as `lookup-failed`: the container could not be read, so
 do not assume a default and do not install. An empty value (exit zero) means
 `unset`, so the tier uses its default staging bucket. A bucket name means the
 operator must add exactly that literal name to the fragment's `location ~`
 alternation before installing, and keep it when a later release changes the
 override.
+
+Before installation, compare the Sandbox `CUSTOMER_WEB_BASE_URL` from the
+active Sandbox container with the recorded storage preflight evidence. For
+each intended Customer Web origin, confirm the storage preflight for the
+Sandbox bucket returns that exact `Access-Control-Allow-Origin`, `Vary: Origin`,
+and the required method and headers. The observed origins are
+`https://aihubproduction.com`, `https://www.aihubproduction.com`, and
+`https://sandbox.aihubproduction.com`; the last is the Sandbox API vhost, not
+a browser application. Stop if the configured Customer Web origin is missing
+from the observed allowed origins or the storage preflight differs. Do not
+broaden or reflect origins on the host: update the checked-in fragment's exact
+reviewed allowlist, preserve these observed matches, run its local spec, and
+install that reviewed artifact only after the origin/preflight parity is
+confirmed.
 
 Install one tier at a time, Sandbox first. Production is only enabled after the
 Sandbox evidence below is recorded and a separate rollout is authorized. The
@@ -631,9 +661,15 @@ An S3 bucket name is DNS-style, so escaping `.` in the nginx regex is the only
 quoting it needs. Back up the vhost and install the reviewed fragment:
 
 ```sh
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-sudo cp -a /etc/nginx/sites-enabled/s3.wispace.app \
-  "/root/s3.wispace.app.$stamp"
+sandbox_stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+sandbox_vhost_backup="/root/s3.wispace.app.sandbox.$sandbox_stamp"
+sudo test ! -e "$sandbox_vhost_backup" &&
+  sudo cp -a /etc/nginx/sites-enabled/s3.wispace.app "$sandbox_vhost_backup" &&
+  sudo test -s "$sandbox_vhost_backup" || {
+    echo "Sandbox vhost backup failed; stop before editing nginx" >&2
+    exit 1
+  }
+printf 'Sandbox vhost backup: %s\n' "$sandbox_vhost_backup"
 sudo install -d -o root -g root -m 0755 /etc/nginx/snippets
 sudo install -o root -g root -m 0644 \
   ops/nginx/s3-wispace-avatar-upload-limit.conf \
@@ -670,58 +706,106 @@ Insert one include inside the HTTPS `s3.wispace.app` server block, after its
 include /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf;
 ```
 
-Then validate and reload once, and save the validated Sandbox-only snippet so
-the Production step can be undone without touching the Sandbox limit:
+After adding the include, require both validation and reload to succeed before
+saving the Sandbox-only snippet backup. If either fails, run the Sandbox
+rollback below before doing anything else:
 
 ```sh
-sudo nginx -t && sudo systemctl reload nginx
-sudo cp -a /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf \
-  "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp"
+if sudo nginx -t && sudo systemctl reload nginx; then
+  sandbox_snippet_backup="/root/s3-wispace-avatar-upload-limit.sandbox.$sandbox_stamp"
+  sudo cp -a /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf \
+    "$sandbox_snippet_backup" && sudo test -s "$sandbox_snippet_backup" || {
+      echo "Sandbox snippet backup failed; run Sandbox rollback now" >&2
+      exit 1
+    }
+  printf 'Sandbox-only snippet backup: %s\n' "$sandbox_snippet_backup"
+else
+  echo "Sandbox validation or reload failed; run Sandbox rollback now" >&2
+  exit 1
+fi
 ```
 
-Roll back the Sandbox step on its own by restoring the vhost backup, which
-removes the include with the rest of the server block, and deleting the
-snippet. That leaves the host exactly as it was before this section:
+Record the exact Sandbox backup paths printed above and set
+`$sandbox_vhost_backup` to that recorded vhost path before rollback; do not reuse
+a Production backup or infer a path from an old timestamp. Sandbox rollback is only valid
+before Production is enabled. If Production has been enabled, roll it back
+first. Restore and successfully reload the original vhost before removing the
+snippet; if restore, validation, or reload fails, leave the snippet in place
+and stop for operator repair:
 
 ```sh
-sudo cp -a "/root/s3.wispace.app.$stamp" \
-  /etc/nginx/sites-enabled/s3.wispace.app
-sudo rm -f /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
-sudo nginx -t && sudo systemctl reload nginx
+sudo cp -a "${sandbox_vhost_backup:?set the exact recorded Sandbox vhost backup}" \
+  /etc/nginx/sites-enabled/s3.wispace.app &&
+  sudo nginx -t && sudo systemctl reload nginx || {
+    echo "Sandbox restore did not validate and reload; keep the snippet and stop" >&2
+    exit 1
+  }
+sudo rm -f /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf || {
+  echo "the original vhost is restored; snippet cleanup remains" >&2
+  exit 1
+}
 ```
 
-Sandbox verification must be a real browser upload through the private staging
-bucket and completion, not a direct `PUT`. `https://sandbox.aihubproduction.com`
-is the Sandbox API vhost, not a browser app, so open Customer Web at its
-configured origin for that deployment (`CUSTOMER_WEB_BASE_URL` in the Sandbox
-container, read the same way as the bucket variable) and confirm the session
-you use targets the Sandbox API and the Sandbox staging bucket. Upload an
-Avatar, confirm it completes and is published, and confirm the staging object
-was private throughout: no anonymous read and no public bytes before
-completion. Then confirm the bound from outside the host: a body of exactly
-2,097,152 bytes still reaches SeaweedFS, one byte more returns `413`, and the
-same one-byte-over request with `Transfer-Encoding: chunked` also returns
-`413`. Immediately after each rejection, before any completion or sweep could
-run, confirm the staging object does not exist; that is what proves the ingress
-rejected the body rather than storing it. Repeat both `413` checks with
-`Origin` set to each of `https://aihubproduction.com`,
-`https://www.aihubproduction.com`, and `https://sandbox.aihubproduction.com`
-(the three origins the ingress echoes) and confirm each response carries a
-matching `Access-Control-Allow-Origin` and `Vary: Origin` so the browser can
-read the status. Confirm an unrelated bucket still accepts a larger body and
-that the ACME, `/seaweed/`, and `/healthz` routes still behave as before.
+Provider-backed Sandbox verification must use an authorized Customer Web
+session whose requests demonstrably target the Sandbox API and its private
+staging bucket. Separately record these outcomes:
+
+- A valid Avatar upload completes through private staging and completion; use
+  authenticated object metadata reads to confirm the staging object has the
+  expected `Content-Length`. Separately confirm an unauthenticated read of
+  that existing staged object is denied and that no public bytes are available
+  before completion. The authenticated metadata read establishes existence and
+  size; an anonymous `403` does not.
+- The deployment's approved bounded verification confirms a complete body at
+  exactly 2,097,152 bytes is accepted with `Content-Length`, and separately
+  confirms a chunked body at that exact limit is accepted. Confirm the resulting
+  object exists with an authenticated metadata read and records that exact size;
+  verify completion and publication separately. For each transfer mode, confirm
+  a body one byte over the ceiling returns `413`.
+- An ingress rejection returns `413`; immediately use an authenticated metadata
+  read for that test object, before completion or cleanup, and confirm it is
+  absent. Do not use anonymous reads as the absence check.
+- Record sanitized ingress evidence that request-body processing remained
+  bounded and the rejected request did not reach the storage handler: correlate
+  the controlled upload's progress and rejection status with ingress-side
+  received/spooled byte counts or equivalent operator telemetry. Record only
+  elapsed time, status, and aggregate byte counts; never log or retain grants,
+  query strings, raw bodies, object keys, or credentials.
+
+From the actual configured Customer Web origin, verify in the browser that the
+ingress-generated `413` is readable by the app. Check that the browser Origin
+exactly matches the same origin accepted by the storage preflight and that the
+response carries that exact `Access-Control-Allow-Origin` and `Vary: Origin`.
+Also retain separate HTTP checks for the three previously observed origins;
+they do not substitute for the configured Customer Web browser check. Confirm
+an unrelated bucket keeps its larger body policy and the ACME, `/seaweed/`, and
+`/healthz` routes keep their existing handlers.
 
 Only after that evidence is recorded and a separate rollout is authorized,
 enable Production. It changes only the snippet, so the vhost and its include
-stay as they are. Re-state both bucket names, take a fresh `stamp`, and back up
-the current Sandbox-only snippet before widening it:
+stay as they are. Re-state both bucket names, take a fresh Production stamp,
+and save the current validated Sandbox-only snippet at a distinct path before
+widening it. Check the copy succeeded and is non-empty; this path is not the
+original Sandbox vhost backup:
+
+First resolve Production's configured `CUSTOMER_WEB_BASE_URL` from its active
+container and repeat the storage preflight and browser-origin parity check for
+that origin. Stop on any mismatch; the installed allowlist must be the exact
+reviewed set used by both tiers.
 
 ```sh
 prod_bucket=aihub-user-asset-staging          # or the resolved Production value
 sandbox_bucket=aihub-sandbox-user-asset-staging   # or the resolved Sandbox value
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+production_stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+production_sandbox_snippet_backup="/root/s3-wispace-avatar-upload-limit.sandbox-before-production.$production_stamp"
+sudo test ! -e "$production_sandbox_snippet_backup" &&
 sudo cp -a /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf \
-  "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp"
+  "$production_sandbox_snippet_backup" && sudo test -s "$production_sandbox_snippet_backup" || {
+    echo "Production rollback backup failed; stop before widening the snippet" >&2
+    exit 1
+  }
+printf 'Pre-Production Sandbox-only snippet backup: %s\n' \
+  "$production_sandbox_snippet_backup"
 ```
 
 Edit that one `location ~` line again so its alternation lists both buckets,
@@ -734,7 +818,10 @@ location ~ ^/(?:aihub-user-asset-staging|aihub-sandbox-user-asset-staging)/ {
 ```sh
 sudo grep -c '^location ~ ' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf   # must print 1
 sudo sed -n '/^location ~ /p' /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
-sudo nginx -t && sudo systemctl reload nginx
+if ! sudo nginx -t || ! sudo systemctl reload nginx; then
+  echo "Production validation or reload failed; restore the saved Sandbox-only snippet now" >&2
+  exit 1
+fi
 ```
 
 Repeat the same checks from the Production Customer Web origin. Roll
@@ -744,9 +831,12 @@ vhost still includes the snippet, so nginx keeps loading and the Sandbox limit
 stays in force:
 
 ```sh
-sudo cp -a "/root/s3-wispace-avatar-upload-limit.sandbox.$stamp" \
-  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf
-sudo nginx -t && sudo systemctl reload nginx
+sudo cp -a "${production_sandbox_snippet_backup:?set the exact recorded pre-Production snippet backup}" \
+  /etc/nginx/snippets/s3-wispace-avatar-upload-limit.conf &&
+  sudo nginx -t && sudo systemctl reload nginx || {
+    echo "Production rollback did not restore, validate, and reload; stop for operator repair" >&2
+    exit 1
+  }
 ```
 
 The fragment is checked in CI against a local nginx and a stub S3 upstream:

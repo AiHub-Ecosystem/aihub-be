@@ -59,6 +59,9 @@ const TS_TEST_GATES = [
   'type-check',
 ];
 
+const AVATAR_UPLOAD_LIMIT_FRAGMENT =
+  'ops/nginx/s3-wispace-avatar-upload-limit.conf';
+
 /**
  * Whether a path is test-only: a spec or test file by suffix, or anything
  * under the `test/` root (including fixtures and shell specs).
@@ -208,7 +211,7 @@ export function selectShellSpecs(files, listDir = listDirEntries) {
           specs.add(`test/ops/${entry}`);
         }
       }
-    } else if (file === 'ops/nginx/s3-wispace-avatar-upload-limit.conf') {
+    } else if (file === AVATAR_UPLOAD_LIMIT_FRAGMENT) {
       // #2008: the operator-installed S3 ingress fragment proves itself against
       // the real file, so a change to it runs that proof.
       specs.add('test/ops/avatar-upload-limit.spec.sh');
@@ -561,7 +564,7 @@ function classifyPathGates(p) {
 
   // #2008: the S3 ingress fragment is operator-installed, so its gate is the
   // spec that exercises it rather than the AIHUB virtual-host header check.
-  if (path === 'ops/nginx/s3-wispace-avatar-upload-limit.conf') {
+  if (path === AVATAR_UPLOAD_LIMIT_FRAGMENT) {
     return ['check:doc-drift', 'test:shell-specs'];
   }
 
@@ -662,7 +665,7 @@ export function gateInvocation(gate, files, exists = existsSync, listDir) {
           (file) =>
             ((file.startsWith('scripts/ops/') && file.endsWith('.sh')) ||
               file === 'ops/nginx/aihub-nginx-apply' ||
-              file === 'ops/nginx/s3-wispace-avatar-upload-limit.conf' ||
+              file === AVATAR_UPLOAD_LIMIT_FRAGMENT ||
               file.startsWith('ops/logs/')) &&
             exists(file),
         ),

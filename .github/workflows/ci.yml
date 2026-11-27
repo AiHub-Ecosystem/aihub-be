@@ -578,6 +578,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes nginx
 
       - name: Exercise the Avatar upload body bound at the S3 ingress
+        env:
+          AVATAR_UPLOAD_LIMIT_REQUIRE_RUNTIME: "1"
         run: bash test/ops/avatar-upload-limit.spec.sh
 
   dev-restart-budget:
