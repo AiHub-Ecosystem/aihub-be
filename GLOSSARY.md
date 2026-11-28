@@ -15,10 +15,10 @@ and shared-host configuration remain operator responsibilities.
 _Avoid_: root deploy account
 
 **Business module**:
-A capability area of the application under `src/modules`: auth, gateway,
-idempotency, identity, metering, secrets, speaking, or writing. A module owns its
-use cases, vocabulary, and adapters, and is meant to change without its
-neighbours changing.
+A capability area of the application under `src/modules`: auth, avatar,
+content-proxy, gateway, idempotency, identity, metering, persistence, secrets,
+speaking, uploads, or writing. A module owns its use cases, vocabulary, and
+adapters, and is meant to change without its neighbours changing.
 _Avoid_: service, package, bounded context
 
 **Module public seam**:

@@ -6,7 +6,6 @@
 
 - `src/downstream/**`
 - `src/modules/gateway/**`
-- `src/modules/writing/application/**`
 
 **Not allowed:** edits to domain policy, API-key/JWKS verification, Postgres/Redis implementations, or public controller validation.
 

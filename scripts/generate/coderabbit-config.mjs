@@ -34,7 +34,7 @@ function pathsFromRule(content, path) {
 }
 
 /** @param {string} content @param {string} path @returns {string[]} */
-function pathsFromRole(content, path) {
+export function pathsFromRole(content, path) {
   const ownership =
     /\*\*File ownership:\*\*\s*\r?\n([\s\S]*?)(?=\r?\n\*\*|$)/u.exec(
       content,
@@ -99,7 +99,11 @@ export function renderCodeRabbitConfig(rootDir) {
     (path) =>
       path.endsWith('.controller.ts') || path.includes('/presentation/'),
   );
-  const authPaths = agents.get('.claude/agents/auth.md') ?? [];
+  // The module-wide claim is for role-ownership checks; review routing keeps
+  // the specific layer globs so it stays disjoint from api and infrastructure.
+  const authPaths = (agents.get('.claude/agents/auth.md') ?? []).filter(
+    (path) => path !== 'src/modules/auth/**',
+  );
   if (apiPaths.length !== API_SCOPES.length) {
     throw new Error('API role must own controller and presentation paths');
   }

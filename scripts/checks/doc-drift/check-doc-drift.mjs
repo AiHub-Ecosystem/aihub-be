@@ -1,8 +1,18 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import {
+  basename,
+  dirname,
+  join,
+  matchesGlob,
+  relative,
+  resolve,
+} from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { codeRabbitConfigDrift } from '../../generate/coderabbit-config.mjs';
+import {
+  codeRabbitConfigDrift,
+  pathsFromRole,
+} from '../../generate/coderabbit-config.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -229,6 +239,64 @@ export function findDocDriftViolations(rootDir = REPO_ROOT) {
   return violations;
 }
 
+/** @param {string} pattern @returns {string[]} */
+function expandBraceAlternatives(pattern) {
+  const match = /\{([^}]+)\}/u.exec(pattern);
+  if (!match) return [pattern];
+  const prefix = pattern.slice(0, match.index);
+  const suffix = pattern.slice(match.index + match[0].length);
+  return match[1]
+    .split(',')
+    .flatMap((alternative) =>
+      expandBraceAlternatives(`${prefix}${alternative}${suffix}`),
+    );
+}
+
+/**
+ * Every directory under `src/modules` must be reachable by a role's file
+ * ownership glob. The narrower-claim rule in AGENTS.md resolves overlaps.
+ *
+ * @param {string} rootDir
+ * @returns {string[]}
+ */
+export function unclaimedModuleDirectories(rootDir = REPO_ROOT) {
+  const root = resolve(rootDir);
+  const agentsDir = join(root, '.claude/agents');
+  const modulesDir = join(root, 'src/modules');
+  if (!existsSync(agentsDir) || !existsSync(modulesDir)) return [];
+
+  /** @type {string[]} */
+  const patterns = [];
+  for (const file of readdirSync(agentsDir)) {
+    if (!file.endsWith('.md')) continue;
+    const content = readFileSync(join(agentsDir, file), 'utf8');
+    for (const path of pathsFromRole(content, `.claude/agents/${file}`)) {
+      patterns.push(...expandBraceAlternatives(path));
+    }
+  }
+
+  /** @type {string[]} */
+  const directories = [];
+  /** @param {string} directory */
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const absolute = join(directory, entry.name);
+      directories.push(relative(root, absolute).replaceAll('\\', '/'));
+      walk(absolute);
+    }
+  };
+  walk(modulesDir);
+  directories.sort();
+
+  return directories.flatMap((directory) => {
+    const probe = `${directory}/__role_ownership_probe__.ts`;
+    return patterns.some((pattern) => matchesGlob(probe, pattern))
+      ? []
+      : [`${directory}: no role claim in .claude/agents/`];
+  });
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -236,6 +304,7 @@ if (
   const violations = [
     ...findDocDriftViolations(),
     ...codeRabbitConfigDrift(REPO_ROOT),
+    ...unclaimedModuleDirectories(REPO_ROOT),
   ];
   if (violations.length > 0) {
     console.error(violations.join('\n'));

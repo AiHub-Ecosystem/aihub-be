@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, matchesGlob, resolve, sep } from 'node:path';
 import { test } from 'node:test';
 
-import { findDocDriftViolations } from './check-doc-drift.mjs';
+import {
+  findDocDriftViolations,
+  unclaimedModuleDirectories,
+} from './check-doc-drift.mjs';
 
 /**
  * @param {import('node:test').TestContext} t
@@ -187,6 +190,31 @@ await test('the static job runs this suite in CI (#1786)', async () => {
     staticJob.includes('bun run test:doc-drift'),
     'the static job must run bun run test:doc-drift',
   );
+});
+
+await test('flags module directories without a role ownership claim', async (t) => {
+  const root = await fixture(t, {
+    '.claude/agents/owner.md':
+      '# Subagent: `owner`\n\n**File ownership:**\n\n- `src/modules/owned/**`\n',
+    'src/modules/owned/application/use-case.ts': '',
+    'src/modules/unowned/application/use-case.ts': '',
+  });
+
+  assert.deepEqual(unclaimedModuleDirectories(root), [
+    'src/modules/unowned: no role claim in .claude/agents/',
+    'src/modules/unowned/application: no role claim in .claude/agents/',
+  ]);
+});
+
+await test('accepts feature-layer and brace ownership globs', async (t) => {
+  const root = await fixture(t, {
+    '.claude/agents/feature.md':
+      '# Subagent: `feature`\n\n**File ownership:**\n\n- `src/modules/auth/**`\n- `src/modules/auth/<feature>/{application,domain}/**`\n',
+    'src/modules/auth/accounts/application/create-account.ts': '',
+    'src/modules/auth/mfa/domain/mfa.ts': '',
+  });
+
+  assert.deepEqual(unclaimedModuleDirectories(root), []);
 });
 
 await test('CodeRabbit config is generated and has disjoint owner scopes', async () => {
