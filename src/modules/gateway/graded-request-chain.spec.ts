@@ -12,9 +12,12 @@ import { MockAgent } from 'undici/index.js';
 
 import { AppModule } from '@/app.module';
 import { OPERATION_CATALOG } from '@/catalog/operation-catalog';
+import { AppError } from '@/common/errors/app-error';
+import type { ErrorEnvelope } from '@/common/errors/error-envelope';
 import { registerRequestLifecycle } from '@/common/http/hooks/request-lifecycle.hook';
 import { isRecord } from '@/common/is-record';
 import { generateRequestId } from '@/common/request-context/request-id';
+import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
 import { USER_ACCOUNT_REPOSITORY } from '@/modules/auth/accounts/application/user-account.port';
 import { PASSWORD_HASHER } from '@/modules/auth/local-credentials/application/password-hasher.port';
 import { AUTH_MFA_SERVICE } from '@/modules/auth/mfa/application/auth-mfa-repository.port';
@@ -62,6 +65,7 @@ import {
 } from '@/modules/writing/public/grading';
 import { fixtureJson } from '../../../test/support/json-fixtures';
 import { useTestRuntimeConfiguration } from '../../../test/support/test-runtime-configuration';
+import { DownstreamCircuitBreakers } from './infrastructure/dispatch/downstream-circuit-breakers';
 import { DownstreamHttpClient } from './infrastructure/dispatch/downstream-http.client';
 
 function operationsServedBy(controller: { prototype: object }): string[] {
@@ -617,6 +621,62 @@ describe('graded request chain', () => {
       });
     } finally {
       Object.defineProperty(operation, 'timeoutMs', timeoutDescriptor);
+    }
+  });
+
+  it('returns a short retry hint on the public route while a half-open probe is running', async () => {
+    const breakers = app.get(DownstreamCircuitBreakers);
+    const operation = 'writing.task1.grade';
+    const failure = new AppError({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'unavailable',
+      retryable: true,
+    });
+    jest.useFakeTimers();
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        await breakers
+          .execute(operation, async () => {
+            throw failure;
+          })
+          .catch(() => undefined);
+      }
+      await jest.advanceTimersByTimeAsync(30_000);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    const { promise, resolve } =
+      Promise.withResolvers<InternalAIServiceResponse<unknown>>();
+    const probe = breakers.execute(operation, () => promise);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/ielts/writing/task1/grade',
+        headers: { 'idempotency-key': 'half-open-probe-in-flight' },
+        payload: {
+          question: task1Request.question,
+          chart_type: task1Request.topic,
+          essay: task1Request.essay,
+          image_url: task1Request.url,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const { error } = response.json<ErrorEnvelope>();
+      expect(error).toMatchObject({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        retryable: true,
+      });
+      const hint = error.retry_after_ms ?? 0;
+      expect(hint).toBeGreaterThanOrEqual(1_000);
+      expect(hint).toBeLessThan(2_000);
+      expect(response.headers['retry-after']).toBe(
+        String(Math.ceil(hint / 1_000)),
+      );
+    } finally {
+      resolve({ status: 200, headers: {}, body: {} });
+      await probe;
     }
   });
 

@@ -81,7 +81,7 @@ new CircuitBreaker(call, {
 
 Local admission refusals marked `ai_service:bulkhead_exhausted` do not count toward the circuit breaker: they were never sent to the provider. Pre-send transport faults such as connection refusal still count as provider failures.
 
-Open breaker → `503 AI_SERVICE_UNAVAILABLE`, with `retry_after_ms` indicating time until the next exploratory probe.
+A breaker refusal returns `503 AI_SERVICE_UNAVAILABLE`. The `retry_after_ms` hint adds 0–999 ms of jitter to the remaining open-state cooldown, or to a 1 s base while the half-open probe is in flight (#1473).
 
 ## I.4 Idempotency — Full Lifecycle
 

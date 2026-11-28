@@ -1,9 +1,13 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import CircuitBreaker from 'opossum';
 
 import { OPERATION_IDS, type OperationId } from '@/catalog/operation-id';
 import { AppError } from '@/common/errors/app-error';
 import { isDownstreamFault } from '@/common/errors/downstream-fault';
+import {
+  OUTAGE_RETRY_AFTER_MS,
+  jitteredRetryAfterMs,
+} from '@/common/errors/retry-jitter';
 import type { InternalAIServiceResponse } from '@/downstream/downstream.types';
 import { setDownstreamBreakerState } from './downstream-breaker-metrics';
 
@@ -36,12 +40,11 @@ function isOpenBreakerError(error: unknown): boolean {
   );
 }
 
-@Injectable()
 export class DownstreamCircuitBreakers implements OnModuleDestroy {
   private readonly breakers: Map<OperationId, OperationBreaker>;
   private readonly openedAt = new Map<OperationId, number>();
 
-  constructor() {
+  constructor(private readonly random: () => number = Math.random) {
     this.breakers = new Map(
       OPERATION_IDS.map(
         (operation) => [operation, this.createBreaker(operation)] as const,
@@ -63,15 +66,17 @@ export class DownstreamCircuitBreakers implements OnModuleDestroy {
       return await breaker.fire(action);
     } catch (error) {
       if (!isOpenBreakerError(error)) throw error;
-      const openedAt = this.openedAt.get(operation) ?? Date.now();
-      const retryAfterMs = breaker.halfOpen
-        ? RESET_TIMEOUT_MS
-        : Math.max(1, RESET_TIMEOUT_MS - (Date.now() - openedAt));
+      const openedAt = this.openedAt.get(operation);
+      // The cooldown has expired once the probe can run, even if it finishes before this catch.
+      const baseWait =
+        openedAt === undefined
+          ? OUTAGE_RETRY_AFTER_MS
+          : Math.max(1, RESET_TIMEOUT_MS - (Date.now() - openedAt));
       throw new AppError({
         code: 'AI_SERVICE_UNAVAILABLE',
         message: 'AI service is temporarily unavailable',
         retryable: true,
-        retryAfterMs,
+        retryAfterMs: jitteredRetryAfterMs(baseWait, this.random),
         cause: error,
       });
     }

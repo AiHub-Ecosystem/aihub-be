@@ -277,7 +277,11 @@ export const PRODUCTION_ADAPTERS = [
       provide: RELEASE_SANDBOX_DISPATCH_RESERVATIONS,
       useValue: releaseSandboxDispatchReservations,
     },
-    DownstreamCircuitBreakers,
+    {
+      provide: DownstreamCircuitBreakers,
+      useFactory: (): DownstreamCircuitBreakers =>
+        new DownstreamCircuitBreakers(),
+    },
     {
       provide: OPERATION_DISPATCHER,
       useFactory: (

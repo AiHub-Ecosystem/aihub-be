@@ -104,6 +104,32 @@ describe('DownstreamCircuitBreakers', () => {
     expect(await breakerState('writing.task2.grade')).toBe('0');
   });
 
+  it('spreads retry hints for simultaneous open-breaker refusals', async () => {
+    jest.useFakeTimers();
+    const random = jest.fn().mockReturnValueOnce(0).mockReturnValue(0.999);
+    const instance = (breakers = new DownstreamCircuitBreakers(random));
+    const failure = new AppError({
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'unavailable',
+      retryable: true,
+    });
+    for (let index = 0; index < 20; index += 1) {
+      await ignoreFailure(instance, 'writing.task1.grade', failure);
+    }
+    await jest.advanceTimersByTimeAsync(5_000);
+
+    const refusals = [25_000, 25_999].map((retryAfterMs) =>
+      expect(
+        instance.execute('writing.task1.grade', async () => OK),
+      ).rejects.toMatchObject({
+        code: 'AI_SERVICE_UNAVAILABLE',
+        retryable: true,
+        retryAfterMs,
+      }),
+    );
+    await Promise.all(refusals);
+  });
+
   // A rejected AIHUB credential fails every request, so the breaker opens; a
   // 408 or 425 says nothing about the service (#845).
   it.each([
@@ -363,7 +389,7 @@ describe('DownstreamCircuitBreakers', () => {
 
   it('admits one half-open probe and returns the retry hint for blocked calls', async () => {
     jest.useFakeTimers();
-    breakers = new DownstreamCircuitBreakers();
+    breakers = new DownstreamCircuitBreakers(() => 0.5);
     const failure = new AppError({
       code: 'AI_SERVICE_UNAVAILABLE',
       message: 'unavailable',
@@ -394,7 +420,7 @@ describe('DownstreamCircuitBreakers', () => {
     expect(blocked).toMatchObject({
       code: 'AI_SERVICE_UNAVAILABLE',
       retryable: true,
-      retryAfterMs: 30_000,
+      retryAfterMs: 1_500,
     });
     expect(await breakerState('writing.task1.grade')).toBe('2');
     completeProbe?.(OK);
