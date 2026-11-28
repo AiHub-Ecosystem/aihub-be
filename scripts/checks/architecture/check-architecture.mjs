@@ -2312,7 +2312,6 @@ function main() {
   }
 
   const dependencyCruiserConfigPath = join(root, '.dependency-cruiser.cjs');
-  // shortcut: leaves one ignored cache folder per policy/resolver revision; prune if these inputs change often.
   const dependencyCruiserCachePath =
     cacheHelpers.dependencyCruiserCacheDirectory(root, [
       readFileSync(dependencyCruiserConfigPath, 'utf8'),
@@ -2323,6 +2322,7 @@ function main() {
       // resolvable, so "missing" and "present" must not share a cache entry.
       cacheHelpers.generatedPrismaClientFingerprint(root),
     ]);
+  cacheHelpers.pruneDependencyCruiserCache(root, dependencyCruiserCachePath);
   const result = spawnSync(
     process.execPath,
     [

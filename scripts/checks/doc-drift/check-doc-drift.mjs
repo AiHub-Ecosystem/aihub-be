@@ -112,9 +112,8 @@ function missingOperationsPaths(rootDir) {
   /** @type {string[]} */
   const violations = [];
   const operationsDir = resolve(rootDir, 'docs/operations');
-  // shortcut: check explicit root tokens and Markdown links; extend if runbooks adopt another path form.
   const repoPathPattern =
-    /(?<![\w./-])((?:\.\/)?(?:scripts|ops|src)\/(?:[\w.*?<>-]+\/)*[\w.*?<>-]+)/gu;
+    /(?<![\w./-])((?:\.\/)?(?:scripts|ops|src|test|docs)\/(?:[\w.*?<>-]+\/)*[\w.*?<>-]+)/gu;
   const markdownLinkPattern = /\[[^\]]*\]\(([^)]+)\)/gu;
 
   for (const path of markdownFiles(operationsDir)) {
@@ -145,7 +144,7 @@ function missingOperationsPaths(rootDir) {
           '/',
         );
         if (
-          /^(?:scripts|ops|src)\//u.test(repositoryPath) &&
+          /^(?:scripts|ops|src|test|docs)\//u.test(repositoryPath) &&
           !/[*?<>]/u.test(repositoryPath)
         ) {
           repositoryPaths.add(repositoryPath);

@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -118,6 +125,32 @@ describe('generated Prisma client fingerprint', () => {
     } finally {
       rmSync(absent, { recursive: true, force: true });
       rmSync(present, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dependency-cruiser cache pruning', () => {
+  it('removes folders from older input revisions and keeps the current one', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dependency-cruiser-prune-'));
+    try {
+      const stale = cacheHelpers.dependencyCruiserCacheDirectory(root, [
+        'old-policy',
+      ]);
+      const current = cacheHelpers.dependencyCruiserCacheDirectory(root, [
+        'current-policy',
+      ]);
+      for (const directory of [stale, current]) {
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, 'result.json'), '{}');
+      }
+
+      cacheHelpers.pruneDependencyCruiserCache(root, current);
+
+      expect(existsSync(stale)).toBe(false);
+      expect(existsSync(current)).toBe(true);
+      expect(readFileSync(join(current, 'result.json'), 'utf8')).toBe('{}');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

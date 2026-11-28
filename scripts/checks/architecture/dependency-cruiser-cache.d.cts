@@ -4,6 +4,7 @@ declare const cacheHelpers: {
     inputs: readonly string[],
   ): string;
   generatedPrismaClientFingerprint(root: string): string;
+  pruneDependencyCruiserCache(root: string, keepPath: string): void;
 };
 
 export = cacheHelpers;

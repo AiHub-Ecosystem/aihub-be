@@ -126,6 +126,26 @@ await test('rejects missing ADR links and missing repository paths in operations
   );
 });
 
+await test('checks repository paths under test/ and docs/ in operations runbooks', async (/** @type {import('node:test').TestContext} */ t) => {
+  const root = await fixture(t, {
+    'docs/operations/runbook.md':
+      'Use `test/ops/missing.sh` and `docs/agents/missing.md`; see [helper](../../test/ops/linked-missing.sh).\n',
+  });
+
+  const violations = findDocDriftViolations(root);
+  assert.ok(
+    violations.some((message) => message.includes('test/ops/missing.sh')),
+  );
+  assert.ok(
+    violations.some((message) => message.includes('docs/agents/missing.md')),
+  );
+  assert.ok(
+    violations.some((message) =>
+      message.includes('test/ops/linked-missing.sh'),
+    ),
+  );
+});
+
 await test('requires every ADR to have a status line', async (/** @type {import('node:test').TestContext} */ t) => {
   const root = await fixture(t, {
     'docs/adr/0001-no-status.md': '# ADR-0001\n\nA decision.\n',

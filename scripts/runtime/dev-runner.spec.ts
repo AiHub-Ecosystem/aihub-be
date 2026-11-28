@@ -286,4 +286,39 @@ describe('dev runner graceful lifecycle', () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it('escalates a connected child that ignores shutdown to SIGTERM before SIGKILL on POSIX', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aihub-dev-grace-'));
+    try {
+      const childScript = join(directory, 'child.mjs');
+      writeFileSync(
+        childScript,
+        `
+        process.on('SIGTERM', () => process.exit(0));
+        process.on('message', () => {});
+        process.stdout.write('READY\\n');
+        setInterval(() => {}, 1000);
+        `,
+      );
+
+      const child = fork(childScript, [], {
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      });
+
+      await new Promise<void>((resolve) => {
+        child.stdout?.on('data', (d: unknown) => {
+          if (String(d).includes('READY')) resolve();
+        });
+      });
+
+      // real-timer-ok: the grace period must elapse before the child exits.
+      const result = await onPlatform('linux', () => stopApp(child, 1500));
+
+      // Windows terminates on SIGTERM without running the child's handler;
+      // neither platform may report the SIGKILL fallback.
+      expect(result.code === 0 || result.signal === 'SIGTERM').toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

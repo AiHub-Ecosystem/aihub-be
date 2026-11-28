@@ -31,8 +31,8 @@ export function ensureSwcBindingCache(cwd = process.cwd()) {
 
 /**
  * Stops a child application process gracefully by sending an IPC shutdown
- * message (SIGTERM on POSIX only when the child has no IPC channel) and
- * awaiting exit before forcing termination.
+ * message, escalating to SIGTERM on POSIX when IPC cannot carry the request or
+ * the child ignores it, and awaiting exit before forcing termination.
  *
  * @param {ChildProcess | undefined} child
  * @param {number} [timeoutMs=5000]
@@ -61,13 +61,20 @@ export async function stopApp(child, timeoutMs = 5000) {
   };
 
   // A signal sent beside the message pre-empts the child's own shutdown path
-  // (#1629), so SIGTERM is only the way in when IPC cannot carry the request.
-  // ponytail: a connected child that ignores 'shutdown' waits for the SIGKILL
-  // fallback below; add a SIGTERM grace period if such a child appears.
+  // (#1629), so SIGTERM is only the way in when IPC cannot carry the request,
+  // or when the child ignores the message and needs a grace period first.
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let graceTimer;
   if (child.connected) {
     try {
       child.send('shutdown', (error) => {
-        if (error) signalTerm();
+        if (error) {
+          signalTerm();
+          return;
+        }
+        // Reserve the last second before SIGKILL for SIGTERM handlers.
+        graceTimer = setTimeout(signalTerm, Math.max(0, timeoutMs - 1000));
+        graceTimer.unref?.();
       });
     } catch {
       signalTerm();
@@ -93,6 +100,7 @@ export async function stopApp(child, timeoutMs = 5000) {
     return result;
   } finally {
     clearTimeout(fallbackTimer);
+    clearTimeout(graceTimer);
   }
 }
 
