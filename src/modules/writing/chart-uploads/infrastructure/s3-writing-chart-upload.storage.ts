@@ -12,6 +12,7 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
+import { isSafeObjectKey } from '@/modules/uploads/public';
 import type { WritingChartRevocationStoragePort } from '@/modules/writing/chart-uploads/application/writing-chart-revocation.port';
 import { WRITING_CHART_MAX_BYTES } from '@/modules/writing/chart-uploads/application/writing-chart-upload.policy';
 import type { WritingChartUploadStoragePort } from '@/modules/writing/chart-uploads/application/writing-chart-upload.port';
@@ -56,11 +57,15 @@ function validBaseUrl(value: string | undefined): URL | undefined {
   }
 }
 
+// The anchored regex is the allowlist; the shared denylist stays explicit so
+// all three storages refuse the same keys if this regex is ever loosened.
 function isChartKey(value: string, stage: 'staging' | 'published'): boolean {
   return (
     /^writing-charts\/chart_[0-9A-HJKMNP-TV-Z]{26}\/(staging|published)$/.test(
       value,
-    ) && value.endsWith(`/${stage}`)
+    ) &&
+    value.endsWith(`/${stage}`) &&
+    isSafeObjectKey(value)
   );
 }
 

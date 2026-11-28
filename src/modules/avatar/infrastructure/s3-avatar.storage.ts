@@ -30,6 +30,7 @@ import {
   objectStorageSignal,
   objectStorageUnavailable,
 } from '@/modules/secrets/public/object-storage';
+import { isSafeObjectKey } from '@/modules/uploads/public';
 import {
   AVATAR_BUCKETS,
   AVATAR_STAGING_BUCKETS,
@@ -48,12 +49,7 @@ export interface AvatarStorageOptions {
 }
 
 function validObjectKey(objectKey: string): boolean {
-  return (
-    objectKey.startsWith('users/') &&
-    objectKey.length <= 1_024 &&
-    !objectKey.includes('..') &&
-    !/[\s?#]/.test(objectKey)
-  );
+  return objectKey.startsWith('users/') && isSafeObjectKey(objectKey);
 }
 
 interface Configured {

@@ -23,3 +23,4 @@ export type {
 } from '@/modules/uploads/domain/upload-session';
 export { UploadSessionVerificationRefusal } from '@/modules/uploads/application/upload-session.errors';
 export { LegacyUploadCompletionQueue } from '@/modules/uploads/application/legacy-upload-completion-queue';
+export { isSafeObjectKey } from '@/modules/uploads/application/safe-object-key';

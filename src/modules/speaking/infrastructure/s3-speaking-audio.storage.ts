@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '@/common/errors/app-error';
 import { objectStorageUnavailable } from '@/modules/secrets/public/object-storage';
 import type { SpeakingAudioStoragePort } from '@/modules/speaking/application/audio/speaking-audio-storage.port';
+import { isSafeObjectKey } from '@/modules/uploads/public';
 
 export const SPEAKING_AUDIO_URL_TTL_SECONDS = 15 * 60;
 
@@ -37,13 +38,7 @@ function storageUnavailable(cause?: unknown): AppError {
 }
 
 function validObjectKey(objectKey: string): boolean {
-  return (
-    objectKey.length > 0 &&
-    objectKey.length <= 1_024 &&
-    !objectKey.startsWith('/') &&
-    !objectKey.includes('..') &&
-    !/[\s?#]/.test(objectKey)
-  );
+  return !objectKey.startsWith('/') && isSafeObjectKey(objectKey);
 }
 
 @Injectable()

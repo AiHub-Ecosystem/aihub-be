@@ -48,4 +48,19 @@ describe('S3SpeakingAudioStorage', () => {
       code: 'INTERNAL_ERROR',
     });
   });
+
+  it.each([
+    ['longer than 1024 characters', `speaking-samples/${'a'.repeat(1_010)}`],
+    ['whitespace', 'speaking-samples/part 1/sample.webm'],
+    ['query', 'speaking-samples/part-1/sample.webm?x'],
+    ['fragment', 'speaking-samples/part-1/sample.webm#x'],
+  ])('rejects a key that is %s', async (_reason, objectKey) => {
+    const storage = new S3SpeakingAudioStorage(configuredClient(), {
+      bucket: 'test-speaking-samples',
+    });
+
+    await expect(storage.getReadUrl(objectKey)).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+    });
+  });
 });

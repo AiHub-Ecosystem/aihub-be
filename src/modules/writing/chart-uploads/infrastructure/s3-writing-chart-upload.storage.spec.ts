@@ -235,6 +235,23 @@ describe('S3WritingChartUploadStorage contract', () => {
     }
   });
 
+  it.each([
+    ['longer than 1024 characters', `writing-charts/${'a'.repeat(1_025)}`],
+    ['traversal', 'writing-charts/../chart_01J00000000000000000000001/staging'],
+    ['whitespace', 'writing-charts/chart_01J00000000000000000000001 /staging'],
+    ['query', `${STAGING_KEY}?x`],
+    ['fragment', `${STAGING_KEY}#x`],
+  ])('refuses a key that is %s', async (_reason, stagingKey) => {
+    await expect(
+      createStorage().createUploadUrl({
+        environment: 'sandbox',
+        stagingKey,
+        contentType: 'image/png',
+        byteSize: 100,
+      }),
+    ).rejects.toMatchObject({ code: 'WRITING_CHART_STORAGE_UNAVAILABLE' });
+  });
+
   it('checks and deletes only the exact published object through the S3 HTTP boundary', async () => {
     const requests: { method: string | undefined; path: string | undefined }[] =
       [];

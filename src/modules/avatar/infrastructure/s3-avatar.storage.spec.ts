@@ -116,6 +116,18 @@ describe('S3AvatarStorage', () => {
         }),
       ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
     });
+
+    it.each([`users/${'a'.repeat(1_025)}`, 'users/x#y', 'users/x\ty'])(
+      'refuses the shared-rule key %s before signing',
+      async (objectKey) => {
+        await expect(
+          storage().createUploadUrl({
+            objectKey,
+            contentType: 'image/png',
+          }),
+        ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+      },
+    );
   });
 
   describe('public URL', () => {
