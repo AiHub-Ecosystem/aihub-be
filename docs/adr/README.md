@@ -45,3 +45,4 @@ This gap is intentional: the numbers stay reserved for those decisions, and
 | [0181](0181-scalar-renderer-1-83.md)                            | Scalar renderer 1.83.0                                                  | Accepted                                       |
 | [0182](0182-security-reads-use-postgres-writer.md)              | Keep security decisions on the PostgreSQL writer                        | Accepted; implementation pending               |
 | [0183](0183-explicit-request-context-stays-the-default.md)      | Keep explicit request context as the default                            | Accepted                                       |
+| [0201](0201-pace-ai-service-recovery.md)                        | Pace recovery across AIHUB tiers and slots                              | Accepted; implementation pending               |

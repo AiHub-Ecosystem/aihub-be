@@ -113,6 +113,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Machine identity:** the service identity used to access infrastructure such as Vault; it is distinct from End-User ID and User Identity.
 - **Secret source of truth:** Vault owns runtime secret values, while Postgres remains the durable source of truth for control-plane data such as API-key hashes.
 - **AI Service:** a downstream domain service behind AIHUB, such as AI Writing or AI Speaking.
+- **Recovery ramp:** the temporary, stepwise increase in how many new dispatches AIHUB admits per second to a recovering AI Service. The ceiling applies across the AIHUB tiers and deployment slots that share the same service capacity ([ADR-0201](docs/adr/0201-pace-ai-service-recovery.md)).
 - **Model Provider:** an upstream foundational model service invoked by an AI Service; this term does not mean an AI Writing or AI Speaking service.
 - **Usage-reporting declaration:** the current contract expectation for one AI Service to return complete token usage; it distinguishes an unreported value that is expected from missing evidence that is an anomaly, and can change independently per service.
 - **Operation Catalog:** the typed code-owned mapping of a **dispatch operation's** public path, scope, identity mode, limits, timeout, and downstream operation. It holds only operations that reach an AI Service. _Avoid_: reading it as the registry of all Public API Routes.
