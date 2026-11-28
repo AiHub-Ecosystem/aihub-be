@@ -102,13 +102,16 @@ _Avoid_: Concurrency permit, HTTP stream
 **Concurrency permit**:
 The right for one graded request to occupy one of its Organization's in-flight
 dispatch slots, acquired after Graded admission and released when the request
-settles. It is admission control, not usage evidence, and is separate from a
-Job quota reservation.
+settles. A permit held past the response by background work ages out after the
+stale-lease window. It is admission control, not usage evidence, and is separate
+from a Job quota reservation.
 _Avoid_: job quota reservation, in-flight jobs
 
 **Organization retry budget**:
 The Organization-wide allowance for same-key repeats of operations that
-support idempotency, shared by its API keys and distinct from monthly quota.
+support idempotency, shared by its API keys and distinct from monthly quota. It
+is a rolling 60-second allowance of at most 10% of first attempts, with a
+minimum of one repeat per Organization.
 _Avoid_: per-key retry limit
 
 **Request ID**:
@@ -183,7 +186,9 @@ _Avoid_: legal category
 
 **End-User ID**:
 The identifier AIHUB associates with a user's operation and usage record. It is
-obtained from either a Signed User Assertion or a Declared User ID.
+obtained from either a Signed User Assertion or a Declared User ID, resolves for
+metering and downstream `user_id`/`sub`, and is compared exactly as sent, never
+case-folded or normalized — one end user must always use the same value.
 _Avoid_: API-key owner ID
 
 **AIHUB User Account**:
@@ -200,7 +205,12 @@ _Avoid_: session revocation
 **Organization Identity Configuration**:
 An Organization-owned policy for verifying end-user identity. When active, it
 requires Signed User Assertions; when absent or disabled, it permits Declared
-User IDs.
+User IDs. It records the issuer, a JWKS URL or inline public JWKS, allowed
+algorithms, maximum assertion TTL, and active/disabled status. Self-service URL
+claims require the issuer and JWKS host to match; inline keys are
+operator-provisioned, and an operator releases a claim by disabling the
+configuration and recording an audit event
+([ADR-0191](docs/adr/0191-organization-identity-issuer-control-and-release.md)).
 _Avoid_: JWKS health
 
 **Identity Cache Entry**:
@@ -223,19 +233,24 @@ _Avoid_: cache TTL
 
 **Signed User Assertion**:
 A short-lived signed token issued by an Organization's backend that asserts an
-End-User ID under that Organization's active identity policy.
+End-User ID under that Organization's active identity policy and is verified
+through that Organization's JWKS. A plain value from such an Organization is
+rejected, never downgraded.
 _Avoid_: API key, plain user ID
 
 **Declared User ID**:
 A plain End-User ID supplied by an application when its Organization has no
-active Identity Configuration; AIHUB does not cryptographically verify who it
-identifies.
+active Identity Configuration. AIHUB neither cryptographically verifies who it
+identifies nor interprets the value; an email address is accepted but stored
+and forwarded as-is.
 _Avoid_: signed assertion
 
 **Customer Sandbox API key**:
 An Organization-owned API key whose stored authorization permits the Sandbox
 Environment. Its prefix does not grant access; the backend checks the key's
-stored environment, scope, and Organization policy.
+stored environment, scope, and Organization policy. Creation permits only
+`writing.grade`, `speaking.grade`, or both, and the public demo checks the
+selected skill's scope ([ADR-0094](docs/adr/0094-sandbox-demo-key-admission.md)).
 
 **Customer Production API key**:
 An Organization-owned API key whose stored authorization permits Production;
@@ -243,7 +258,13 @@ its use may incur charges under the Organization's Production policy.
 
 **Sandbox dispatch allowance**:
 The maximum number of Sandbox grading dispatches admitted for one Organization
-in one UTC calendar month, subject to the shared Sandbox ceiling.
+in one UTC calendar month, subject to the shared Sandbox ceiling. Each
+Organization receives five from the persisted default, shared across every key,
+client, and Writing/Speaking skill, with a shared ceiling of 500; a
+month-specific override replaces that default without resetting consumption
+and expires with the month, and a month with no persisted default fails closed.
+Dispatches reaching the boundary count despite downstream failure or timeout,
+while completed successful Writing replays consume none.
 
 **Sandbox allowance override**:
 A month-specific total Sandbox dispatch allowance for one Organization that

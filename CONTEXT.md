@@ -8,16 +8,17 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 
 ## Vocabulary
 
+Stable structural terms are defined in [GLOSSARY.md](GLOSSARY.md); the linked entries below point there instead of repeating a definition. Retired Clerk-era terms are recorded once in [historical vocabulary](docs/history/retired-vocabulary.md).
+
 - **Organization:** the tenant that owns API keys, identity configuration, quotas, usage, and downstream policy.
-- **Organization Identity Configuration:** the Organization-owned settings AIHUB uses to verify Signed User Assertions: issuer, a JWKS URL or inline public JWKS, allowed algorithms, maximum assertion TTL, and active/disabled status. Self-service URL claims require the issuer and JWKS host to match; inline keys are operator-provisioned. Operators can release a claim by disabling the configuration and recording an audit event ([ADR-0191](docs/adr/0191-organization-identity-issuer-control-and-release.md)).
+- **Organization Identity Configuration:** defined in [GLOSSARY.md#organization-identity-configuration](GLOSSARY.md#organization-identity-configuration).
 - **Request admission:** the identity reads required before a grading request can proceed: API-key lookup and, when the caller supplies a Signed User Assertion, the Organization Identity Configuration used to verify it.
-- **Graded admission:** the single decision on a graded request that applies the API key's rate limit, then the Organization retry budget, then the monthly quota, in the order [ADR-0057](docs/adr/0057-graded-request-order-is-a-declared-contract.md) declares. It is distinct from Request admission (identity reads) and Organization admission (Membership Role rules); the Concurrency permit is a separate step after it.
+- **Graded admission:** defined in [GLOSSARY.md#graded-admission](GLOSSARY.md#graded-admission).
 - **PostgreSQL connection budget:** the complete per-client allocation and unallocated operational/monitoring reserve for the shared cluster, approved in one written decision by AIHUB as its sole owner. The server-session budget includes PgBouncer backend caps and direct-client pools within `max_connections` after PostgreSQL reserved slots; app-to-PgBouncer client caps are tracked separately because they do not equal server sessions. Calculate both from measured load and supported process overlap ([ADR-0103](docs/adr/0103-budget-postgresql-connections-on-shared-cluster.md)).
 - **Organization Identity Readiness:** whether an Organization has an active identity configuration, and therefore verifies End-User IDs through Signed User Assertions rather than accepting Declared User IDs; it reflects saved configuration state, not current JWKS endpoint health. It is generally not a precondition for grading, and the public demo admits such Organizations: its key validation reports `signed_assertion` so the demo collects the assertion instead of a Declared User ID.
 - **Customer Web:** the public site and signed-in Console in the `AiHub-Frontend` repository, served at `aihubproduction.com`. The current public Writing and Speaking demos show fixed local Mock results without an eligible key and use an Organization-owned Sandbox key for Live grading; explicit Sandbox/Production selection is accepted design pending implementation in `AiHub-Frontend/docs/adr/0018-explicit-demo-environments-and-safe-exports.md` and this repository's [ADR-0095](docs/adr/0095-demo-environments-and-sandbox-allowance-policy.md).
-- **Customer User:** _Historical_: a person authenticated by the Customer Web through Clerk on the original invite-only flow; this was not an AIHUB account. A person signed in to the Customer Web today holds an AIHUB User Account.
-- **AIHUB User Account:** a credential-bearing account managed by AIHUB for user-facing access; it is distinct from an Organization and from the existing Customer User term until the Customer Web boundary is migrated.
-- **Operator:** a person who runs a privileged AIHUB control-plane CLI command; an Operator is not a Customer User and is not authenticated by the Bearer boundary.
+- **AIHUB User Account:** defined in [GLOSSARY.md#aihub-user-account](GLOSSARY.md#aihub-user-account).
+- **Operator:** a person who runs a privileged AIHUB control-plane CLI command. Its recorded actor is an AIHUB User Account named by `--actor`, but the command itself is not authenticated by the Bearer boundary.
 - **Operator actor:** the active AIHUB User Account named by the `--actor` option for an Operator command; it is the recorded actor for Organization Audit Events.
 - **Auth Identity:** a login identity attached to an AIHUB User Account, such as the Phase 1 local email/password identity or a future Google identity; it is not itself an Organization, API key, or username.
 - **Password policy:** the local Auth Identity password rule that accepts 12 through 128 Unicode code points, counted without normalization.
@@ -38,9 +39,6 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Signup Browser Binding:** a random nonce held in an HttpOnly cookie by the browser that requested an email verification token (by registering or resending), stored by AIHUB only as a hash on that token; it proves which browser may be signed in by that token, never who owns the email.
 - **Verification Sign-in:** the one Refresh Session a verification token may create, issued only when the verifying browser presents the token's Signup Browser Binding; any holder of the link can verify the email, but only the bound browser is signed in, and only once per token.
 - **Refresh Token Family:** the ordered lineage of rotated Refresh Token versions for one Refresh Session; reusing any previous version revokes the entire family.
-- **Customer Organization:** the tenant concept in the Customer Web. During the invite-only sandbox MVP, all invited Customer Users belong to one Customer Organization mapped to the dedicated sandbox AIHUB Organization.
-- **Clerk:** _Historical_: the Managed IdP of the original invite-only Customer Web sandbox. It is retired; the Customer Web signs in only through AIHUB ([ADR-0046](docs/adr/0046-customer-web-aihub-auth-identity-boundary.md), [issue #94](https://github.com/AiHub-Ecosystem/aihub-be/issues/94)).
-- **Invite-only membership:** access granted by an operator to a known user; it remains the current sandbox membership path, while AIHUB local access uses explicit Organization Membership and local account registration does not grant Organization access.
 - **Organization Membership:** the durable relationship that grants an AIHUB User Account access to an Organization; it is separate from account registration and API-key issuance, and one account may hold memberships in multiple Organizations. Removing access disables the relationship rather than deleting it.
 - **Membership Role:** the per-organization authority assigned to a membership: `owner`, `admin`, or `member`; it is not a User Access JWT claim. Owners have full membership authority; admins may manage current members but not current owners or admins; members have no authority over any membership but their own, which they may only disable.
 - **Organization Invitation:** a pending, organization-scoped invitation for one normalized email; it is separate from a membership and becomes a membership only after the invited identity accepts. An invitation is open only while its token is unconsumed and unexpired; otherwise it is a closed invitation, whether accepted, superseded, expired, or revoked, without implying a separate public lifecycle status.
@@ -52,7 +50,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Management Idempotency Scope:** the replay boundary for one Organization mutation: one Organization, one AIHUB User Account, one mutation type, and one client-supplied key. Different Organizations and callers never share replay state.
 - **Account Idempotency Scope:** the replay boundary for a mutation that has no Organization yet, such as creating one: one AIHUB User Account, one mutation type, and one client-supplied key. Different callers never share replay state.
 - **Retry-eligible repeat:** a subsequent request for the same Organization and operation that reuses the original `Idempotency-Key`; this is AIHUB's observable proxy for client retry traffic on operations that support idempotency.
-- **Organization retry budget:** the rolling 60-second allowance for retry-eligible repeats: at most 10% of first attempts on idempotency-enabled operations, with a minimum of one repeat per Organization.
+- **Organization retry budget:** defined in [GLOSSARY.md#organization-retry-budget](GLOSSARY.md#organization-retry-budget).
 - **AI Service retry budget:** the shared token bucket for AIHUB-generated retries to one AI Service; its refill rate is set to 10% of confirmed sustainable first-attempt capacity, with the absolute rate pending #273 and #327 evidence.
 - **Self-serve Organization:** an Organization an AIHUB User Account created through the Bearer boundary rather than one an operator provisioned; the creator becomes its first active `owner`, and its commercial terms start from operator-controlled defaults that only an operator may change.
 - **Organization Suspension:** the operator act that sets an Organization's status to `suspended`, closing its management surfaces and API-key authentication while leaving its memberships, keys, invitations, quota, and audit trail untouched; it is never reachable from the Bearer boundary.
@@ -76,14 +74,7 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Password Reset Token:** the opaque, single-use proof issued by Password Recovery; it is valid for one hour, and issuing a newer token invalidates the previous open token.
 - **Local Account Status:** the lifecycle state of a local User Account: pending verification, active, or disabled.
 - **Login credential failure:** the deliberately generic result for an unknown email, wrong password, pending-verification account, or disabled account; it does not reveal which account state was observed.
-- **Sandbox User ID:** an opaque deterministic identifier derived from the verified Managed IdP issuer and subject, encoded to AIHUB's `[A-Za-z0-9_-]` boundary; it is never an email address or a browser-supplied value.
-- **Server-side session:** a Customer Web session represented to the browser only by a secure, HttpOnly, same-site cookie; provider access tokens do not live in browser storage. _Superseded_ for the Customer Web login session by **Web Session** [ADR-0081](docs/adr/0081-aihub-owned-customer-web-web-sessions.md); the term survives only to describe the browser-facing shape, not the session's owner or store.
-- **Sandbox API key:** the server-held API key for AIHUB's dedicated demo Organization, distinct from the Organization-owned Sandbox keys that visitors may supply to the public demos; it is never sent to a browser.
-- **Customer Sandbox API key:** an Organization-owned key restricted to the `sandbox` Environment, distinct from that Organization's Production key. Customer key creation permits only `writing.grade`, `speaking.grade`, or both for Sandbox; the public demo checks for the selected skill's scope ([ADR-0094](docs/adr/0094-sandbox-demo-key-admission.md)).
-- **Membership decision:** the active/disabled authorization result for a Customer User; the Customer Web evaluates it on every BFF request and may cache it for no more than five minutes in the sandbox MVP.
-- **Per-request assertion:** a short-lived sandbox Signed User Assertion minted immediately before one grading call; it is never persisted or reused for another request.
-- **Pass-through audio:** uploaded Speaking audio streamed from the Customer Web BFF to AIHUB and discarded after the response; it is not an MVP audio asset.
-- **Sandbox-only deployment:** the first Customer Web release is configured only for AIHUB's sandbox hostname and credential; Production is absent until the production bridge is approved.
+- **Customer Sandbox API key:** defined in [GLOSSARY.md#customer-sandbox-api-key](GLOSSARY.md#customer-sandbox-api-key).
 - **Live grading:** a real Writing or Speaking request sent through the Customer Web BFF to the explicitly selected, key-authorized Environment with an Organization-owned key carrying the matching scope; the currently implemented public demo supports Sandbox only, while Production support is accepted design pending implementation.
 - **Mock preview:** an anonymous, non-AIHUB demonstration of the Speaking workflow and a sanitized sample result; it never consumes sandbox quota or performs live grading.
 - **Speaking prompt:** a selectable IELTS question identified by a stable `question_id` and Part; the sandbox MVP uses a Customer Web prompt catalog rather than an AIHUB question service.
@@ -105,9 +96,9 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Sandbox environment:** AIHUB's fourth, hostname-bound request tier for controlled testing. Under the approved design in [ADR-0056](docs/adr/0056-customer-sandbox-test-tier.md), Organization, key, and identity-configuration data use the production control plane, while sandbox usage, idempotency, and dispatch reservations use the separate sandbox database and Redis logical database `/1`.
 - **Deployment secret realm:** the environment scope used to select runtime credentials; `sandbox` is not a separate realm and sandbox traffic uses the enclosing deployment's credentials.
 - **User Identity:** the value of `X-User-Identity` on user-scoped operations; its form is chosen by Organization Identity Readiness, never by the shape of the value.
-- **Signed User Assertion:** the User Identity form for an Organization with an active identity configuration: a short-lived organization-signed JWT verified through that Organization's JWKS. A plain value sent by such an Organization is rejected, never downgraded.
-- **Declared User ID:** the User Identity form for an Organization without an active identity configuration: an opaque identifier the Organization's API-key holder asserts without a signature. AIHUB does not interpret it; an email address is accepted but stored and forwarded as-is.
-- **End-User ID:** the identifier AIHUB resolves from a User Identity, in either form, for metering and downstream `user_id`/`sub`; it is the Organization's own end user, distinct from a Customer User, an AIHUB User Account, and a Username. AIHUB compares it exactly as sent, never case-folded or normalized, so one end user must always be sent as the same value.
+- **Signed User Assertion:** defined in [GLOSSARY.md#signed-user-assertion](GLOSSARY.md#signed-user-assertion).
+- **Declared User ID:** defined in [GLOSSARY.md#declared-user-id](GLOSSARY.md#declared-user-id).
+- **End-User ID:** defined in [GLOSSARY.md#end-user-id](GLOSSARY.md#end-user-id).
 - **Internal JWT:** a short-lived AIHUB-signed token used only on AIHUB-to-service calls.
 - **Runtime secret:** a credential needed by a running service to call a dependency; it is not an API-key hash or a User Identity.
 - **Machine identity:** the service identity used to access infrastructure such as Vault; it is distinct from End-User ID and User Identity.
@@ -132,17 +123,8 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
   policy.
 - **Speaking sample answer:** a publicly fetchable recording of a candidate's
   answer to one Speaking prompt; it is distinct from audio that reads the
-  prompt and from caller-uploaded Pass-through audio.
-- **Writing Task 1 chart asset:** an AIHUB-published chart image attached to a
-  Writing Task 1 request. It is publicly readable until its 24-hour expiry;
-  the accepted operator revocation design may stop AIHUB-controlled serving
-  earlier. Its URL uses the shared `s3.wispace.app`
-  host with separate Production and Sandbox buckets ([ADR-0100](docs/adr/0100-writing-task1-chart-image-uploads.md),
-  [ADR-0101](docs/adr/0101-writing-charts-use-shared-seaweedfs-host.md)).
-  Organization and End-User ownership scope upload and completion, not public
-  reads. The revocation design is accepted in [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md);
-  the CLI, audit, and prune are implemented in #816, while production release,
-  the real report contact, and public-edge verification remain gated.
+  prompt and from caller-uploaded Speaking audio.
+- **Writing Task 1 chart asset:** defined in [GLOSSARY.md#writing-task-1-chart-asset](GLOSSARY.md#writing-task-1-chart-asset).
 - **Published image URL:** an HTTPS reference supplied for a Writing Task 1
   chart, publicly readable without a signature or credentials. It may point to
   a customer-hosted image or a completed AIHUB Writing Task 1 chart asset. The
@@ -171,10 +153,10 @@ AIHUB is a B2B multi-tenant AI API Gateway and identity broker. A client authent
 - **Quota tracking:** whether one request counts against its Organization's Monthly request quota. A request whose Environment is the Sandbox Environment, or whose Organization's quota is `null`, is not quota-tracked and never spends a unit; a tracked request spends exactly one unit, and only when it is billable. Quota tracking is a request-level fact distinct from Metering status, and it never becomes a public field.
 - **Billable request:** a successfully completed operation eligible for request-based billing; recorded failures remain non-billable evidence.
 - **Monthly request quota:** the organization-scoped maximum number of billable requests in one UTC calendar month; `null` means unlimited and zero freezes billable work.
-- **Sandbox dispatch allowance:** the maximum number of AI dispatches admitted in the Sandbox Environment. Each Organization gets five per UTC month from the persisted default, shared across every key, client, and Writing/Speaking skill of that Organization, with a shared Sandbox ceiling of 500. A month-specific Organization override replaces the default for that month without resetting consumption and expires with the month; a month with no override uses the persisted default, and a month with no persisted default fails closed. The five-call default begins in the UTC month after deployment, preserving the deployment month's effective allowance and all consumption. Dispatches that reach the boundary count despite downstream failure or timeout, while completed successful Writing replays consume none.
+- **Sandbox dispatch allowance:** defined in [GLOSSARY.md#sandbox-dispatch-allowance](GLOSSARY.md#sandbox-dispatch-allowance).
 - **Quota counter:** the ephemeral count of billable requests for one organization and UTC month; it gates admission heuristically and is never the durable source of truth.
 - **Quota reconciliation:** the periodic comparison that restores a quota counter from the durable billable request evidence for the same organization and UTC month; the durable evidence wins when the two disagree.
-- **Concurrency permit:** the right for one graded request to occupy one of its Organization's in-flight slots, acquired before downstream dispatch and released once the request has settled. A permit stays held past the response boundary only while background work is holding it, and a permit that is never released ages out of its slot after the stale-lease window. A concurrency permit is an admission control like Quota tracking, not usage evidence: it never appears in a Metering record.
+- **Concurrency permit:** defined in [GLOSSARY.md#concurrency-permit](GLOSSARY.md#concurrency-permit).
 - **Usage retention:** the rolling 13-calendar-month window for durable metering records, measured from the UTC cutoff used by an operator run; records strictly older than the cutoff are eligible for pruning.
 - **Retention cutoff:** the UTC instant captured for one usage-prune run; records at or after it remain retained, while records strictly before it are eligible.
 - **Usage prune:** the operator maintenance action that removes expired metering records in bounded transactions; it is separate from quota reconciliation and idempotency cleanup.
@@ -324,6 +306,7 @@ Demo key validation requires the server-to-server Customer Web BFF secret; the B
 
 ## Current scope and blockers
 
+- Writing Task 1 chart revocation is accepted in [ADR-0111](docs/adr/0111-revoke-reported-public-writing-charts.md); the CLI, audit, and prune are implemented in #816, while production release, the real report contact, and public-edge verification remain gated.
 - #58's accepted target is recorded in [ADR-0179](docs/adr/0179-constrain-the-production-deploy-identity.md): migrate CD to rootless Docker, remove the deploy identity's general sudo routes, and keep only a fixed nginx helper after #434 is implemented and verified. This is a decision, not live-state evidence; Production still has the legacy root-equivalent sudo policy until the rootless deploy and rollback rehearsal passes.
 
 - Implemented for #1571 in [ADR-0192](docs/adr/0192-gateway-multi-instance-admission.md): API-key rate limits, Organization retry budgets, and Sandbox dispatch reservations use shared Redis/PostgreSQL state; rate admission fails closed consistently when Redis cannot verify the decision. XFetch singleflight remains per-process, with up to K loaders across K processes. Two-process coverage is in PR #1920.
