@@ -36,10 +36,10 @@ describe('Graded admission through a Redis fault proxy', () => {
       await redisAnswers(client);
 
       const retryBucketKeys = [
-        'aihub:v1:downstream-retry:{writing.task1.grade}:first',
-        'aihub:v1:downstream-retry:{writing.task1.grade}:retries',
-        'aihub:v1:downstream-retry:{writing.task2.grade}:first',
-        'aihub:v1:downstream-retry:{writing.task2.grade}:retries',
+        'aihub:v1:downstream-retry:{ai-writing}:writing.task1.grade:first',
+        'aihub:v1:downstream-retry:{ai-writing}:writing.task1.grade:retries',
+        'aihub:v1:downstream-retry:{ai-writing}:writing.task2.grade:first',
+        'aihub:v1:downstream-retry:{ai-writing}:writing.task2.grade:retries',
         'aihub:v1:downstream-retry-service:{ai-writing}',
       ];
       const clearRetryBuckets = async (): Promise<void> => {
@@ -68,6 +68,14 @@ describe('Graded admission through a Redis fault proxy', () => {
             `${organizationId}-task2-${index}`,
           );
         }
+        await client.eval(
+          `local now = tonumber(redis.call('TIME')[1]) * 1000
+          for index = 1, 4 do redis.call('ZADD', KEYS[index], 'XX', 61000 - now, ':started') end
+          redis.call('HSET', KEYS[5], 'tokens', 1, 'updated', now)
+          return 1`,
+          retryBucketKeys.length,
+          ...retryBucketKeys,
+        );
         const decisions = await Promise.all([
           retryBudget.reserveRetry(
             'writing.task1.grade',

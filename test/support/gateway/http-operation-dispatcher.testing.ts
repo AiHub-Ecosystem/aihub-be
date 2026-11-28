@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 
+import type { OperationId } from '@/catalog/operation-id';
 import type { DownstreamAdapter } from '@/downstream/downstream-adapter';
 import { DispatchAttemptPolicy } from '@/modules/gateway/application/dispatch/dispatch-attempt-policy';
 import type { DownstreamRetryBudgetPort } from '@/modules/gateway/application/dispatch/downstream-retry-budget.port';
@@ -30,6 +31,7 @@ export function createHttpOperationDispatcher(
   retryBudget?: DownstreamRetryBudgetPort,
   random: () => number = Math.random,
   circuitBreakers = new DownstreamCircuitBreakers(),
+  retryAfter503Safe?: (operation: OperationId) => boolean,
 ): OperationDispatcherPort {
   const logger = new Logger(DISPATCHER_LOG_CONTEXT);
   const warn = (event: string): void => logger.warn({ event });
@@ -45,6 +47,9 @@ export function createHttpOperationDispatcher(
     (operation, reason) =>
       metricsDispatchObserver.downstreamRetryEvent(operation, reason),
     random,
+    undefined,
+    undefined,
+    retryAfter503Safe,
   );
   return new GuardedOperationDispatcher(
     transport,

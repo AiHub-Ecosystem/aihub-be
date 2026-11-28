@@ -114,9 +114,10 @@ function tenantIsolationRedisUrl(): string {
   return url.toString();
 }
 
-export function createTenantIsolationRedis(): Redis {
-  const url = tenantIsolationRedisUrl();
-  const redis = new Redis(url, {
+export function createTenantIsolationRedis(database: 14 | 15 = 15): Redis {
+  const url = new URL(tenantIsolationRedisUrl());
+  url.pathname = `/${database}`;
+  const redis = new Redis(url.toString(), {
     commandTimeout: 1_000,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
@@ -125,8 +126,10 @@ export function createTenantIsolationRedis(): Redis {
   return redis;
 }
 
-export function createTenantIsolationRedisClients(): TenantIsolationRedisClients {
-  const raw = createTenantIsolationRedis();
+export function createTenantIsolationRedisClients(
+  database?: 14 | 15,
+): TenantIsolationRedisClients {
+  const raw = createTenantIsolationRedis(database);
   const gateway: RedisGatewayClient = {
     waitUntilReady: (signal) => {
       if (raw.status === 'ready') return Promise.resolve(true);

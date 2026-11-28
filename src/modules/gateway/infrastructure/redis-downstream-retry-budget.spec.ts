@@ -14,7 +14,15 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
     { tokens: number; updatedAt: number }
   >();
   private readonly hashExpirations = new Map<string, number>();
+  private readonly ledgerStarts = new Map<string, number>();
   now = 0;
+
+  seedWritingBucket(tokens: number): void {
+    this.hashes.set('aihub:v1:downstream-retry-service:{ai-writing}', {
+      tokens,
+      updatedAt: this.now,
+    });
+  }
 
   async eval(
     script: string,
@@ -22,19 +30,28 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
     ...args: readonly (string | number)[]
   ): Promise<number> {
     if (script === RESERVE_DOWNSTREAM_SERVICE_TOKEN_SCRIPT) {
-      if (numberOfKeys !== 1)
+      if (numberOfKeys !== 3)
         throw new Error('unexpected service bucket key count');
-      const [key, rateRaw, burstRaw, ttlRaw] = args.map(String);
+      const [key, , retryKey, rateRaw, burstRaw, ttlRaw, member, windowMs] =
+        args.map(String);
       const rate = Number(rateRaw);
       const burst = Number(burstRaw);
-      if (key === undefined || Number(ttlRaw) <= 0) {
+      if (
+        key === undefined ||
+        retryKey === undefined ||
+        member === undefined ||
+        Number(ttlRaw) <= 0
+      ) {
         throw new Error('invalid service bucket arguments');
       }
+      const reservedAt = this.sets.get(retryKey)?.get(member);
+      if (reservedAt === undefined || reservedAt <= this.now - Number(windowMs))
+        return -1;
       if ((this.hashExpirations.get(key) ?? Infinity) <= this.now) {
         this.hashes.delete(key);
       }
       const state = this.hashes.get(key) ?? {
-        tokens: burst,
+        tokens: 0,
         updatedAt: this.now,
       };
       const tokens = Math.min(
@@ -64,13 +81,18 @@ class FakeRedis implements RedisDownstreamRetryBudgetClient {
     const retries = this.prune(retriesKey, cutoff);
 
     if (script === RECORD_DOWNSTREAM_FIRST_ATTEMPT_SCRIPT) {
-      firsts.set(member, this.now);
+      if (!this.ledgerStarts.has(firstKey))
+        this.ledgerStarts.set(firstKey, this.now);
+      if (!firsts.has(member)) firsts.set(member, this.now);
       return 1;
     }
     if (script !== RESERVE_DOWNSTREAM_RETRY_SCRIPT) {
       throw new Error('unexpected retry budget script');
     }
 
+    const startedAt = this.ledgerStarts.get(firstKey);
+    if (startedAt === undefined) return -1;
+    if (startedAt > cutoff || retries.has(member)) return 0;
     const allowance = Math.floor(firsts.size * Number(ratio));
     if (firsts.size === 0 || retries.size >= allowance) return 0;
     retries.set(member, this.now);
@@ -92,6 +114,17 @@ const retryServiceBuckets = {
   'ai-writing': { ratePerSecond: 1, burst: 1, expectedAttemptMs: 100 },
 } as const;
 
+async function warmBudget(
+  redis: FakeRedis,
+  budget: RedisDownstreamRetryBudget,
+  operations: readonly OperationId[] = [operation],
+  burst = 1,
+): Promise<void> {
+  for (const id of operations) await budget.recordFirstAttempt(id, 'warmup');
+  redis.now += 60_001;
+  redis.seedWritingBucket(burst);
+}
+
 describe('RedisDownstreamRetryBudget', () => {
   it('admits one retry after ten first attempts and bounds concurrent retries to ten percent', async () => {
     const redis = new FakeRedis();
@@ -99,6 +132,7 @@ describe('RedisDownstreamRetryBudget', () => {
     const second = new RedisDownstreamRetryBudget(redis, retryServiceBuckets);
 
     expect(first.isEnabled(operation)).toBe(true);
+    await warmBudget(redis, first);
 
     for (let index = 0; index < 10; index += 1) {
       await first.recordFirstAttempt(operation, `first-${index}`);
@@ -114,6 +148,7 @@ describe('RedisDownstreamRetryBudget', () => {
   it('rolls first attempts and retries out of the shared window', async () => {
     const redis = new FakeRedis();
     const budget = new RedisDownstreamRetryBudget(redis, retryServiceBuckets);
+    await warmBudget(redis, budget);
 
     for (let index = 0; index < 10; index += 1) {
       await budget.recordFirstAttempt(operation, `first-old-${index}`);
@@ -121,7 +156,7 @@ describe('RedisDownstreamRetryBudget', () => {
     await expect(budget.reserveRetry(operation, 'retry-old', 1)).resolves.toBe(
       'admitted',
     );
-    redis.now = 60_001;
+    redis.now += 60_001;
     for (let index = 0; index < 10; index += 1) {
       await budget.recordFirstAttempt(operation, `first-new-${index}`);
     }
@@ -132,10 +167,9 @@ describe('RedisDownstreamRetryBudget', () => {
   });
 
   it('does not use the Organization budget floor for an operation with fewer than ten attempts', async () => {
-    const budget = new RedisDownstreamRetryBudget(
-      new FakeRedis(),
-      retryServiceBuckets,
-    );
+    const redis = new FakeRedis();
+    const budget = new RedisDownstreamRetryBudget(redis, retryServiceBuckets);
+    await warmBudget(redis, budget);
     await budget.recordFirstAttempt(operation, 'first-one');
 
     await expect(budget.reserveRetry(operation, 'retry-one', 1)).resolves.toBe(
@@ -170,6 +204,7 @@ describe('RedisDownstreamRetryBudget', () => {
     const task1 = new RedisDownstreamRetryBudget(redis, retryServiceBuckets);
     const task2 = new RedisDownstreamRetryBudget(redis, retryServiceBuckets);
     const otherOperation: OperationId = 'writing.task2.grade';
+    await warmBudget(redis, task1, [operation, otherOperation]);
 
     for (let index = 0; index < 10; index += 1) {
       await task1.recordFirstAttempt(operation, `task1-first-${index}`);
@@ -195,6 +230,7 @@ describe('RedisDownstreamRetryBudget', () => {
     const task1 = new RedisDownstreamRetryBudget(redis, slowBuckets);
     const task2 = new RedisDownstreamRetryBudget(redis, slowBuckets);
     const task2Operation: OperationId = 'writing.task2.grade';
+    await warmBudget(redis, task1, [operation, task2Operation], 2);
 
     for (let index = 0; index < 10; index += 1) {
       await task1.recordFirstAttempt(operation, `task1-first-old-${index}`);
@@ -210,7 +246,7 @@ describe('RedisDownstreamRetryBudget', () => {
       task2.reserveRetry(task2Operation, 'task2-retry-old', 1),
     ).resolves.toBe('admitted');
 
-    redis.now = 121_000;
+    redis.now += 121_000;
     for (let index = 0; index < 10; index += 1) {
       await task1.recordFirstAttempt(operation, `task1-first-new-${index}`);
     }
@@ -220,11 +256,12 @@ describe('RedisDownstreamRetryBudget', () => {
     ).resolves.toBe('exhausted');
   });
 
-  it('allows an idle fast service bucket after it has naturally refilled', async () => {
+  it('refills an expired fast service bucket from zero', async () => {
     const redis = new FakeRedis();
     const fastBudget = new RedisDownstreamRetryBudget(redis, {
       'ai-writing': { ratePerSecond: 1, burst: 2, expectedAttemptMs: 100 },
     });
+    await warmBudget(redis, fastBudget, [operation], 2);
 
     for (let index = 0; index < 10; index += 1) {
       await fastBudget.recordFirstAttempt(operation, `first-old-${index}`);
@@ -233,13 +270,17 @@ describe('RedisDownstreamRetryBudget', () => {
       fastBudget.reserveRetry(operation, 'retry-old', 1),
     ).resolves.toBe('admitted');
 
-    redis.now = 121_000;
-    for (let index = 0; index < 10; index += 1) {
+    redis.now += 121_000;
+    for (let index = 0; index < 20; index += 1) {
       await fastBudget.recordFirstAttempt(operation, `first-new-${index}`);
     }
 
     await expect(
       fastBudget.reserveRetry(operation, 'retry-new', 1),
+    ).resolves.toBe('exhausted');
+    redis.now += 1_001;
+    await expect(
+      fastBudget.reserveRetry(operation, 'retry-refilled', 1),
     ).resolves.toBe('admitted');
   });
 

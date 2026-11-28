@@ -47,6 +47,8 @@ Let `C_s` be the lower of (a) AIHUB's sustainable first-attempt throughput for t
 
 When an AIHUB retry budget is exhausted, fail fast: skip the next retry and return the last real downstream error in the operation's existing error envelope, as #332 specifies. This applies to Writing and Speaking dispatches. Do not queue or serve a cached result. If a retry is admitted, it remains subject to the per-operation circuit breaker before every dispatch attempt; the breaker and retry budget solve different problems.
 
+On a missing service bucket, begin with zero tokens and refill from Redis time. On a missing or mismatched operation ledger, record new first attempts in a fresh ledger and wait one full 60-second window before admitting retries. This also applies to newly initialized state or state that expires after inactivity. The service reservation checks that the operation ledger and its specific retry reservation still exist before spending a token. Unconfirmed reservations skip the retry and may consume an operation slot or service token. First attempts continue under ordinary dispatch rules during a rebuild.
+
 ### Amplification estimate and limits
 
 For a 5x same-key client retry storm (four repeats per first attempt), the edge admits at most `max(1, floor(0.10 × first_attempts))` repeats per Organization in 60 seconds and refuses the rest with `429`. At ten or more first attempts, accepted edge traffic is at most 1.1x; at one first attempt, the minimum allowance permits at most 2x for that Organization in the window.

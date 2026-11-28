@@ -644,36 +644,39 @@ describe('HttpOperationDispatcher', () => {
     },
   );
 
-  it('returns the original connection error when the per-operation retry budget is spent', async () => {
-    const attempts = fakeDispatchAttempts();
-    const refused = Object.assign(new Error('connection refused'), {
-      code: 'ECONNREFUSED',
-    });
-    mockAgent
-      .get('https://ai-writing.test')
-      .intercept({ method: 'POST', path: '/task-one' })
-      .replyWithError(refused);
-    const httpClient = new DownstreamHttpClient(
-      'https://ai-writing.test',
-      mockAgent,
-    );
-    const retryBudget = fakeDownstreamRetryBudget('exhausted');
-    const dispatcher = createHttpOperationDispatcher(
-      httpClient,
-      new FakeTokenIssuer(),
-      [fakeGradeAdapter('/task-one')],
-      attempts.recorder,
-      undefined,
-      retryBudget.port,
-    );
+  it.each(['exhausted', 'unavailable'] as const)(
+    'returns the original connection error when retry admission is %s',
+    async (decision) => {
+      const attempts = fakeDispatchAttempts();
+      const refused = Object.assign(new Error('connection refused'), {
+        code: 'ECONNREFUSED',
+      });
+      mockAgent
+        .get('https://ai-writing.test')
+        .intercept({ method: 'POST', path: '/task-one' })
+        .replyWithError(refused);
+      const httpClient = new DownstreamHttpClient(
+        'https://ai-writing.test',
+        mockAgent,
+      );
+      const retryBudget = fakeDownstreamRetryBudget(decision);
+      const dispatcher = createHttpOperationDispatcher(
+        httpClient,
+        new FakeTokenIssuer(),
+        [fakeGradeAdapter('/task-one')],
+        attempts.recorder,
+        undefined,
+        retryBudget.port,
+      );
 
-    await expect(
-      dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
-    ).rejects.toMatchObject({ code: 'AI_SERVICE_UNAVAILABLE' });
+      await expect(
+        dispatcher.dispatch('writing.task1.grade', gradeInput, context()),
+      ).rejects.toMatchObject({ code: 'AI_SERVICE_UNAVAILABLE' });
 
-    expect(retryBudget.reserveRetry).toHaveBeenCalledTimes(1);
-    mockAgent.assertNoPendingInterceptors();
-  });
+      expect(retryBudget.reserveRetry).toHaveBeenCalledTimes(1);
+      mockAgent.assertNoPendingInterceptors();
+    },
+  );
 
   it('counts only breaker-admitted HTTP actions as downstream first attempts', async () => {
     const attempts = fakeDispatchAttempts();
@@ -784,6 +787,65 @@ describe('HttpOperationDispatcher', () => {
       'aihub_breaker_state{operation="writing.task1.grade"} 1',
     );
     mockAgent.assertNoPendingInterceptors();
+  });
+
+  it('does not send an admitted retry after a retryable half-open probe reopens the breaker', async () => {
+    jest.useFakeTimers();
+    try {
+      const operation = 'writing.task1.grade';
+      const origin = 'https://ai-writing.test';
+      const circuitBreakers = (activeCircuitBreakers =
+        new DownstreamCircuitBreakers());
+      const failure = new AppError({
+        code: 'AI_SERVICE_ERROR',
+        message: 'upstream failure',
+        retryable: true,
+        downstreamStatus: 500,
+      });
+      for (let index = 0; index < 20; index += 1) {
+        await circuitBreakers
+          .execute(operation, async () => {
+            throw failure;
+          })
+          .catch(() => undefined);
+      }
+      await jest.advanceTimersByTimeAsync(30_000);
+      expect(await getMetrics()).toContain(
+        'aihub_breaker_state{operation="writing.task1.grade"} 2',
+      );
+
+      mockAgent
+        .get(origin)
+        .intercept({ method: 'POST', path: '/task-one' })
+        .reply(503, {}, { headers: { 'retry-after': '0' } });
+      const httpClient = new DownstreamHttpClient(origin, mockAgent);
+      const request = jest.spyOn(httpClient, 'request');
+      const retryBudget = fakeDownstreamRetryBudget();
+      const dispatcher = createHttpOperationDispatcher(
+        httpClient,
+        new FakeTokenIssuer(),
+        [fakeGradeAdapter('/task-one')],
+        noOpDispatchAttemptRecord,
+        undefined,
+        retryBudget.port,
+        () => 0,
+        circuitBreakers,
+        (candidate) => candidate === operation,
+      );
+
+      await expect(
+        dispatcher.dispatch(operation, gradeInput, context()),
+      ).rejects.toMatchObject({ code: 'AI_SERVICE_UNAVAILABLE' });
+
+      expect(retryBudget.reserveRetry).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(await getMetrics()).toContain(
+        'aihub_breaker_state{operation="writing.task1.grade"} 1',
+      );
+      mockAgent.assertNoPendingInterceptors();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('stops after two pre-send connection retries', async () => {
